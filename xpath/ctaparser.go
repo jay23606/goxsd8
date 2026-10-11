@@ -1428,8 +1428,9 @@ func (p *ctaParser) dataInstanceOf() (ctaValue, bool) {
 // instanceTail parses the `"instance" "of" SequenceType` tail over v, whose
 // `instance` the cursor is on, into its node, reporting false where v's static
 // type does not decide its items' dynamic type (ctaTypes.instanceItem) or the
-// SequenceType declines (sequenceType). An absent indicator, `?`, `*` and `+`
-// are xpath20.md [51] OccurrenceIndicator; xpath20.md A.1.2's
+// SequenceType declines (sequenceType). An fn:sum call, whose dynamic type its
+// static type does not decide, is sumInstanceTail's. An absent indicator, `?`,
+// `*` and `+` are xpath20.md [51] OccurrenceIndicator; xpath20.md A.1.2's
 // occurrence-indicators constraint makes a `*` or `+` after the AtomicType an
 // indicator and never an operator.
 func (p *ctaParser) instanceTail(v ctaValue) (ctaValue, bool) {
@@ -1438,6 +1439,9 @@ func (p *ctaParser) instanceTail(v ctaValue) (ctaValue, bool) {
 		return nil, false
 	}
 	p.advance()
+	if sum, isSum := v.(ctaSum); isSum {
+		return p.sumInstanceTail(sum)
+	}
 	item, derived, decides := p.types.instanceItem(v)
 	if !decides {
 		return nil, false
@@ -1464,6 +1468,31 @@ func (p *ctaParser) instanceTail(v ctaValue) (ctaValue, bool) {
 		read = typed.st
 	}
 	return ctaInstanceOf{operand: v, read: read, matches: matches, occurrence: occurrence, st: boolean}, true
+}
+
+// sumInstanceTail parses the SequenceType of an `instance of` tail over sum, an
+// fn:sum call, whose `of` the cursor has passed, into its ctaSumInstance. The
+// call's value's DYNAMIC type depends on how many items its argument yields
+// (ctaSum.total), so whether it matches is decided at evaluation and never
+// from sum's static type: only the AtomicType is settled here, on
+// sequenceType's terms, admitted where itemMatches admits it. The call always
+// returns exactly one item, which every occurrence indicator admits, so the
+// indicator is read and decides nothing.
+func (p *ctaParser) sumInstanceTail(sum ctaSum) (ctaValue, bool) {
+	if !p.at(ctaNameTok) || p.peek(1).kind == ctaLParen {
+		return nil, false
+	}
+	name := p.typeName(p.peek(0).text)
+	p.advance()
+	if _, admitted := p.types.itemMatches(ctaTyped{st: sum.st}, name); !admitted {
+		return nil, false
+	}
+	p.occurrenceIndicator()
+	boolean, resolved := p.types.simple(ctaBuiltin("boolean"))
+	if !resolved {
+		return nil, false
+	}
+	return ctaSumInstance{sum: sum, atomic: name, st: boolean}, true
 }
 
 // sequenceType parses the ItemType of xpath20.md [50] SequenceType where it is
@@ -1572,8 +1601,82 @@ func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
 		return p.focusCall()
 	case "namespace-uri":
 		return p.namespaceURICall()
+	case "sum":
+		return p.sumCall()
 	}
 	return p.constructorFunction()
+}
+
+// sumCall parses a call to fn:sum with its one `xs:anyAtomicType*` argument
+// (xpath-functions.md §15.4.5), whose name the cursor is on, where that
+// argument is a path through one or more child steps to an attribute step,
+// `N1/…/@A` (attributePathLength), whose node p.facade builds
+// (ctaFacade.attributePath) and which ctaTypes.sum types the call over.
+//
+// GAP(xpath): every other call to fn:sum declines — the two-argument form
+// `sum($arg, $zero)`, whose empty result is `$zero` and never the xs:integer
+// 0 of this one, and every other argument: E's own attribute `sum(@p)`, a
+// child or element path read for its value `sum(c)` or `sum(a/c)`, `$value`,
+// a wildcard or `//` step, a predicate, and any other expression — as do
+// fn:avg, fn:min and fn:max, which reach constructorFunction. The direction is
+// the withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) sumCall() (ctaValue, bool) {
+	n := p.attributePathLength(2)
+	if n == 0 || p.peek(2+n).kind != ctaRParen {
+		return nil, false
+	}
+	p.advance() // the function name
+	p.advance() // '('
+	var steps []xsd.QName
+	for end := p.pos + n - 2; p.pos < end; p.advance() {
+		if p.at(ctaSlashTok) {
+			continue
+		}
+		steps = append(steps, p.elementName(p.peek(0).text))
+	}
+	p.advance() // '@'
+	test := p.attributeTest()
+	p.advance()
+	p.advance() // ')'
+	arg, ok := p.facade.attributePath(steps, test, p.types)
+	if !ok {
+		return nil, false
+	}
+	return p.types.sum(arg)
+}
+
+// attributeTest resolves the NameTest the cursor is on, after an attribute
+// step's '@': a QName on attributeName's terms, and a [37] Wildcard on
+// wildcardTest's. Nothing is consumed.
+func (p *ctaParser) attributeTest() ctaNameTest {
+	text := p.peek(0).text
+	if p.at(ctaWildcardTok) {
+		return p.wildcardTest(text)
+	}
+	return ctaExactName{name: p.attributeName(text)}
+}
+
+// attributePathLength is how many tokens, from offset at ahead of the cursor,
+// spell a relative path of one or more abbreviated child-axis steps with QName
+// NameTests followed by one abbreviated attribute step whose NameTest is a
+// QName or a [37] Wildcard, `QName ('/' QName)* '/' '@' NameTest`, and 0 where
+// they spell none. A name followed by anything but '/' — a '(', a '::', a '['
+// — is no such step. Nothing is consumed.
+func (p *ctaParser) attributePathLength(at int) int {
+	n := 0
+	for {
+		if p.peek(at+n).kind != ctaNameTok || p.peek(at+n+1).kind != ctaSlashTok {
+			return 0
+		}
+		n += 2
+		if p.peek(at+n).kind == ctaAtTok {
+			break
+		}
+	}
+	if last := p.peek(at + n + 1).kind; last != ctaNameTok && last != ctaWildcardTok {
+		return 0
+	}
+	return n + 2
 }
 
 // arguments parses the parenthesized argument list of a call whose name the
@@ -2214,6 +2317,12 @@ func (ctaPredicateFacade) variable(xsd.QName, ctaTypes) (ctaValue, bool) { retur
 func (ctaPredicateFacade) child(ctaNameTest, ctaTypes) (ctaValue, bool) { return nil, false }
 
 func (ctaPredicateFacade) childPath([]xsd.QName, ctaElementTest) (ctaValue, bool) {
+	return nil, false
+}
+
+// attributePath declines. It is never reached: callsLibrary is false, so
+// `sum(…)` in a predicate reaches constructorFunction and declines there.
+func (ctaPredicateFacade) attributePath([]xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }
 

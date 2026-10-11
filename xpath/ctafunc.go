@@ -19,17 +19,18 @@ import (
 // ctaDistinctValues), fn:string (§2.3, ctaStringFunction) and fn:concat
 // (§7.4.1, ctaConcat) — and fn:count over an argument that is no path
 // (§15.4.1, ctaCountedItems), whose items are counted as fn:empty and
-// fn:exists count them. fn:true and fn:false (§9.1.1, §9.1.2) are constants,
-// which compile to the ctaLiteral of their xs:boolean
-// (ctaParser.constantCall). fn:current-date (§16.4) reads the dynamic
-// context's current dateTime (ctaCurrentDate), and fn:position and fn:last
-// (§16.1, §16.2) its focus, which only the facet façade compiles, to the
-// err:XPDY0002 of an absent one (ctaNoFocus, ctaFacade.focus).
-// fn:namespace-uri (§14.3, ctaNamespaceURI) and fn:in-scope-prefixes
-// (§11.2.6), the latter as an operand of `=` against string literals
-// (ctaPrefixMember), read E itself, `.` taken as a node and never atomized
-// (ctaContextNode, ctaFacade.contextNode), through the [ContextElement] the
-// evaluation carries.
+// fn:exists count them, and fn:sum with one argument over a path to an
+// attribute below E (§15.4.5, ctaSum), whose values the [Tally] collects.
+// fn:true and fn:false (§9.1.1, §9.1.2) are constants, which compile to the
+// ctaLiteral of their xs:boolean (ctaParser.constantCall). fn:current-date
+// (§16.4) reads the dynamic context's current dateTime (ctaCurrentDate), and
+// fn:position and fn:last (§16.1, §16.2) its focus, which only the facet
+// façade compiles, to the err:XPDY0002 of an absent one (ctaNoFocus,
+// ctaFacade.focus). fn:namespace-uri (§14.3, ctaNamespaceURI) and
+// fn:in-scope-prefixes (§11.2.6), the latter as an operand of `=` against
+// string literals (ctaPrefixMember), read E itself, `.` taken as a node and
+// never atomized (ctaContextNode, ctaFacade.contextNode), through the
+// [ContextElement] the evaluation carries.
 //
 // An argument whose parameter is xs:string? is converted by xpath20.md
 // §3.1.5's function conversion rules, as far as the static type settles them,
@@ -210,6 +211,144 @@ func (ctaDistinctValues) ctaValue() {}
 func (ctaCurrentDate) ctaValue()    {}
 func (ctaNoFocus) ctaValue()        {}
 func (ctaNamespaceURI) ctaValue()   {}
+func (ctaSum) ctaValue()            {}
+func (ctaSumInstance) ctaValue()    {}
+
+// ctaSum is a call to fn:sum with its one `xs:anyAtomicType*` argument
+// (xpath-functions.md §15.4.5, ctaParser.sumCall), arg, whose types
+// ctaTypes.sum settled: item is the type arg's items are read in — their own
+// type, or xs:double where they are xs:untypedAtomic, which §15.4.5 casts to
+// xs:double — st the call's static type, which an enclosing operator converts
+// its value into, and integer xs:integer, the type of the 0 an empty argument
+// sums to.
+//
+// The value's DYNAMIC type is not st alone (ctaSum.total): the xs:integer 0
+// for an empty argument, the one item itself for an argument of one, and st
+// for two or more. Each derives from st where st is xs:integer or xs:decimal,
+// so converting it into st is subtype substitution. Where st is xs:float or
+// xs:double the 0 does not, which is why such a call is no arithmetic operand
+// and is compared with an xs:decimal operand only where that cannot tell the
+// two types apart (ctaTypes.arithmeticOperand, ctaTypes.sumCompares), and why
+// `instance of` over any call reads the dynamic type (ctaSumInstance).
+type ctaSum struct {
+	arg     ctaValue
+	item    *xsd.SimpleType
+	st      *xsd.SimpleType
+	integer *xsd.SimpleType
+}
+
+// ctaSumInstance is `E instance of T` (xpath20.md §3.10.1) over an fn:sum
+// call sum (ctaParser.sumInstanceTail), whose result is st, xs:boolean: true
+// where the DYNAMIC type of the call's one item (ctaSum.total) is the
+// AtomicType named atomic or derives from it (§2.5.4.2), which only the
+// evaluation decides. Every occurrence indicator admits the one item, so none
+// is kept.
+type ctaSumInstance struct {
+	sum    ctaSum
+	atomic xsd.QName
+	st     *xsd.SimpleType
+}
+
+// floating reports whether n's static type is xs:float or xs:double, from
+// neither of which the xs:integer 0 of an empty argument derives.
+func (n ctaSum) floating() bool {
+	return n.st.Name() == ctaBuiltin("float") || n.st.Name() == ctaBuiltin("double")
+}
+
+// ctaFloatingSum is the fn:sum call whose static type v takes, where that call
+// is floating (ctaSum.floating): v itself, or the operand of an
+// fn:distinct-values call over one, which keeps its operand's static type
+// (ctaStaticOf) and so its operand's xs:integer 0 over an empty argument. It
+// is false for every other v.
+func ctaFloatingSum(v ctaValue) (ctaSum, bool) {
+	switch n := v.(type) {
+	case ctaSum:
+		return n, n.floating()
+	case ctaDistinctValues:
+		return ctaFloatingSum(n.operand)
+	}
+	return ctaSum{}, false
+}
+
+// total evaluates n (xpath-functions.md §15.4.5): its value and that value's
+// dynamic type, or false where it raises. The argument's items are read in
+// n.item — so an xs:untypedAtomic item is cast to xs:double, and one that
+// does not cast raises err:FORG0001 — in document order. Then:
+//
+//   - none: the xs:integer 0;
+//   - any, where n.item's {primitive type definition} is not numeric, so it
+//     does not support addition: err:FORG0006 — the duration types, which do,
+//     ctaTypes.sum declines;
+//   - one: that item, of type n.item;
+//   - two or more: their sum, of type n.st, added in document order through
+//     each item's ·canonical representation· on ctaArith's terms, so a sum of
+//     xs:decimal items is exact (§6.2) and one containing NaN is NaN. §15.4.5
+//     lets the items be added in any order; this one fixes it (STYLE D1).
+func (n ctaSum) total(env ctaEnv) (value.Value, *xsd.SimpleType, bool) {
+	atoms, read := ctaItemOf(n.arg, n.item, env).(ctaAtoms)
+	if !read {
+		return nil, nil, false
+	}
+	if len(atoms.vs) == 0 {
+		zero, validated := ctaValidated(ctaValidate("0", n.integer, env))
+		return zero, n.integer, validated
+	}
+	p, err := n.item.Primitive(env.types)
+	if err != nil || p == nil {
+		return nil, nil, false
+	}
+	kind, numeric := ctaNumericKindOf(p)
+	if !numeric {
+		return nil, nil, false // err:FORG0006
+	}
+	if len(atoms.vs) == 1 {
+		return atoms.vs[0], n.item, true
+	}
+	adding := ctaArith{op: ctaAdd, kind: kind}
+	total, rendered := ctaCanonical(atoms.vs[0], n.item, env)
+	if !rendered {
+		return nil, nil, false
+	}
+	for _, v := range atoms.vs[1:] {
+		lexical, rendered := ctaCanonical(v, n.item, env)
+		if !rendered {
+			return nil, nil, false
+		}
+		if total, rendered = adding.compute(total, lexical); !rendered {
+			return nil, nil, false
+		}
+	}
+	sum, validated := ctaValidated(ctaValidate(total, n.st, env))
+	return sum, n.st, validated
+}
+
+// ctaSumItem is n's value converted into c on ctaTypedAttrItem's terms, from
+// its dynamic type (ctaSum.total): one item, or ctaRaised where the call
+// raises.
+func ctaSumItem(n ctaSum, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	v, dynamic, ok := n.total(env)
+	if !ok {
+		return ctaRaised{}
+	}
+	return ctaPromote(v, dynamic, c, env)
+}
+
+// ctaSumInstanceItem evaluates n and converts the xs:boolean it returns into
+// c on ctaMatchItem's terms: whether the dynamic type of the fn:sum call's
+// value is n.atomic or derived from it, walked up its {base type definition}
+// chain at evaluation (ctaTypes.ancestor, over the evaluation's resolver). A
+// call that raises raises, as evaluating any operand does.
+func ctaSumInstanceItem(n ctaSumInstance, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	_, dynamic, ok := n.sum.total(env)
+	if !ok {
+		return ctaRaised{}
+	}
+	at, err := ctaTypes{resolver: env.types}.ancestor(dynamic, n.atomic)
+	if err != nil {
+		return ctaRaised{}
+	}
+	return ctaConvert(strconv.FormatBool(at != nil), n.st, c, env)
+}
 
 // ctaPrefixMember is a general comparison by `=` (xpath20.md §3.5.2) one of
 // whose operands is a call to fn:in-scope-prefixes over E (xpath-functions.md

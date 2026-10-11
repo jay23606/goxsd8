@@ -885,6 +885,14 @@ type ctaFacade interface {
 	// (ctaParser.childPath), into its node, reporting false where the façade
 	// declines it, on attribute's terms. No step is typed: none is atomized.
 	childPath(parents []xsd.QName, last ctaElementTest) (ctaValue, bool)
+	// attributePath compiles a relative path of one or more child-axis steps
+	// whose QName NameTests resolved to steps, followed by one attribute step
+	// whose NameTest resolved to test, `N1/…/@A`, standing as fn:sum's
+	// argument (ctaParser.sumCall), into its node, reporting false where the
+	// façade declines it, on attribute's terms. The attribute step is typed
+	// with the type types classifies, as attribute's is: its nodes are
+	// atomized.
+	attributePath(steps []xsd.QName, test ctaNameTest, types ctaTypes) (ctaValue, bool)
 	// childrenHaving compiles a child step whose QName NameTest resolved to
 	// name, filtered by a predicate that is a conjunction of child steps whose
 	// QName NameTests resolved to required, `N[a and b]`, standing where
@@ -1016,6 +1024,13 @@ func (ctaTypeAlternativeFacade) child(ctaNameTest, ctaTypes) (ctaValue, bool) {
 // is evaluated over no [children], so `N/*` would select nothing there, and
 // declining it is what §3.12.6's Note licenses.
 func (ctaTypeAlternativeFacade) childPath([]xsd.QName, ctaElementTest) (ctaValue, bool) {
+	return nil, false
+}
+
+// attributePath declines every path through child steps to an attribute, on
+// childPath's terms. It is never reached: callsLibrary is false, so `sum(…)`
+// reaches constructorFunction and declines there.
+func (ctaTypeAlternativeFacade) attributePath([]xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }
 
@@ -1540,6 +1555,27 @@ func ctaChildPathOf(parents []xsd.QName, last ctaElementTest) (ctaChildPath, boo
 	return ctaChildPath{parents: parents, last: last}, true
 }
 
+// ctaAttributePath is a relative path of one or more abbreviated child-axis
+// steps with QName NameTests followed by one abbreviated attribute step with a
+// QName NameTest, `N1/…/@A` (xpath20.md [26] RelativePathExpr, §3.2.1.1,
+// §3.2.4), which only the assertion façade admits (ctaFacade.attributePath) and
+// only as fn:sum's argument (ctaParser.sumCall): the attribute nodes named name
+// of the elements whose chain of names below E, from E's child down to the
+// element itself, is steps — each a distinct node, in document order (§3.2) —
+// atomized to their typed values (§2.4.2). Each value is of type st, the type
+// [AttributeTypes] answered for (steps, name) at compile time, or
+// xs:untypedAtomic where st is ·special· (xpath-datamodel §3.3.1.2).
+//
+// The values are read off the [Tally] the evaluation carries, which is why
+// the node is a counter key (ctaKey) whose counter collects them
+// (ctaAttributeCollector) rather than reading [TypedAttributes] or
+// [ChildElements], neither of which reaches below E's children.
+type ctaAttributePath struct {
+	steps []xsd.QName
+	name  xsd.QName
+	st    *xsd.SimpleType
+}
+
 // ctaChildrenHaving is a child step with a QName NameTest filtered by a
 // predicate that is a conjunction of child steps with QName NameTests, `N[a]`
 // or `N[a and b …]` (xpath20.md §3.2.2), which only the assertion façade admits
@@ -1740,16 +1776,18 @@ func ctaSelectedElementsOf(p ctaCountPath) (ctaSelectedElements, bool) {
 // keys one [Tally.Element] report decides alone (ctaTallied), a child step
 // filtered by its children's existence (ctaChildrenHaving), which the reports
 // below the child decide, a child step filtered by a `preceding::` step
-// (ctaChildrenPreceded), which the reports before the child decide, and the
+// (ctaChildrenPreceded), which the reports before the child decide, the
 // children followed by a sibling of a name (ctaChildrenFollowedBy), which the
-// report of the next child decides. The grammar closes the set (STYLE T2's
-// schema-closed-set exception). Two keys are compared by same and never with
-// ==, which a slice-holding arm cannot take.
+// report of the next child decides, and a path to an attribute
+// (ctaAttributePath), whose values the [Tally.Attribute] calls after each
+// report bring. The grammar closes the set (STYLE T2's schema-closed-set
+// exception). Two keys are compared by same and never with ==, which a
+// slice-holding arm cannot take.
 type ctaKey interface {
 	ctaKey()
-	// selectsAttributesAt reports whether the key selects an attribute node of
-	// any name of the element depth levels below E, 0 being E
-	// ([Tally.CountsAttributesAt]).
+	// selectsAttributesAt reports whether the key selects, or reads the value
+	// of, an attribute node of any name of the element depth levels below E, 0
+	// being E ([Tally.ReadsAttributesAt]).
 	selectsAttributesAt(depth int) bool
 	// same reports whether the key and other select the same nodes, which is
 	// what makes one counter serve both.
@@ -1784,6 +1822,8 @@ func (ctaChildrenHaving) ctaKey()   {}
 func (ctaChildrenPreceded) ctaKey() {}
 
 func (ctaChildrenFollowedBy) ctaKey() {}
+
+func (ctaAttributePath) ctaKey() {}
 
 func (ctaCountPath) ctaTallied()        {}
 func (ctaFilteredChildren) ctaTallied() {}
@@ -1902,6 +1942,26 @@ func (p ctaCountPath) same(other ctaKey) bool {
 	return isCount && o == p
 }
 
+// counter is a fresh ctaAttributeCollector over p, which holds no value.
+func (p ctaAttributePath) counter() ctaCounter { return &ctaAttributeCollector{read: p} }
+
+// selectsAttributesAt is true at the depth of the elements p's steps select,
+// whose attribute names decide which values p reads, and false at every other.
+func (p ctaAttributePath) selectsAttributesAt(depth int) bool { return depth == len(p.steps) }
+
+// same reports whether other is a ctaAttributePath over p's steps and name:
+// both were compiled against one [AttributeTypes], so their types agree.
+func (p ctaAttributePath) same(other ctaKey) bool {
+	o, isPath := other.(ctaAttributePath)
+	return isPath && o.name == p.name && slices.Equal(o.steps, p.steps)
+}
+
+// reads reports whether p reads the value of the attribute named name of the
+// element whose chain below E is path.
+func (p ctaAttributePath) reads(path []xsd.QName, name xsd.QName) bool {
+	return name == p.name && slices.Equal(path, p.steps)
+}
+
 // selectsElement reports whether path is p's parents followed by one name its
 // last step matches, whatever the element's attributes.
 func (p ctaChildPath) selectsElement(path, _ []xsd.QName) bool {
@@ -2010,6 +2070,7 @@ func (ctaUntypedChild) ctaValue()     {}
 func (ctaCandidate) ctaValue()        {}
 func (ctaRangeItem) ctaValue()        {}
 func (ctaChildPath) ctaValue()        {}
+func (ctaAttributePath) ctaValue()    {}
 func (ctaChildrenHaving) ctaValue()   {}
 func (ctaChildrenPreceded) ctaValue() {}
 func (ctaSelectedElements) ctaValue() {}
@@ -2059,16 +2120,16 @@ func (ctaTyped) ctaStatic()         {}
 func (ctaEmptySequence) ctaStatic() {}
 
 // ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr,
-// ctaUntypedChild, ctaUntypedValue and ctaContextAtom are the untyped arms,
-// and so is an fn:distinct-values call over one, whose static type is its
-// operand's; so are ctaNoDocumentRoot and ctaNoContextItem: each raises
-// before any item exists, so its static type decides only whether a
-// comparison over it compiles, never an answer. A ctaChildPath,
-// ctaChildrenHaving, ctaChildrenPreceded or ctaSelectedElements never reaches
-// here: ctaParser.childPath, ctaParser.childrenHaving,
+// ctaUntypedChild, ctaUntypedValue, ctaContextAtom and a ctaAttributePath over
+// a ·special· type are the untyped arms, and so is an fn:distinct-values call
+// over one, whose static type is its operand's; so are ctaNoDocumentRoot and
+// ctaNoContextItem: each raises before any item exists, so its static type
+// decides only whether a comparison over it compiles, never an answer. A
+// ctaChildPath, ctaChildrenHaving, ctaChildrenPreceded or ctaSelectedElements
+// never reaches here: ctaParser.childPath, ctaParser.childrenHaving,
 // ctaParser.childrenPreceded and ctaParser.selectedElements build them only
-// where no static type is asked. Every other operand is typed
-// by the type it carries (ctaCarriedType).
+// where no static type is asked. Every other operand is typed by the type it
+// carries (ctaCarriedType).
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaDistinctValues:
@@ -2087,9 +2148,21 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 // for one that carries none: an untyped or statically empty operand, and an
 // fn:distinct-values call, whose static type is its operand's. A cast carries
 // its target, an fn:string call its cast's, `$value` the type of each of its
-// items, and a range variable over `$value` that same type (ctaRangeItem).
+// items, and a range variable over `$value` that same type (ctaRangeItem). A
+// path to an attribute carries its compiled type, unless that type is ·special·
+// and its values xs:untypedAtomic; an fn:sum call carries its static type
+// (ctaSum), and `instance of` over one xs:boolean (ctaSumInstance).
 func ctaCarriedType(v ctaValue) (*xsd.SimpleType, bool) {
 	switch n := v.(type) {
+	case ctaAttributePath:
+		if n.st.IsSpecial() {
+			return nil, false
+		}
+		return n.st, true
+	case ctaSum:
+		return n.st, true
+	case ctaSumInstance:
+		return n.st, true
 	case ctaLiteral:
 		return n.st, true
 	case ctaCast:
@@ -2542,6 +2615,10 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaDistinctValues:
 		return ctaBoolean(e.operand, n.st, env)
+	case ctaSum:
+		return ctaBoolean(e.operand, n.st, env)
+	case ctaSumInstance:
+		return ctaBoolean(e.operand, n.st, env)
 	case ctaValueVar:
 		return ctaBoolean(e.operand, n.atom, env)
 	case ctaRangeItem:
@@ -2708,9 +2785,13 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //     wherever the two coincide; the statically empty `$value` yields nothing
 //     to convert.
 //   - an F&O function's result is of its own result type — an
-//     fn:distinct-values call's items of the type it compares them in —
-//     and converted to c on the typed operands' terms, once the function has
+//     fn:distinct-values call's items of the type it compares them in, and an
+//     fn:sum call's of the type its value carries (ctaSum.total) — and
+//     converted to c on the typed operands' terms, once the function has
 //     been applied to its arguments (ctafunc.go).
+//   - a path to an attribute below E yields each value the [Tally] collected
+//     for it, typed or xs:untypedAtomic, on the typed attribute's or the
+//     untyped attribute's terms (ctaAttributePathItem).
 //   - a rooted path raises err:XPDY0050 before it yields anything, and a read
 //     of an absent context item, or of an absent focus by fn:position or
 //     fn:last, err:XPDY0002.
@@ -2793,6 +2874,12 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaNamespaceURIItem(n, c, env)
 	case ctaDistinctValues:
 		return ctaDistinctValuesItem(n, c, env)
+	case ctaAttributePath:
+		return ctaAttributePathItem(n, c, env)
+	case ctaSum:
+		return ctaSumItem(n, c, env)
+	case ctaSumInstance:
+		return ctaSumInstanceItem(n, c, env)
 	case ctaValueVar:
 		return ctaValueItem(n, c, env)
 	case ctaEmptyValue:
@@ -2991,6 +3078,47 @@ func ctaTypedAttrItem(n ctaTypedAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaRaised{}
 	}
 	return ctaPromoted(matched, n.st, c, env)
+}
+
+// ctaAttributePathItem atomizes the attribute nodes n selects (xpath20.md
+// §2.4.2) to the typed values the evaluation's [Tally] collected for n, in the
+// order they were reported, which is document order ([Tally.Attribute]), and
+// converts them into c: cast as ctaAttrItem casts an untyped attribute's
+// where n's type is ·special·, and on ctaTypedAttrItem's terms otherwise. A
+// value of the other arm than n's type fixes, or nil, breaks the obligation
+// [Tally.Attribute] states and raises, as does a Tally holding no collector
+// for n, which [AssertionTest.Evaluate] refuses before the tree is read. The
+// input is ctaTypedInput by construction (ctaInput); the other arm carries no
+// Tally and raises.
+func ctaAttributePathItem(n ctaAttributePath, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return ctaRaised{}
+	}
+	collected, held := in.counts.values(n)
+	if !held {
+		return ctaRaised{}
+	}
+	if n.st.IsSpecial() {
+		lexicals := make([]string, 0, len(collected))
+		for _, v := range collected {
+			untyped, isUntyped := v.(tvUntyped)
+			if !isUntyped {
+				return ctaRaised{}
+			}
+			lexicals = append(lexicals, untyped.lexical)
+		}
+		return ctaUntypedItems(lexicals, c, env)
+	}
+	vs := make([]value.Value, 0, len(collected))
+	for _, v := range collected {
+		tv, isTyped := v.(tvTyped)
+		if !isTyped {
+			return ctaRaised{}
+		}
+		vs = append(vs, tv.v)
+	}
+	return ctaPromoted(vs, n.st, c, env)
 }
 
 // ctaEachChild hands each of E's element [[children]] named name, in the

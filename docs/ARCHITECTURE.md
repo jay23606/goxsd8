@@ -522,9 +522,10 @@ assertion `{test}` over the typed values of the element's attributes, of its
 element children and of its simple content for `cvc-assertion`, keeping only
 the children the compiled test reads; for a test that counts nodes it walks
 the element's subtree in `validate/cvcassertion.go`, reporting each element
-and attribute to the test's `Tally` and asking `CountsAttributesAt` at which
-depths an element whose ·governing type definition· was not determined
-leaves the count lacking; and it injects `FacetAssertions`, the
+and attribute to the test's `Tally`, with the typed value of each attribute a
+path reads (`ReadsAttribute`, `Attribute`), and asking `ReadsAttributesAt` at
+which depths an element whose ·governing type definition· was not determined
+leaves the count or the value lacking; and it injects `FacetAssertions`, the
 `value.AssertionEvaluator` for an assertions facet's `{test}`
 (`cvc-assertions-valid`), into `value.ValidateLexical`/`ValidatingType`.
 Read the tiers below as "does" for tier 1 and for tier 2's first slices,

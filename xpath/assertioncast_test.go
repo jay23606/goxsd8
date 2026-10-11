@@ -158,7 +158,10 @@ func TestAssertionCastUpTheHierarchyRendersNothing(t *testing.T) {
 	pd := csRestriction(t, "Precise", ctaBuiltin("precisionDecimal"))
 	types := asTypesWith(ym, pd)
 	typed := map[xsd.QName]*xsd.SimpleType{uq("ym"): ym, uq("p"): pd}
-	uses := func(name xsd.QName) (*xsd.SimpleType, bool) {
+	uses := func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, bool) {
+		if len(path) != 0 {
+			return nil, false
+		}
 		st, ok := typed[name]
 		return st, ok
 	}

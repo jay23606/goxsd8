@@ -62,7 +62,7 @@ func TestAssertionQuantifiedSiblingsThroughTheWalk(t *testing.T) {
 // so it holds where every e1 carries a and is charged where one lacks it; an
 // undetermined <u> among the children has ·defaulted attributes· the walk
 // cannot know at depth 1, where the Tally counts attribute names, so the
-// assertion is declined (Tally.CountsAttributesAt). The decided rows are
+// assertion is declined (Tally.ReadsAttributesAt). The decided rows are
 // declined instead, and fail, with xpath's quantifier declining.
 func TestAssertionQuantifiedAttributesThroughTheWalk(t *testing.T) {
 	const every = "every $c in e1 satisfies $c/@a"

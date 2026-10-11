@@ -202,6 +202,13 @@ func (ctaFacetFacade) childPath([]xsd.QName, ctaElementTest) (ctaValue, bool) {
 	return ctaNoContextItem{}, true
 }
 
+// attributePath compiles any path through child steps to an attribute to
+// ctaNoContextItem, on childPath's terms, so `sum(a/@p) = 0` fails the facet
+// rather than declining.
+func (ctaFacetFacade) attributePath([]xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {
+	return ctaNoContextItem{}, true
+}
+
 // childrenHaving compiles any child step filtered by its children's existence
 // to ctaNoContextItem, on childPath's terms: the step its predicate filters
 // reads the absent context item before the predicate is evaluated.

@@ -92,21 +92,23 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // {attribute use}, carried or ·defaulted·, has no ·actual value·, one of whose
 // element [[children]] a {test} reads has no typed value this package reads
 // ([walk.keepChild]) — a child of mixed content among them whose string-value
-// spans a descendant whose contribution is undecided
-// ([stringValueFrame.lacking]) — whose `$value` is undecided
-// ([walk.assertionValues]), whose own string value, which `.` reads, spans such
-// a descendant, or was not gathered because e has simple content and element
-// [[children]], or is ·nilled· and has [[children]] and simple content or a
-// {test} reading `.` ([walk.assertionValue]), or one of whose {test}s counts
-// the attribute nodes of, or filters children by the attribute names of, an
-// element of its subtree whose ·governing type definition· this package could
-// not determine, so that its ·defaulted attributes· are unknown
-// ([walk.tallyElement]); a ·skipped· subtree is counted, by name
-// ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause
-// 6's own verdict, whose whole consumer set inside this package is
-// w.res.violations and its one reader [Result.Violations], which charge on a
-// violation PRESENT, so a decline can only cost a rejection and can manufacture
-// none. (#1042)
+// spans a descendant whose contribution is undecided ([stringValueFrame.lacking])
+// — whose `$value` is undecided ([walk.assertionValues]), whose own string value,
+// which `.` reads, spans such a descendant, or was not gathered because e has
+// simple content and element [[children]], or is ·nilled· and has [[children]] and
+// simple content or a {test} reading `.` ([walk.assertionValue]), or one of whose
+// {test}s counts the attribute nodes of, filters children by the attribute names
+// of, or reads the attribute values of, an element of its subtree whose ·governing
+// type definition· this package could not determine, so that its ·defaulted
+// attributes· are unknown ([walk.tallyElement]), or reads through a path the typed
+// value of an attribute below e that has none under the type the {test} was
+// compiled to read — its element ·skipped·, its own {attribute use}'s type neither
+// that type nor validly derived from it, no use matching it, or no ·actual value·
+// ([walk.tallyAttributes]); a ·skipped· subtree is counted, by name
+// ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause 6's
+// own verdict, whose whole consumer set inside this package is w.res.violations
+// and its one reader [Result.Violations], which charge on a violation PRESENT, so
+// a decline can only cost a rejection and can manufacture none. (#1042)
 func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, own *stringValueFrame, invalid bool) {
 	if asserts == nil {
 		return
@@ -155,11 +157,15 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 // contribution to its string-value is undecided ([stringValueFrame.lacking]) —
 // or the first element of the element's subtree a test's [xpath.Tally] cannot
 // be told of exactly: one whose ·governing type definition· was not
-// determined, at whose depth some test's count reads attribute names
-// ([assertionCheck.countsAttributesAt], [walk.tallyElement]). The lack is the
-// whole check's, never one test's. Each test's Tally collects the counts from
-// the whole subtree as it is walked — a ·skipped· part of it by name
-// ([assertionAncestry.tallySkipped]) — and no node of it is kept.
+// determined, at whose depth some test reads attribute names or values
+// ([assertionCheck.readsAttributesAt], [walk.tallyElement]), or one carrying
+// an attribute whose typed value a test reads and which has none under the
+// type the test was compiled to read ([walk.tallyAttributes],
+// [assertionAncestry.tallySkipped]). The lack is the whole check's, never one
+// test's. Each test's Tally collects the counts, and the typed values of the
+// attributes a path to an attribute reads, from the whole subtree as it is
+// walked — a ·skipped· part of it by name ([assertionAncestry.tallySkipped]) —
+// and no node of it is kept.
 type assertionCheck struct {
 	ct       xsd.ComplexType
 	tests    []assertionTest
@@ -182,17 +188,41 @@ func (c *assertionCheck) counts() bool {
 	return false
 }
 
-// countsAttributesAt reports whether the attribute names reported for an
+// readsAttributesAt reports whether the attribute names reported for an
 // element depth levels below c's element, 0 being c's element itself, can
-// change a count some compiled test of c holds
-// ([xpath.Tally.CountsAttributesAt]). A test with no Tally counts none.
-func (c *assertionCheck) countsAttributesAt(depth int) bool {
+// change a count, or a value read, some compiled test of c holds
+// ([xpath.Tally.ReadsAttributesAt]). A test with no Tally reads none.
+func (c *assertionCheck) readsAttributesAt(depth int) bool {
 	for _, t := range c.tests {
-		if t.tally.CountsAttributesAt(depth) {
+		if t.tally.ReadsAttributesAt(depth) {
 			return true
 		}
 	}
 	return false
+}
+
+// readsAttribute reports whether some compiled test of c reads the typed value
+// of the attribute named name of each element whose chain of names below c's
+// element is path ([xpath.Tally.ReadsAttribute]). A test with no Tally reads
+// none.
+func (c *assertionCheck) readsAttribute(path []xsd.QName, name xsd.QName) bool {
+	for _, t := range c.tests {
+		if t.tally.ReadsAttribute(path, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// attribute reports v, the typed value of the attribute named name of the
+// element just reported at path ([assertionCheck.tally]), to the Tally of
+// each test of c that reads it ([xpath.Tally.Attribute]).
+func (c *assertionCheck) attribute(path []xsd.QName, name xsd.QName, v xpath.TypedValue) {
+	for _, t := range c.tests {
+		if t.tally.ReadsAttribute(path, name) {
+			t.tally.Attribute(name, v)
+		}
+	}
 }
 
 // tally reports one element of c's element's subtree to each test's Tally, in
@@ -586,7 +616,12 @@ func (up assertionAncestry) skipped(e Element) error {
 // key-governing-type-elem item 5), so it has no ·defaulted attribute·
 // (key-dflt-att), and its attribute nodes are exactly the [[attributes]] it
 // carries, xsi ones included ([Element.Attributes]); whether a {test} counts
-// attribute nodes at its depth decides nothing here.
+// attribute nodes at its depth decides nothing here. An attribute whose typed
+// value a {test} of a counting ancestor reads through a path to it
+// ([assertionCheck.readsAttribute]) has a typed value of xs:untypedAtomic
+// under no type, never the one that {test} was compiled to read, so that
+// ancestor takes the lack ([lackingAttributeBelow]) and its Tallies, left
+// owing the value, are never read.
 //
 // It reads names and nothing else: no element below the skip is ·assessed·
 // (cvc-assess-elt clause 2), so nothing is fed to an identity constraint or the
@@ -606,7 +641,14 @@ func (up assertionAncestry) tallySkipped(e Element) error {
 		attrs = append(attrs, a.Name())
 	}
 	for f := up.counting; f != nil; f = f.outer {
-		f.check.tally(chain[f.depth+1:], attrs)
+		path := chain[f.depth+1:]
+		f.check.tally(path, attrs)
+		for _, a := range attrs {
+			if f.check.readsAttribute(path, a) {
+				f.check.lacking(lackingAttributeBelow{attr: a, name: e.Name(), loc: e.Loc(), why: "its element is ·skipped·, so its typed value is xs:untypedAtomic, never the type the {test} was compiled to read"})
+				break
+			}
+		}
 	}
 	below := assertionAncestry{counting: up.counting, path: chain}
 	kids := e.Children()
@@ -634,14 +676,17 @@ func (up assertionAncestry) tallySkipped(e Element) error {
 // ancestor — the names in up's path below the ancestor's depth, then e's own —
 // with e's attribute nodes ([walk.attributeNodes]) at that chain's length, and
 // own's count e's attribute nodes with the empty chain, depth 0. g is e's
-// governance. Where e's attribute nodes are undecided — its ·governing type
-// definition· was not determined, so its ·defaulted attributes· are unknown —
-// an ancestor some test of which reads attribute names at e's depth below it
-// ([assertionCheck.countsAttributesAt]) — counting attribute nodes, or
-// filtering children by their attributes — takes the lack instead, which
-// declines its assertions, since a count missing them could fabricate a
-// charge; every other ancestor counts e's element node alone, which no
-// attribute name it could miss changes.
+// governance. Each ancestor's Tallies that read the typed value of an
+// attribute of e through a path to it ([xpath.Tally.ReadsAttribute]) are then
+// told that value ([walk.tallyAttributes]). Where e's attribute nodes are
+// undecided — its ·governing type definition· was not determined, so its
+// ·defaulted attributes· are unknown — an ancestor some test of which reads
+// attribute names at e's depth below it ([assertionCheck.readsAttributesAt])
+// — counting attribute nodes, filtering children by their attributes, or
+// reading their values — takes the lack instead, which declines its
+// assertions, since a count or a sum missing them could fabricate a charge;
+// every other ancestor counts e's element node alone, which no attribute name
+// it could miss changes.
 //
 // It runs on every element [walk.element] enters — invalid, ·nilled·, ·laxly
 // assessed· or undecided alike — once, on entry and before [walk.element]
@@ -659,10 +704,11 @@ func (w *walk) tallyElement(e Element, g governance, up assertionAncestry, own *
 	tell := func(c *assertionCheck, path []xsd.QName) {
 		if decided {
 			c.tally(path, attrs)
+			w.tallyAttributes(c, path, e, g)
 			return
 		}
-		if c.countsAttributesAt(len(path)) {
-			c.lacking(lackingCount{name: e.Name(), loc: e.Loc(), why: "its ·governing type definition· was not determined, so its ·defaulted attributes·, whose names a {test} reads, are unknown"})
+		if c.readsAttributesAt(len(path)) {
+			c.lacking(lackingCount{name: e.Name(), loc: e.Loc(), why: "its ·governing type definition· was not determined, so its ·defaulted attributes·, whose names or values a {test} reads, are unknown"})
 			return
 		}
 		c.tally(path, nil)
@@ -677,6 +723,119 @@ func (w *walk) tallyElement(e Element, g governance, up assertionAncestry, own *
 	if own.counts() {
 		tell(own, chain[len(chain):])
 	}
+}
+
+// tallyAttributes tells the Tallies of c, an ancestor's clause 6 state to which
+// e was just reported at path ([assertionCheck.tally]), the typed value of each
+// attribute node of e one of them reads ([assertionCheck.readsAttribute]):
+// each attribute e carries, in document order, then each ·defaulted
+// attribute· under g's complex ·governing type definition·, in {attribute
+// uses} order, the order [walk.attributeNodes] names them in. Each value is
+// [walk.attributeBelow]'s. Where one has none, c takes the lack instead
+// ([lackingAttributeBelow]) and nothing more is told: its assertions are
+// declined, and its Tallies, left owing a value, are never read.
+func (w *walk) tallyAttributes(c *assertionCheck, path []xsd.QName, e Element, g governance) {
+	attrs := e.Attributes()
+	own := g.complexType()
+	for _, a := range attrs {
+		if !c.readsAttribute(path, a.Name()) {
+			continue
+		}
+		var uses []xsd.AttributeUse
+		if own != nil {
+			uses = own.AttributeUses()
+		}
+		u, matched := attributeUseNamed(uses, a.Name())
+		if !matched {
+			c.lacking(lackingAttributeBelow{attr: a.Name(), name: e.Name(), loc: e.Loc(), why: "no {attribute use} of its element's ·governing type definition· matches it, so its type is not the one the {test} was compiled to read"})
+			return
+		}
+		v, why := w.attributeBelow(c.ct, path, u, a.Value(), elementContext{owner: e}, a.Loc())
+		if why != "" {
+			c.lacking(lackingAttributeBelow{attr: a.Name(), name: e.Name(), loc: e.Loc(), why: why})
+			return
+		}
+		c.attribute(path, a.Name(), v)
+	}
+	if own == nil {
+		return
+	}
+	for _, u := range own.AttributeUses() {
+		vc, defaulted := w.defaultedConstraint(u, attrs)
+		if !defaulted || !c.readsAttribute(path, u.DeclarationName()) {
+			continue
+		}
+		v, why := w.attributeBelow(c.ct, path, u, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
+		if why != "" {
+			c.lacking(lackingAttributeBelow{attr: u.DeclarationName(), name: e.Name(), loc: e.Loc(), why: why})
+			return
+		}
+		c.attribute(path, u.DeclarationName(), v)
+	}
+}
+
+// attributeBelow is the typed value of an attribute of an element at path below
+// the element whose ·governing type definition· is ct, as a {test} of that
+// element reads it through a path to the attribute, or why it has none. u is
+// the attribute's own {attribute use}, within its element's own ·governing
+// type definition·; lexical is its [schema normalized value], read at loc and
+// mapped under ctx. The value is mapped under T, the type [walk.assertionTypes]
+// answers for (path, u's name) — the one closure the {test} was compiled
+// against, so the compiled type and the mapped type cannot disagree, which
+// [xpath.Tally.Attribute] makes the caller's obligation — on
+// [walk.childValue]'s pattern: normalized under u's own type T′ and mapped
+// under T. It reports why instead where:
+//
+//   - T′ is neither T nor, for a T that is not ·special·, validly derived from
+//     it (cos-st-derived-ok, [xsd.Schema.ValidlySubstitutable] with no blocking
+//     keyword): T is STATIC, read off the ·locally declared type· chain, and a
+//     type an element is governed by — a {type table}'s selection, an
+//     xsi:type, a declaration a wildcard resolves to — can give the attribute
+//     another type. A ·special· T is read as xs:untypedAtomic, so T′ must be
+//     T itself, on [walk.childValue]'s terms for a child;
+//   - u's declaration or type does not resolve, or String Valid
+//     ([walk.stringValid]) over lexical under T′ is rejected or withheld, so it
+//     has no ·actual value·, on [walk.assertionTyped]'s terms;
+//   - its normalized value does not map under T.
+//
+// The relation is tested on the attribute use's type directly, never through
+// the element's ·governing type definition· being substitutable for the
+// ·locally declared type·.
+func (w *walk) attributeBelow(ct xsd.ComplexType, path []xsd.QName, u xsd.AttributeUse, lexical string, ctx value.Context, loc xsderr.Loc) (xpath.TypedValue, string) {
+	compiled, typed := w.assertionTypes(ct)(path, u.DeclarationName())
+	if !typed {
+		// Unreachable: a {test} reads the value only where the compile typed it.
+		return nil, "the {test} was compiled with no type for it"
+	}
+	own, resolved := w.assertionType(u)
+	if !resolved {
+		return nil, "its {attribute declaration} or its type does not resolve"
+	}
+	if !sameType(own, compiled) {
+		if compiled.IsSpecial() {
+			return nil, fmt.Sprintf("its type %s is not %s, which the {test} reads as xs:untypedAtomic", typeName(own), typeName(compiled))
+		}
+		derived, err := w.schema.ValidlySubstitutable(own, compiled, nil)
+		if err != nil || !derived {
+			return nil, fmt.Sprintf("its type %s is neither %s, the type the {test} was compiled to read, nor validly derived from it", typeName(own), typeName(compiled))
+		}
+	}
+	decided, verdict := w.stringValid(own, lexical, ctx, loc)
+	if !decided || verdict != nil {
+		return nil, fmt.Sprintf("%q has no ·actual value· under its type %s", lexical, typeName(own))
+	}
+	if compiled.IsSpecial() {
+		return xpath.Untyped(lexical), ""
+	}
+	normalized, ok := normalizedLexical(w.schema, own, lexical)
+	if !ok {
+		return nil, fmt.Sprintf("%q has no [schema normalized value] under its type %s", lexical, typeName(own))
+	}
+	v, err := value.ValidateLexical(w.backend, w.schema, compiled, normalized, ctx, xpath.FacetAssertions(w.now))
+	if err != nil {
+		return nil, fmt.Sprintf("its [schema normalized value] %q has no ·actual value· under %s", normalized, typeName(compiled))
+	}
+	return xpath.Typed(v), ""
 }
 
 // attributeNodes is the names of e's attribute nodes in the data model instance
@@ -793,25 +952,55 @@ func (w *walk) assertionType(u xsd.AttributeUse) (st *xsd.SimpleType, resolved b
 }
 
 // assertionTypes is the [xpath.AttributeTypes] of an element whose
-// ·governing type definition· is ct: the type of the {attribute use} of ct
-// matching the name (cvc-complex-type clause 2.1's match, attributeUseNamed),
-// on [walk.assertionType]'s terms. A name no use matches has no type fixed at
-// compile time — only an {attribute wildcard} can admit it — and answers false,
-// as does a use whose declaration or type does not resolve.
+// ·governing type definition· is ct: the type of the {attribute use} matching
+// the name (cvc-complex-type clause 2.1's match, attributeUseNamed) of ct for
+// the empty path, and of the STATIC type of the element at a non-empty path
+// below it ([walk.staticTypeBelow]), on [walk.assertionType]'s terms. A path
+// with no such static type, and a name no use matches — only an {attribute
+// wildcard} can admit it — have no type fixed at compile time and answer
+// false, as does a use whose declaration or type does not resolve.
 //
 // The answer does not depend on whether the element carries the attribute: a
 // carried one and a ·defaulted attribute· (key-dflt-att) are both in the
 // partial ·PSVI· cvc-assertion clause 1.2 builds from, and both are yielded
-// ([walk.assertionValues]); a use neither carried nor defaulted is absent, and
-// the empty sequence is what the {test} reads.
+// ([walk.assertionValues]) or, below the element, reported
+// ([walk.tallyAttributes]); a use neither carried nor defaulted is absent, and
+// the empty sequence is what the {test} reads. It is the one closure the
+// compile and [walk.attributeBelow]'s mapping both read.
 func (w *walk) assertionTypes(ct xsd.ComplexType) xpath.AttributeTypes {
-	return func(name xsd.QName) (*xsd.SimpleType, bool) {
-		u, matched := attributeUseNamed(ct.AttributeUses(), name)
+	return func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, bool) {
+		owner, static := w.staticTypeBelow(ct, path)
+		if !static {
+			return nil, false
+		}
+		u, matched := attributeUseNamed(owner.AttributeUses(), name)
 		if !matched {
 			return nil, false
 		}
 		return w.assertionType(u)
 	}
+}
+
+// staticTypeBelow is the STATIC type of the element at path below an element
+// whose ·governing type definition· is ct: ct itself for the empty path, and
+// otherwise the ·locally declared type· (key-ldt-elem,
+// [xsd.Schema.LocallyDeclaredElementType]) of path[0] within ct, then of each
+// later step within the type found for the step before. It is false where a
+// step's type is ·absent· or is not a complex type, within which no later step
+// and no {attribute use} has a type.
+func (w *walk) staticTypeBelow(ct xsd.ComplexType, path []xsd.QName) (xsd.ComplexType, bool) {
+	for _, step := range path {
+		ldt, local := w.schema.LocallyDeclaredElementType(ct, step)
+		if !local {
+			return xsd.ComplexType{}, false
+		}
+		next, isComplex := ldt.(xsd.ComplexType)
+		if !isComplex {
+			return xsd.ComplexType{}, false
+		}
+		ct = next
+	}
+	return ct, true
 }
 
 // assertionElementTypes is the [xpath.ElementTypes] of an element whose
@@ -1045,6 +1234,22 @@ type lackingCount struct {
 	name xsd.QName
 	loc  xsderr.Loc
 	why  string
+}
+
+// lackingAttributeBelow is the attribute named attr of an element, named name
+// at loc, of the subtree of an element one of whose {test}s reads that
+// attribute's typed value through a path to it, which has no typed value that
+// {test} reads, for the reason why ([walk.tallyAttributes],
+// [walk.attributeBelow], [assertionAncestry.tallySkipped]).
+type lackingAttributeBelow struct {
+	attr xsd.QName
+	name xsd.QName
+	loc  xsderr.Loc
+	why  string
+}
+
+func (l lackingAttributeBelow) declined(e xsd.QName) string {
+	return fmt.Sprintf("the attribute %s of the element %s at %s, in the subtree of the element %s, whose typed value a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: %s", l.attr, l.name, l.loc, e, l.why)
 }
 
 func (l lackingCount) declined(e xsd.QName) string {

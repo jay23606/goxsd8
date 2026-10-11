@@ -291,7 +291,7 @@ func TestAssertionTallyIsFreshAndTotal(t *testing.T) {
 	none.Element([]xsd.QName{uq("e1")}, []xsd.QName{uq("a")})
 }
 
-// CountsAttributesAt answers per counted path: `@a` selects attributes of E
+// ReadsAttributesAt answers per counted path: `@a` selects attributes of E
 // alone, `.//@a` those of E and of every element below it, and `e1`, `.//e1`
 // and the child path `e1/e1` select none at any depth. `c[@a]` reads the
 // attribute names of E's children, at depth 1 alone, and a union reads them
@@ -300,7 +300,7 @@ func TestAssertionTallyIsFreshAndTotal(t *testing.T) {
 // rows fail at depth 1 with ctaFilteredChildren.selectsAttributesAt false, and
 // the `c | @a` row at depth 0 with ctaUnion.selectsAttributesAt asking its
 // first operand alone.
-func TestTallyCountsAttributesAt(t *testing.T) {
+func TestTallyReadsAttributesAt(t *testing.T) {
 	for _, tc := range []struct {
 		expr string
 		want map[int]bool
@@ -318,8 +318,8 @@ func TestTallyCountsAttributesAt(t *testing.T) {
 	} {
 		c := acCompile(t, asRecord(tc.expr)).Tally()
 		for depth := -1; depth <= 2; depth++ {
-			if got := c.CountsAttributesAt(depth); got != tc.want[depth] {
-				t.Errorf("Tally of %q: CountsAttributesAt(%d) = %v, want %v", tc.expr, depth, got, tc.want[depth])
+			if got := c.ReadsAttributesAt(depth); got != tc.want[depth] {
+				t.Errorf("Tally of %q: ReadsAttributesAt(%d) = %v, want %v", tc.expr, depth, got, tc.want[depth])
 			}
 		}
 	}

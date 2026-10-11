@@ -37,14 +37,18 @@ func asBuiltin(t *testing.T, local string) *xsd.SimpleType {
 }
 
 // asUses is the [AttributeTypes] of an element whose governing type declares
-// one use per entry of uses, name to builtin type local name.
+// one use per entry of uses, name to builtin type local name, and below which
+// no element has a static type: every non-empty path answers false.
 func asUses(t *testing.T, uses map[string]string) AttributeTypes {
 	t.Helper()
 	typed := make(map[xsd.QName]*xsd.SimpleType, len(uses))
 	for local, typ := range uses {
 		typed[uq(local)] = asBuiltin(t, typ)
 	}
-	return func(name xsd.QName) (*xsd.SimpleType, bool) {
+	return func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, bool) {
+		if len(path) != 0 {
+			return nil, false
+		}
 		st, ok := typed[name]
 		return st, ok
 	}
@@ -304,11 +308,11 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 		"x": "integer", "l": "NMTOKENS",
 		"q": "QName", "n": "NOTATION", "f": "float",
 	})
-	uses := func(name xsd.QName) (*xsd.SimpleType, bool) {
-		if name == uq("u") {
+	uses := func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, bool) {
+		if len(path) == 0 && name == uq("u") {
 			return union, true
 		}
-		return types(name)
+		return types(path, name)
 	}
 	for _, tc := range []struct{ expr, why string }{
 		{"@y > 1", "a name with no attribute use, which AttributeTypes does not type"},

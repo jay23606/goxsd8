@@ -1,6 +1,9 @@
 package xpath
 
 import (
+	"errors"
+	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -724,7 +727,19 @@ func (t ctaTypes) arithmetic(op ctaArithOp, l, r ctaValue) (ctaValue, bool) {
 // computed from: xs:double for an xs:untypedAtomic operand (§3.4), and its own
 // {primitive type definition} for a typed one, reporting false where that is
 // not numeric or does not resolve.
+//
+// GAP(xpath): an fn:sum call whose static type is xs:float or xs:double
+// declines (ctaSum.floating), and so does an fn:distinct-values call over one,
+// which takes its static type (ctaFloatingSum): over an empty argument it
+// returns the xs:integer 0, which is not of that type, so the operation type
+// B.1 settles from it would be wrong for that one value — `sum(a/@u) + 0.1 +
+// 0.2 = 0.3` computed in xs:double where XPath computes it in xs:decimal,
+// `sum(a/@u) div 0` NaN where XPath raises err:FOAR0001. The direction is the
+// withhold [CompileAssertionTest] reports. (#1042)
 func (t ctaTypes) arithmeticOperand(v ctaValue) (*xsd.SimpleType, bool) {
+	if _, floating := ctaFloatingSum(v); floating {
+		return nil, false
+	}
 	typed, isTyped := ctaStaticOf(v).(ctaTyped)
 	if !isTyped {
 		return t.double, true
@@ -778,6 +793,49 @@ func (t ctaTypes) arithmeticResult(op ctaArithOp, kind ctaNumericKind, operation
 	return integer, true
 }
 
+// sum builds the node of a call to fn:sum over arg (xpath-functions.md
+// §15.4.5), settling at compile time the type arg's items are read in and the
+// call's static type (ctaSum), or reports false where this engine declines it.
+// The items are read in their own type, or in xs:double where they are
+// xs:untypedAtomic, which §15.4.5 casts to xs:double. The static type is,
+// where that item type has a numeric {primitive type definition}, the type
+// §6.2's numeric operators return over two of them: xs:integer for one
+// derived from xs:integer, and the primitive otherwise; and, where it does
+// not, xs:integer, the type of the only value such a call returns without
+// raising — the 0 of an empty argument — since a non-empty one raises
+// err:FORG0006.
+//
+// GAP(xpath): an item type with a duration {primitive type definition}
+// declines, though §15.4.5 sums xs:yearMonthDuration and xs:dayTimeDuration
+// values: this engine computes no duration arithmetic (ctaTypes.arithmetic).
+// The direction is the withhold [CompileAssertionTest] reports. (#1042)
+func (t ctaTypes) sum(arg ctaValue) (ctaValue, bool) {
+	integer, resolved := t.simple(ctaBuiltin("integer"))
+	if !resolved {
+		return nil, false
+	}
+	item := t.double
+	if typed, isTyped := ctaStaticOf(arg).(ctaTyped); isTyped {
+		item = typed.st
+	}
+	p, resolved := t.primitive(item)
+	if !resolved || p.Name() == ctaBuiltin("duration") {
+		return nil, false
+	}
+	st := p
+	if !ctaNumeric(p) {
+		st = integer
+	}
+	at, err := t.ancestor(item, integer.Name())
+	if err != nil {
+		return nil, false
+	}
+	if at != nil {
+		st = integer
+	}
+	return ctaSum{arg: arg, item: item, st: st, integer: integer}, true
+}
+
 // ctaTyping is which of the three outcomes settling a comparison's type
 // reached, and the three are three DIFFERENT directions rather than degrees of
 // one (STYLE P3):
@@ -813,6 +871,9 @@ const (
 // makes a constructed ctaCompare B.2-legal by construction, so evaluation
 // never meets an operand pair its operator does not admit.
 func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
+	if !t.sumCompares(l, r) || !t.sumCompares(r, l) {
+		return nil, ctaTypeDeclined
+	}
 	if st, empty := t.againstEmpty(l, r); empty {
 		return st, ctaTypeSettled
 	}
@@ -849,6 +910,9 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 // path (ctaNoDocumentRoot, err:XPDY0050) and a read of the absent context item
 // (ctaNoContextItem, err:XPDY0002, xpath20.md §3.1.4).
 func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
+	if !t.sumCompares(l, r) || !t.sumCompares(r, l) {
+		return nil, ctaTypeDeclined
+	}
 	if st, empty := t.againstEmpty(l, r); empty {
 		return st, ctaTypeSettled
 	}
@@ -861,6 +925,57 @@ func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleT
 		return nil, ctaTypeErrored
 	}
 	return st, ctaTypeSettled
+}
+
+// sumCompares reports whether a comparison of v against other is decided in
+// the comparison type B.1 settles from their static types for every value v
+// can take, which is false for one case alone: v is an fn:sum call whose
+// static type is xs:float or xs:double (ctaSum.floating), or an
+// fn:distinct-values call over one, which takes its static type
+// (ctaFloatingSum), and other is typed with an xs:decimal {primitive type
+// definition}. Over an empty argument v is the xs:integer 0, which XPath
+// compares with an xs:decimal in xs:decimal and this engine would compare in
+// v's floating type, where a non-zero decimal of tiny magnitude rounds to
+// zero: `sum(a/@u) = $tiny` would hold. A DecimalLiteral or IntegerLiteral
+// other is admitted where its value is zero exactly when its rounding to v's
+// type is, which settles every comparison of it with 0 alike in both types;
+// every other such operand is not.
+//
+// GAP(xpath): such a comparison declines. The direction is the withhold
+// [CompileAssertionTest] reports. (#1042)
+func (t ctaTypes) sumCompares(v, other ctaValue) bool {
+	sum, floating := ctaFloatingSum(v)
+	if !floating {
+		return true
+	}
+	typed, isTyped := ctaStaticOf(other).(ctaTyped)
+	if !isTyped {
+		return true
+	}
+	p, resolved := t.primitive(typed.st)
+	if !resolved || p.Name() != ctaBuiltin("decimal") {
+		return true
+	}
+	lit, isLiteral := other.(ctaLiteral)
+	return isLiteral && ctaZeroAlike(lit.text, sum.st)
+}
+
+// ctaZeroAlike reports whether the decimal lexical text is zero exactly where
+// its value rounded to the IEEE 754 type floating, xs:float or xs:double, is.
+func ctaZeroAlike(text string, floating *xsd.SimpleType) bool {
+	exact, parsed := new(big.Rat).SetString(text)
+	if !parsed {
+		return false
+	}
+	bits := 64
+	if floating.Name() == ctaBuiltin("float") {
+		bits = 32
+	}
+	rounded, err := strconv.ParseFloat(text, bits)
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
+		return false
+	}
+	return (exact.Sign() == 0) == (rounded == 0)
 }
 
 // valueOperand is the type one value-comparison operand is compared from: its

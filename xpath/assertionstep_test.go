@@ -120,7 +120,7 @@ func TestAssertionElementStepReadsNoChild(t *testing.T) {
 			t.Errorf("(%s).Tally() = %v, want %d counters", tc.expr, c, tc.counters)
 		}
 	}
-	if c := esCompile(t, "not(.//d)").Tally(); c.CountsAttributesAt(0) || c.CountsAttributesAt(2) {
+	if c := esCompile(t, "not(.//d)").Tally(); c.ReadsAttributesAt(0) || c.ReadsAttributesAt(2) {
 		t.Error("Tally of not(.//d) counts attributes, want none: an element step selects no attribute")
 	}
 }

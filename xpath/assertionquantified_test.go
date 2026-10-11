@@ -174,7 +174,7 @@ func TestAssertionQuantifiedChessSpellings(t *testing.T) {
 // A quantifier keeps the counters its keys need and shares the binding count
 // with `count(N)`: `every` keys the satisfying children and N, `some` the
 // satisfying children alone, and the De Morgan rewrite of `every … not(B)` is
-// a `some`. Neither form reads a child's value. CountsAttributesAt(1) is true
+// a `some`. Neither form reads a child's value. ReadsAttributesAt(1) is true
 // for the `$c/@a` body, whose key reads depth 1's attribute names, and false
 // for the sibling body, which reads names alone.
 func TestAssertionQuantifiedCounters(t *testing.T) {
@@ -198,10 +198,10 @@ func TestAssertionQuantifiedCounters(t *testing.T) {
 		if c == nil || len(c.counters) != tc.counters {
 			t.Errorf("(%s).Tally() = %v, want %d counters", tc.expr, c, tc.counters)
 		}
-		if got := c.CountsAttributesAt(1); got != tc.attributes {
-			t.Errorf("(%s).Tally().CountsAttributesAt(1) = %v, want %v", tc.expr, got, tc.attributes)
+		if got := c.ReadsAttributesAt(1); got != tc.attributes {
+			t.Errorf("(%s).Tally().ReadsAttributesAt(1) = %v, want %v", tc.expr, got, tc.attributes)
 		}
-		if c.CountsAttributesAt(0) || c.CountsAttributesAt(2) {
+		if c.ReadsAttributesAt(0) || c.ReadsAttributesAt(2) {
 			t.Errorf("(%s).Tally() counts attributes at depth 0 or 2, want neither", tc.expr)
 		}
 		for _, name := range []string{"c", "d", "e"} {
