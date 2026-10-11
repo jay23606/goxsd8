@@ -227,11 +227,16 @@ func TestAssertionQuantifiedVariableNames(t *testing.T) {
 }
 
 // Every QuantifiedExpr over a child step outside the admitted shapes declines,
-// and so does the range variable outside its body (err:XPST0008). The two
-// `preceding::` rows stand outside the child-step predicate #2522 admits and
-// belong to #1042. A binding over `$value` is
+// and so does the range variable outside its body (err:XPST0008). c and d are
+// typed xs:integer, so no row declines for want of a type a body over the
+// bound children's values could read: those bodies, `$c = 1` and
+// `$c/following-sibling::c[1]`, are admitted (xpath20.md §3.9, §3.5.2,
+// §3.2.1.1, §3.2.2) and pinned in TestAssertionQuantifiedChildrenTyped. The
+// two `preceding::` rows stand outside the child-step predicate #2522 admits
+// and belong to #1042. A binding over `$value` is
 // TestAssertionQuantifiedOverValueDeclines'.
 func TestAssertionQuantifiedDeclines(t *testing.T) {
+	elems := asElems(map[xsd.QName]xsd.TypeDefinition{uq("c"): asBuiltin(t, "integer"), uq("d"): asBuiltin(t, "integer")})
 	for _, tc := range []struct{ expr, why string }{
 		{"every $value in c satisfies $value/@a", "a range variable named $value"},
 		{"every $c in c, $d in d satisfies $c/@a", "two in-clauses"},
@@ -244,7 +249,6 @@ func TestAssertionQuantifiedDeclines(t *testing.T) {
 		{"every $c in c satisfies some $d in d satisfies $d/@a", "a nested quantifier"},
 		{"every $c in c satisfies $c/@a or $c/@b", "a disjunctive body"},
 		{"every $c in c satisfies $c/@a = 1", "a body reading the attribute's value"},
-		{"every $c in c satisfies $c = 1", "a body reading $c's value"},
 		{"every $c in c satisfies $c/@*", "a wildcard attribute"},
 		{"every $c in c satisfies $c/@a and @b", "a conjunct off E"},
 		{"every $c in c satisfies $c/@a and $d/@b", "a conjunct off another variable"},
@@ -253,7 +257,6 @@ func TestAssertionQuantifiedDeclines(t *testing.T) {
 		{"every $c in c satisfies $d/@a", "another variable in the body"},
 		{"every $a:w in c satisfies $w/@x", "a prefixed variable named unprefixed"},
 		{"(every $c in c satisfies $c/@a) and $c/@a", "the variable outside its body"},
-		{"every $c in c satisfies $c/following-sibling::c[1]", "a NameTest before [1]"},
 		{"every $c in c satisfies $c/following-sibling::*[self::c][1]", "the predicates swapped"},
 		{"every $c in c satisfies $c/following-sibling::*[1]", "no [self::M]"},
 		{"every $c in c satisfies $c/following-sibling::*[self::c]", "no [1]"},
@@ -273,7 +276,7 @@ func TestAssertionQuantifiedDeclines(t *testing.T) {
 		{"count(every $c in c satisfies $c/@a) = 1", "a quantifier as a value"},
 		{"every $c in c satisfies $c/following-sibling::*[1][self::c] and count(c) = 1", "a body followed by and"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems); ok {
+		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, nil), elems); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
@@ -289,9 +292,13 @@ func TestAssertionQuantifiedDeclines(t *testing.T) {
 // `$value` decline at ctaTypeAlternativeFacade.variable before rangeScope is
 // asked; the facet rows over a child step fail with ctaFacetFacade.quantified
 // admitting the node, and those over `$value`, which hold over "x" where
-// compiled, with ctaFacetFacade.rangeScope admitting the body's scope.
+// compiled, with ctaFacetFacade.rangeScope admitting the body's scope. The
+// windowed form over a typed child step declines at child on both façades: a
+// Type Alternative's declines every child step, and the facet's compiles to
+// ctaNoContextItem, no ctaTypedChild (ctaParser.childQuantified).
 func TestAssertionQuantifiedOutsideTheAssertionFacade(t *testing.T) {
 	forms := []string{
+		aqcAscending,
 		"every $c in c satisfies $c/@a",
 		"some $c in c satisfies $c/@a",
 		"every $w in white satisfies not($w/following-sibling::*[1][self::white])",

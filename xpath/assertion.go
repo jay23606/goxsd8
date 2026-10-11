@@ -67,11 +67,14 @@ import (
 // ExprSingle stands whole in a boolean position (ctaFacade.conditional), and
 // there §3.9's [6] QuantifiedExpr over one child step, whose body tests the
 // bound child's attributes or its next sibling element, its counts read off
-// the [Tally] (ctaFacade.quantified), or over the items of a typed `$value`,
-// each bound in turn to its range variable (ctaFacade.rangeScope); [47]
-// ContextItemExpr `.`, as E's string value (ctaAssertionFacade.contextItem);
-// and, as a general comparison's operand, §3.3.1's integer and string sequences
-// (ctaFacade.constructsSequences).
+// the [Tally] (ctaFacade.quantified), or over one typed child step, filtered
+// by `[position() lt last()]` or not (§3.2.2), each child bound in turn to its
+// range variable off [ChildElements], whose body reads its typed value and
+// `$v/following-sibling::M[1]` (ctaFacade.childScope, ctaFacade.boundSibling),
+// or over the items of a typed `$value`, each bound in turn to its range
+// variable (ctaFacade.rangeScope); [47] ContextItemExpr `.`, as E's string value
+// (ctaAssertionFacade.contextItem); and, as a general comparison's operand,
+// §3.3.1's integer and string sequences (ctaFacade.constructsSequences).
 
 // AttributeTypes answers, for the element information item E whose assertions
 // are being compiled, the {type definition} an attribute with the ·expanded
@@ -137,6 +140,10 @@ func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name
 // DOCUMENT ORDER (STYLE D1), each as a [ChildElement]. It must be non-nil, and
 // a yield reporting false ends the walk. A child no compiled step names need
 // not be yielded: [AssertionTest.ReadsChild] reports which names one reads.
+// Every child of a name it reports true for must be yielded, once, in its
+// document-order place among the others yielded: a quantifier reads a child's
+// position among its namesakes, the last of them, and the next child of a
+// name after it off that order (xpath20.md §3.2.1.1, §3.2.2).
 //
 // Each value's arm is fixed by the type [ElementTypes] answered for its name
 // when the [AssertionTest] being evaluated was compiled; a ·nilled· child's is
@@ -160,12 +167,15 @@ func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name
 // It carries the children whose typed values a compiled step reads and nothing
 // below them: those a value step names, and those an fn:count argument filters
 // by a predicate over their value, `count(N[. = 'x'])`, which is counted over
-// them here. A node a {test} only counts — a child, a descendant, an
-// attribute, a child filtered by its attributes' existence — or only asks the
-// existence of through a path, `a`, `.//a`, `a/b`, `a/*` or `a[b]`, is
-// reported to the [Tally] instead, and never yielded here for that sake; so is
-// the typed value of an attribute of a child or a deeper descendant that a
-// path reads, `sum(a/b/@p)` ([Tally.Attribute]).
+// them here, and those a quantifier binds whose body reads the bound child's
+// value or its next namesake, `every $v in N[position() lt last()] satisfies
+// $v lt $v/following-sibling::M[1]` — the children named N and those named M.
+// A node a {test} only counts — a child, a descendant, an attribute, a child
+// filtered by its attributes' existence — or only asks the existence of
+// through a path, `a`, `.//a`, `a/b`, `a/*` or `a[b]`, is reported to the
+// [Tally] instead, and never yielded here for that sake; so is the typed value
+// of an attribute of a child or a deeper descendant that a path reads,
+// `sum(a/b/@p)` ([Tally.Attribute]).
 type ChildElements func(yield func(ChildElement) bool)
 
 // TypedValue is the typed value of one attribute node, of one element node of
@@ -329,19 +339,20 @@ type ContextElement interface {
 // ranges over (§3.9) — the children it binds, and those its body holds for:
 // those carrying an attribute, or followed by a sibling element of a name —
 // how many nodes of E's subtree it selects. A child step filtered by its VALUE
-// is not among them: [ChildElements] answers it. [AssertionTest.Tally] makes
-// one, the caller reports E's subtree to it while that subtree streams past,
-// and [AssertionTest.Evaluate] reads it. It keeps one counter per distinct
-// path and no node: what the caller holds for a count is one integer per path,
-// the chain of names of the latest report, which is O(depth), for a child step
-// filtered by its children's existence, which of those children the latest
-// child named by the step has shown so far, for one filtered by a
-// `preceding::` step, whether an element it keeps has been reported and, for
-// each element of the latest report's chain, whether it bears the preceding
-// step's name and has shown the child its filter names, which is O(depth) too,
-// and, for the children followed by a sibling of a name, whether the latest
-// child of E reported bears the name they are drawn from — whatever the
-// subtree's size.
+// is not among them: [ChildElements] answers it. A quantifier reading its
+// bindings' values is not among them: [ChildElements] answers it.
+// [AssertionTest.Tally] makes one, the caller reports E's subtree to it while
+// that subtree streams past, and [AssertionTest.Evaluate] reads it. It keeps
+// one counter per distinct path and no node: what the caller holds for a count
+// is one integer per path, the chain of names of the latest report, which is
+// O(depth), for a child step filtered by its children's existence, which of
+// those children the latest child named by the step has shown so far, for one
+// filtered by a `preceding::` step, whether an element it keeps has been
+// reported and, for each element of the latest report's chain, whether it
+// bears the preceding step's name and has shown the child its filter names,
+// which is O(depth) too, and, for the children followed by a sibling of a
+// name, whether the latest child of E reported bears the name they are drawn
+// from — whatever the subtree's size.
 //
 // It also carries, for each path to an attribute whose values the {test}
 // reads — fn:sum's argument `N1/…/@A` (xpath-functions.md §15.4.5, xpath20.md
@@ -934,12 +945,18 @@ type AssertionTest struct {
 // selects, whose body is `$v/@A`, a conjunction `$v/@A and $v/@B …`, or
 // `$v/following-sibling::*[1][self::M]` — the next sibling element of `$v` where it is named
 // M, empty after E's last child element (§3.2.1.1, §3.2.2) — or one of those inside fn:not, or
-// binding a range variable `$x` to each item of a typed `$value`, atomic or list, written
-// `data($value)` or `$value` (xpath-functions.md §2.4), whose body is any one ExprSingle this
-// function admits, the range variable in scope in it alone as an atomic value of `$value`'s
-// item type, `some` true where a binding satisfies the body and `every` where all do, so over
-// no binding — an empty list, or the nil `$value` clause 2.3.2 binds — `some` is false and
-// `every` true, and over `$value` a binding whose body raises is the answer unless another
+// binding `$v` to each child such a step selects whose type elems answers is one a child read
+// for its value is admitted under as a TYPED value, or to each but the last of them under the
+// one predicate `[position() lt last()]` (§3.2.2), whose body is any one ExprSingle this
+// function admits, `$v` in scope in it alone as a node, ·nilled· or not, whose typed value is
+// that child's, and `$v/following-sibling::M[1]` the first later child named M however many
+// of other names lie between, or none (§3.2.1.1), typed on the same terms, or binding a range
+// variable `$x` to each item of a typed `$value`, atomic or list, written `data($value)` or
+// `$value` (xpath-functions.md §2.4), whose body is any one ExprSingle this function admits,
+// the range variable in scope in it alone as an atomic value of `$value`'s item type, `some`
+// true where a binding satisfies the body and `every` where all do, so over no binding — an
+// empty list, or the nil `$value` clause 2.3.2 binds — `some` is false and `every` true, and
+// over `$value` or a typed child step a binding whose body raises is the answer unless another
 // binding decides the quantifier (§3.6's tables); and, as an operand of a general comparison,
 // an integer sequence: [11] RangeExpr `I to J` over two IntegerLiterals, bare or
 // parenthesized, or a parenthesized comma sequence of IntegerLiterals and such ranges, `(1 to
@@ -972,19 +989,25 @@ type AssertionTest struct {
 //   - a quantified expression of any other shape: a range variable named
 //     `$value`, which would shadow clause 2.3's; two or more in-clauses; a
 //     binding sequence that is not one QName child step `N` or `./N` — `*`,
-//     `a/b`, `.//N`, `@x`, `.` or a predicate — nor `data($value)` or
-//     `$value` over a typed `$value`, so a `$value` under a {content type}
-//     that is not simple or over a ·special· one declines as a binding; a
-//     nested quantifier in either body; over `$value`, a path over the range
-//     variable, `$x/@a`, and `instance of` over it; over a child step, a body
-//     of any other form — `or`, a value read off `$v`,
-//     `$v/following-sibling::M[1]` or `$v/following-sibling::*[self::M][1]`,
-//     which select the first M sibling however far, a position other than the
-//     IntegerLiteral `1`, `[last()]`, `[position() = 1]`, either predicate
-//     alone, a wildcard or kind test on either step, `self::` outside a
-//     predicate, and every other axis, `preceding::` among them — a body
-//     followed by `and` or `or` inside the same ExprSingle, and a quantifier
-//     anywhere but where the conditional stands;
+//     `a/b`, `.//N`, `@x`, `.` or a predicate but `[position() lt last()]`
+//     — `<`, `ne` or `!=` for `lt`, `[last()]`, `[1]`, a second predicate —
+//     nor `data($value)` or `$value` over a typed `$value`, so a `$value`
+//     under a {content type} that is not simple or over a ·special· one
+//     declines as a binding; a nested quantifier in any body; over `$value`, a
+//     path over the range variable, `$x/@a`, and `instance of` over it; over a
+//     child step whose body is none of the forms read off the [Tally], a
+//     child step N a child read for its value would decline, or of mixed
+//     content, a path over `$v` but `$v/following-sibling::M[1]` — `$v/@a`,
+//     `$v/following-sibling::M`, `[2]`, a wildcard M, `preceding-sibling::`
+//     — and such an M a child read for its value would decline, or of mixed
+//     content; over `N[position() lt last()]`, a body read off the [Tally];
+//     over a child step whose body opens as one read off the [Tally] does,
+//     `$v/@` or `$v/following-sibling::*`, a body of any other form — `or`,
+//     `$v/following-sibling::*[self::M][1]`, which selects the first M sibling
+//     however far, a position other than the IntegerLiteral `1`, `[last()]`,
+//     `[position() = 1]`, either predicate alone, a wildcard or kind test on
+//     either step — a body followed by `and` or `or` inside the same
+//     ExprSingle, and a quantifier anywhere but where the conditional stands;
 //   - a child-axis step whose NameTest is not a QName — but the `*` ending a
 //     child path whose existence is asked — or spells its axis out, and, where
 //     the step's value is read — anywhere but as the whole operand of
@@ -1155,18 +1178,20 @@ type AssertionTest struct {
 // where `a = 1` declines. Nor does an attribute-existence predicate, whose
 // ·effective boolean value· asks only whether the attribute node exists (§2.4.3
 // rule 2), so `c[@a]` counts a c carrying an empty a, and neither does a
-// quantified expression over a child step, whose binding step is never
-// atomized and whose body asks only whether its step selects a node, so a
-// child of any type is bound and `$v/@a` holds for a `$v` carrying an empty a.
-// What the {test} counts is read off the [Tally] its evaluation carries
-// ([AssertionTest.Tally]). A predicate reading `.` is the one counted argument
-// elems types: it atomizes each candidate child, typed as a child step naming
-// it reads a TYPED value, and counts over [ChildElements]; a dynamic or type
-// error over any candidate raises for the whole count. An argument that is no
-// path is counted off its own items, never the [Tally], on fn:exists' terms:
-// `count($value)` is the number of items of `$value` — one for an atomic or
-// ·special· value, each item of a list (Datatypes dt-xdmrep clause 3), and none
-// for an empty list or the empty sequence clause 2.3.2 binds.
+// quantified expression over a child step whose body is read off the [Tally],
+// whose binding step is never atomized and whose body asks only whether its
+// step selects a node, so a child of any type is bound and `$v/@a` holds for a
+// `$v` carrying an empty a. One whose body is any other form binds typed
+// children off [ChildElements], on a value step's terms. What the {test} counts
+// is read off the [Tally] its evaluation carries ([AssertionTest.Tally]). A
+// predicate reading `.` is the one counted argument elems types: it atomizes
+// each candidate child, typed as a child step naming it reads a TYPED value,
+// and counts over [ChildElements]; a dynamic or type error over any candidate
+// raises for the whole count. An argument that is no path is counted off its
+// own items, never the [Tally], on fn:exists' terms: `count($value)` is the
+// number of items of `$value` — one for an atomic or ·special· value, each item
+// of a list (Datatypes dt-xdmrep clause 3), and none for an empty list or the
+// empty sequence clause 2.3.2 binds.
 //
 // fn:distinct-values atomizes its argument and drops each item eq to an
 // earlier one (xpath-functions.md §15.1.6), compared in the items' {primitive
@@ -1194,9 +1219,12 @@ type AssertionTest struct {
 // steps of such a path, the one element step whose existence is asked, the one
 // counted step, the preceding step and its child step in a predicate on a
 // child step whose existence is asked — `ancestor::` and `preceding-sibling::`
-// among the axes beyond them — and the following-sibling and self steps of a
-// quantifier's sibling body, quantified expressions beyond one in-clause over
-// a child step with the two body forms, or over a typed `$value`, wildcards
+// among the axes beyond them — the following-sibling and self steps of a
+// quantifier's sibling body, and the `following-sibling::M[1]` step over a
+// range variable bound to a typed child, quantified expressions beyond one
+// in-clause over a child step with the two body forms read off the [Tally],
+// over a typed child step, filtered by `[position() lt last()]` or not, whose
+// body reads its bound children, or over a typed `$value`, wildcards
 // but a `*` ending a child path whose existence is asked, predicates beyond
 // the two kinds on a counted child step and the child-existence conjunction
 // and the `preceding::` step on a child step whose existence is asked,
@@ -1326,15 +1354,15 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e Conte
 // children's existence, one counter serving `N[a and b]` and `N[b and a]`, or one filtered by
 // a `preceding::` step, `N[preceding::M[not(P)]]` — whose existence t asks (fn:exists,
 // fn:empty, an ·effective boolean value·), one counter serving a path both counted and asked —
-// and, for each quantified expression over a child step, the children satisfying its body,
-// `N[@A]` or the N followed by an M sibling, and, under `every`, the children it binds, `N`,
-// one counter serving `count(N)` and `every $v in N satisfies …` — and one collector for each
-// distinct path to an attribute whose values t reads, fn:sum's argument `a/b/@p` — or nil
-// exactly where t neither counts nor reads a value below E — a {test} with none of these, or
-// one whose every fn:count argument is rooted and raises, is a child step filtered by its
-// value, which [ChildElements] answers, or is no path and counts none, as `count($value)`
-// counts the items of `$value`. t itself is not changed, so one compiled test serves any
-// number of evaluations, each with its own Tally.
+// and, for each quantified expression over a child step whose body is read off the Tally, the
+// children satisfying its body, `N[@A]` or the N followed by an M sibling, and, under `every`,
+// the children it binds, `N`, one counter serving `count(N)` and `every $v in N satisfies …` —
+// and one collector for each distinct path to an attribute whose values t reads, fn:sum's
+// argument `a/b/@p` — or nil exactly where t neither counts nor reads a value below E — a
+// {test} with none of these, or one whose every fn:count argument is rooted and raises, is a
+// child step filtered by its value, which [ChildElements] answers, or is no path and counts
+// none, as `count($value)` counts the items of `$value`. t itself is not changed, so one
+// compiled test serves any number of evaluations, each with its own Tally.
 //
 // Its consumer is validate's walk (validate/cvcassertion.go), which reads the
 // nil as its gate: only an element one of whose {test}s has a Tally reports its
@@ -1354,9 +1382,9 @@ func (t AssertionTest) Tally() *Tally {
 
 // countedPaths is each distinct key t counts under — an fn:count argument, an
 // element step, child path or filtered child step whose existence it asks,
-// the keys of a quantified expression over a child step, or a path to an
-// attribute whose values it reads — in written order, read off the tree
-// itself.
+// the keys of a quantified expression over a child step read off the Tally,
+// or a path to an attribute whose values it reads — in written order, read
+// off the tree itself.
 func (t AssertionTest) countedPaths() []ctaKey {
 	if t.root == nil {
 		// The zero AssertionTest, which no successful CompileAssertionTest
@@ -1384,9 +1412,11 @@ func ctaHoldsPath[K ctaKey](keys []K, key ctaKey) bool {
 
 // ReadsChild reports whether the compiled {test} holds a child-axis step that
 // selects a child element named name for its VALUE, which is what
-// [AssertionTest.Evaluate]'s [ChildElements] must yield: a value step, or a
-// child step an fn:count argument filters by a predicate over its value,
-// `count(N[. = 'x'])`, which is counted over the children yielded. Its
+// [AssertionTest.Evaluate]'s [ChildElements] must yield: a value step; a child
+// step an fn:count argument filters by a predicate over its value,
+// `count(N[. = 'x'])`, which is counted over the children yielded; or the
+// binding step of a quantifier whose body reads its bound children's values,
+// and the `following-sibling::M[1]` step over its range variable. Its
 // consumer is validate's walk, which keeps a child's value only where some
 // {test} of its parent reads it. Any other fn:count path reads no value and is
 // no read here — an argument that is no path reads what its operand reads,
@@ -1441,6 +1471,14 @@ func (ctaQuantified) readsChild(xsd.QName) bool { return false }
 // readsChild reports whether the body holds a child value step naming name:
 // the binding sequence, `$value`, reads no child.
 func (n ctaQuantifiedValue) readsChild(name xsd.QName) bool { return n.body.readsChild(name) }
+
+// readsChild reports whether name is the binding step's, whose children the
+// quantifier binds off [ChildElements] — their values, their positions and the
+// last of them — or one the body reads, `$v/following-sibling::M[1]`'s M among
+// them.
+func (n ctaQuantifiedChildren) readsChild(name xsd.QName) bool {
+	return n.over.name == name || n.body.readsChild(name)
+}
 
 // readsChild reports whether the test or either branch holds a child value
 // step naming name: which branch is evaluated is not known until E is.
@@ -1553,6 +1591,14 @@ func (ctaCandidate) readsChild(xsd.QName) bool { return false }
 
 // readsChild is false: the range variable is an item of `$value`, no child.
 func (ctaRangeItem) readsChild(xsd.QName) bool { return false }
+
+// readsChild is false: the bound child's name is the enclosing
+// ctaQuantifiedChildren's read, which reports it.
+func (ctaBoundChild) readsChild(xsd.QName) bool { return false }
+
+// readsChild reports whether the step selects children named name, read off
+// [ChildElements] beside the bound one.
+func (n ctaBoundSibling) readsChild(name xsd.QName) bool { return n.step.name == name }
 
 // readsChild is false, on ctaCount's terms: a child path reads no node's value,
 // and how many nodes it selects is the [Tally]'s.
@@ -1677,6 +1723,11 @@ func (ctaCandidate) counted(into []ctaKey) []ctaKey { return into }
 // counted appends nothing: the range variable is no fn:count call.
 func (ctaRangeItem) counted(into []ctaKey) []ctaKey { return into }
 
+// counted appends nothing for each of these: each is read off [ChildElements],
+// never keyed in the [Tally].
+func (ctaBoundChild) counted(into []ctaKey) []ctaKey   { return into }
+func (ctaBoundSibling) counted(into []ctaKey) []ctaKey { return into }
+
 // counted appends the path itself: the [Tally] counts the nodes it selects.
 func (n ctaChildPath) counted(into []ctaKey) []ctaKey { return append(into, n) }
 
@@ -1709,6 +1760,11 @@ func (n ctaQuantified) counted(into []ctaKey) []ctaKey {
 // counted appends each path the body counts over: the binding sequence,
 // `$value`, keys nothing, and the quantifier none of its own.
 func (n ctaQuantifiedValue) counted(into []ctaKey) []ctaKey { return n.body.counted(into) }
+
+// counted appends each path the body counts over: the binding step is read
+// off [ChildElements], keying nothing, and the quantifier keys none of its
+// own.
+func (n ctaQuantifiedChildren) counted(into []ctaKey) []ctaKey { return n.body.counted(into) }
 
 // counted appends the step's path, the key an fn:count over the same step
 // counts under too.
@@ -1981,6 +2037,21 @@ func (f ctaAssertionFacade) rangeScope(variable xsd.QName, over ctaValueVar) (ct
 	return ctaRangeFacade{ctaAssertionFacade: f, name: variable, item: ctaRangeItem{st: over.atom}}, true
 }
 
+// childScope is f with variable in scope as the range variable over the
+// children over selects (ctaChildRangeFacade), each a node whose typed value is
+// of over's type: the body of a quantifier over a typed child step parses
+// under it.
+func (f ctaAssertionFacade) childScope(variable xsd.QName, over ctaTypedChild) (ctaFacade, bool) {
+	return ctaChildRangeFacade{ctaAssertionFacade: f, name: variable, item: ctaBoundChild{st: over.st}}, true
+}
+
+// boundSibling declines: outside a quantifier's body over a child step no
+// variable is a node `following-sibling::` could step from, `$value` included
+// (cvc-assertion clause 2.3 binds it to atomic values).
+func (ctaAssertionFacade) boundSibling(xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {
+	return nil, false
+}
+
 // ctaRangeFacade is the façade the body of an assertion's quantifier over a
 // typed `$value` parses under (ctaParser.quantifiedExpr): the assertion
 // façade, with the range variable, whose ·expanded name· is name, added to
@@ -2009,8 +2080,10 @@ func (f ctaRangeFacade) variable(name xsd.QName, types ctaTypes) (ctaValue, bool
 
 // quantified declines a quantifier over a child step inside the body.
 //
-// GAP(xpath): a nested quantifier declines, here and in rangeScope. The
-// direction is the withhold [CompileAssertionTest] reports. (#1042)
+// GAP(xpath): a nested quantifier declines, here, in rangeScope and in
+// childScope, and so does one nested in a body over a typed child step
+// (ctaChildRangeFacade). The direction is the withhold [CompileAssertionTest]
+// reports. (#1042)
 func (ctaRangeFacade) quantified(ctaQuantifier, ctaRangeKey) (ctaExpr, bool) {
 	return nil, false
 }
@@ -2018,6 +2091,71 @@ func (ctaRangeFacade) quantified(ctaQuantifier, ctaRangeKey) (ctaExpr, bool) {
 // rangeScope declines a quantifier over `$value` inside the body, under
 // quantified's GAP(xpath).
 func (ctaRangeFacade) rangeScope(xsd.QName, ctaValueVar) (ctaFacade, bool) {
+	return nil, false
+}
+
+// childScope declines a quantifier over a typed child step inside the body,
+// under quantified's GAP(xpath).
+func (ctaRangeFacade) childScope(xsd.QName, ctaTypedChild) (ctaFacade, bool) {
+	return nil, false
+}
+
+// ctaChildRangeFacade is the façade the body of an assertion's quantifier over
+// a typed child step parses under (ctaParser.childQuantified): the assertion
+// façade, with the range variable, whose ·expanded name· is name, added to its
+// in-scope variables (xpath20.md §3.9), compiled to item, and the one path
+// over it this engine reads, `$v/following-sibling::M[1]` (boundSibling). It
+// embeds the concrete ctaAssertionFacade on ctaRangeFacade's terms, and its
+// scope is the body alone on the same terms.
+type ctaChildRangeFacade struct {
+	ctaAssertionFacade
+	name xsd.QName
+	item ctaBoundChild
+}
+
+// variable compiles the range variable, name, to item, and every other name as
+// the assertion façade does, `$value` among them.
+func (f ctaChildRangeFacade) variable(name xsd.QName, types ctaTypes) (ctaValue, bool) {
+	if name == f.name {
+		return f.item, true
+	}
+	return f.ctaAssertionFacade.variable(name, types)
+}
+
+// boundSibling compiles `$v/following-sibling::M[1]` over the range variable,
+// name, to the ctaBoundSibling over the step M as the assertion façade's child
+// compiles it, so its typed value is of the type M's ·locally declared type·
+// gives it. Every other variable declines, and so does an M that child does
+// not compile to a ctaTypedChild — a type child declines, and mixed content, whose
+// untyped values no bound node reads — under ctaParser.quantifiedExpr's
+// GAP(xpath).
+func (f ctaChildRangeFacade) boundSibling(variable xsd.QName, next ctaNameTest, types ctaTypes) (ctaValue, bool) {
+	if variable != f.name {
+		return nil, false
+	}
+	step, typed := f.child(next, types)
+	sibling, isTyped := step.(ctaTypedChild)
+	if !typed || !isTyped {
+		return nil, false
+	}
+	return ctaBoundSibling{step: sibling}, true
+}
+
+// quantified declines a quantifier over a child step inside the body, under
+// ctaRangeFacade.quantified's GAP(xpath).
+func (ctaChildRangeFacade) quantified(ctaQuantifier, ctaRangeKey) (ctaExpr, bool) {
+	return nil, false
+}
+
+// rangeScope declines a quantifier over `$value` inside the body, under
+// ctaRangeFacade.quantified's GAP(xpath).
+func (ctaChildRangeFacade) rangeScope(xsd.QName, ctaValueVar) (ctaFacade, bool) {
+	return nil, false
+}
+
+// childScope declines a quantifier over a typed child step inside the body,
+// under ctaRangeFacade.quantified's GAP(xpath).
+func (ctaChildRangeFacade) childScope(xsd.QName, ctaTypedChild) (ctaFacade, bool) {
 	return nil, false
 }
 

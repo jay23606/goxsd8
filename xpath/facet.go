@@ -29,8 +29,9 @@ import (
 // ctaFacetFacade.instanceOf), and fn:count over it or over any other operand
 // that is no path. An fn:count call over a path declines
 // (ctaFacetFacade.count), and so does a quantified expression, over a child
-// step (ctaFacetFacade.quantified) or over `$value`
-// (ctaFacetFacade.rangeScope).
+// step (ctaFacetFacade.quantified, and ctaParser.childQuantified for one
+// windowed or reading its bound children, whose binding step compiles to no
+// typed child) or over `$value` (ctaFacetFacade.rangeScope).
 
 // FacetAssertions is the [value.AssertionEvaluator] for an assertions facet's
 // {test}s: it compiles the {test} under the facet's static context and
@@ -67,9 +68,9 @@ import (
 // GAP(xpath): an fn:count call over a path is declined, whose argument would
 // raise err:XPDY0002 over the absent context item (ctaFacetFacade.count), and
 // so is a quantified expression, whose binding step would raise it
-// (ctaFacetFacade.quantified), and one over `$value`, which would not
-// (ctaFacetFacade.rangeScope). Every other decline is
-// [CompileAssertionTest]'s, under its GAP(xpath). The direction is the
+// (ctaFacetFacade.quantified, ctaParser.childQuantified), and one over
+// `$value`, which would not (ctaFacetFacade.rangeScope). Every other decline
+// is [CompileAssertionTest]'s, under its GAP(xpath). The direction is the
 // withhold: the caller declines the value's Datatype Valid verdict, never
 // charging it and never showing it satisfied. (#1042)
 //
@@ -241,6 +242,20 @@ func (ctaFacetFacade) quantified(ctaQuantifier, ctaRangeKey) (ctaExpr, bool) {
 // bound here and §3.13 admits full XPath 2.0 in a facet's {test}: the decline
 // is [FacetAssertions]' withhold, under its GAP(xpath). (#1042)
 func (ctaFacetFacade) rangeScope(xsd.QName, ctaValueVar) (ctaFacade, bool) {
+	return nil, false
+}
+
+// childScope declines every quantifier over a child step, on quantified's
+// terms. It is never reached: child compiles the binding step to
+// ctaNoContextItem, which is no ctaTypedChild, so ctaParser.childQuantified
+// declines before the body's scope is asked for.
+func (ctaFacetFacade) childScope(xsd.QName, ctaTypedChild) (ctaFacade, bool) {
+	return nil, false
+}
+
+// boundSibling declines: `$value` is the one variable in scope, bound to
+// atomic values (clause 1.1), from which no axis steps.
+func (ctaFacetFacade) boundSibling(xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }
 

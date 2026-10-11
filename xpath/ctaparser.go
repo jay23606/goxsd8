@@ -36,37 +36,40 @@ import (
 // predicate façade reads as its candidate (valuePredicate), [7] IfExpr wherever
 // an ExprSingle stands whole in a boolean position (exprSingle), [6]
 // QuantifiedExpr over one child step whose body tests the bound child's
-// attributes or next sibling element, or over the items of a typed `$value`
-// whose body is any ExprSingle, in the same positions (quantifiedExpr),
-// [18] CastableExpr's `castable as` tail (castableTail), [16] InstanceofExpr's
-// `instance of` tail with an atomic SequenceType, over an fn:data call among
-// others (instanceofExpr), and, as a general comparison's operand, an integer
+// attributes or next sibling element, over one typed child step, filtered by
+// `[position() lt last()]` or not (rangeBinding), whose body is any ExprSingle
+// reading the bound child and `$v/following-sibling::M[1]` (childQuantified,
+// boundSibling), or over the items of a typed `$value` whose body is any
+// ExprSingle, in the same positions (quantifiedExpr), [18] CastableExpr's
+// `castable as` tail (castableTail), [16] InstanceofExpr's `instance of` tail
+// with an atomic SequenceType, over an fn:data call among others
+// (instanceofExpr), and, as a general comparison's operand, an integer
 // sequence, [11] RangeExpr or §3.3.1's comma sequence over IntegerLiterals
 // (integerSequence), or a string sequence, §3.3.1's comma sequence over
 // StringLiterals (stringSequence; ctasequence.go) — each behind the façade
 // (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
 // ctaFacade.childPath, ctaFacade.childrenHaving, ctaFacade.childrenPreceded,
 // ctaFacade.elements, ctaFacade.quantified, ctaFacade.rangeScope,
-// ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary,
-// ctaFacade.computes, ctaFacade.contextItem, ctaFacade.contextNode,
-// ctaFacade.focus, ctaFacade.conditional, ctaFacade.constructsSequences,
-// ctaFacade.castable, ctaFacade.instanceOf), so a Type Alternative's {test}
-// reaches none of them. Every method below is named for the production it
-// parses, and the whole grammar is both reached and evaluated: no method here
-// is a stub, and the production-level declines are those twenty façade
-// methods'. xpath/doc.go owns the enumeration of what declines; every other
-// decline reaching this file is ctaTypes answering ctaTypeDeclined for a
-// comparison type, a cast target or a cast operand it will not serve,
-// ctaTypes.arithmetic declining an operand pair, ctaTypes.instanceItem and
-// ctaTypes.itemMatches declining an `instance of` operand or AtomicType, a
-// library call of an arity its function does not have, a predicate or a union
-// operand outside the shapes predicate, valuePredicate, childrenHaving,
-// childrenPreceded and ctaUnionOf admit, a quantified expression outside the
-// shapes quantifiedExpr admits, `.` or another node standing as a node
-// (booleanExpr, presenceCall, instanceofExpr), a sequence sequenceLength does
-// not measure or integerSequence does not build, or the façade declining a
-// NameTest, a variable's type or a settled comparison type, which the
-// production that asked propagates unchanged.
+// ctaFacade.childScope, ctaFacade.boundSibling, ctaFacade.rooted,
+// ctaFacade.count, ctaFacade.callsLibrary, ctaFacade.computes,
+// ctaFacade.contextItem, ctaFacade.contextNode, ctaFacade.focus,
+// ctaFacade.conditional, ctaFacade.constructsSequences, ctaFacade.castable,
+// ctaFacade.instanceOf), so a Type Alternative's {test} reaches none of them.
+// Every method below is named for the production it parses, and the whole
+// grammar is both reached and evaluated: no method here is a stub, and the
+// production-level declines are those twenty-two façade methods'. xpath/doc.go
+// owns the enumeration of what declines; every other decline reaching this file
+// is ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or
+// a cast operand it will not serve, ctaTypes.arithmetic declining an operand
+// pair, ctaTypes.instanceItem and ctaTypes.itemMatches declining an `instance
+// of` operand or AtomicType, a library call of an arity its function does not
+// have, a predicate or a union operand outside the shapes predicate,
+// valuePredicate, childrenHaving, childrenPreceded and ctaUnionOf admit, a
+// quantified expression outside the shapes quantifiedExpr admits, `.` or
+// another node standing as a node (booleanExpr, presenceCall, instanceofExpr),
+// a sequence sequenceLength does not measure or integerSequence does not build,
+// or the façade declining a NameTest, a variable's type or a settled comparison
+// type, which the production that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -288,7 +291,7 @@ const (
 	// ctaAxisTok is '::', which only the unabbreviated attribute-axis form
 	// clause 2.2 admits reaches, the preceding step childrenPreceded reads,
 	// and, in a quantifier's body, the following-sibling and self steps
-	// siblingBody reads.
+	// siblingBody reads and the following-sibling step boundSibling reads.
 	ctaAxisTok
 	// ctaQuestionTok is the '?' occurrence indicator of [15] ta-CastExpr.
 	ctaQuestionTok
@@ -300,16 +303,19 @@ const (
 	// which opens an fn:count argument that is no path (ctaParser.countsItems),
 	// and a quantifier's range variable, where it is bound and where its body
 	// names it (ctaParser.quantifiedExpr) — through the façade inside a body
-	// over `$value` (ctaRangeFacade.variable) — and `$value` as such a
-	// quantifier's binding sequence (ctaParser.valueBinding).
+	// over `$value` or a typed child step (ctaRangeFacade.variable,
+	// ctaChildRangeFacade.variable), and opening `$v/following-sibling::M[1]`
+	// there (ctaParser.boundSibling) — and `$value` as such a quantifier's
+	// binding sequence (ctaParser.valueBinding).
 	ctaDollarTok
 	// ctaSlashTok is '/' and ctaSlashSlashTok is '//'. Each is read only where
 	// it opens a [25] PathExpr (ctaParser.rootedPath) or follows the `.`
 	// opening an fn:count argument or an element step whose existence is
 	// asked (ctaParser.countPath), and a '/' also between the steps of a
-	// child path (ctaParser.childPath); anywhere else it is a token no
-	// production takes, so `a//b`, and `a/b` outside a child path's three
-	// positions, are not expressions here.
+	// child path (ctaParser.childPath) and after a quantifier's range variable
+	// in its body (ctaParser.variableStep, ctaParser.boundSibling); anywhere
+	// else it is a token no production takes, so `a//b`, and `a/b` outside a
+	// child path's three positions, are not expressions here.
 	ctaSlashTok
 	ctaSlashSlashTok
 	// ctaDotTok is a '.' that opens no NumericLiteral: the [47]
@@ -334,8 +340,9 @@ const (
 	// argument (ctaParser.predicate), after the child step of a child-existence
 	// conjunction (ctaParser.childrenHaving), after the child step a
 	// `preceding::` step filters and after that step
-	// (ctaParser.childrenPreceded), and after the following-sibling step of a
-	// quantifier's body (ctaParser.siblingBody).
+	// (ctaParser.childrenPreceded), after the following-sibling step of a
+	// quantifier's body (ctaParser.siblingBody, ctaParser.boundSibling), and
+	// after a quantifier's binding step (ctaParser.positionWindow).
 	ctaLBracketTok
 	ctaRBracketTok
 	// ctaBarTok is '|', xpath20.md [21] UnionExpr's operator, read only between
@@ -718,32 +725,43 @@ func (p *ctaParser) exprSingle() (ctaExpr, bool) {
 //     ctaFacade.rangeScope answers, the range variable in scope as an item of
 //     `$value`'s item type, so `every $x in data($value) satisfies $x gt 0 and
 //     $x lt 9` is one body; the node is ctaQuantifiedValue;
-//   - over every other binding, a child step (rangeBinding), the body
+//   - over a child step (rangeBinding) unfiltered, whose body opens, after an
+//     optional fn:not, as rangeBody's two forms do (atTalliedBody), the body
 //     rangeBody desugars to the key counting the children satisfying it,
-//     optionally inside one fn:not, which De Morgan's law moves outside:
-//     `every $v in N satisfies not(B)` is `not(some $v in N satisfies B)`
-//     (ctaQuantifier.dual). The node is p.facade's, which may decline it
-//     (ctaFacade.quantified).
+//     the fn:not moved outside by De Morgan's law: `every $v in N satisfies
+//     not(B)` is `not(some $v in N satisfies B)` (ctaQuantifier.dual). The
+//     node is p.facade's, which may decline it (ctaFacade.quantified);
+//   - over a child step filtered by `[position() lt last()]`, or unfiltered
+//     under any other body, the body is one ExprSingle parsed under the
+//     façade ctaFacade.childScope answers, the range variable in scope as a
+//     node of the step's type (childQuantified); the node is
+//     ctaQuantifiedChildren.
 //
 // The VarName is a QName, resolved on varRef's terms, so an unprefixed one is
 // in no namespace, and the body names it by its ·expanded name·. Its scope is
 // the body alone (§3.9): the binding sequence is parsed under the outer
 // façade, and so is everything after the body, so `$x` outside the body is
-// still the err:XPST0008 that declines. Over a child step it is bound in no
-// static context, never resolved through ctaFacade.variable. A body
-// ExprSingle runs as far as the grammar lets it, so over a child step `every
-// $v in N satisfies $v/@a and @b` is one body, which declines: the parse
-// stops before the `and`, a token no caller of exprSingle takes after an
-// ExprSingle.
+// still the err:XPST0008 that declines. Under a body rangeBody desugars it is
+// bound in no static context, never resolved through ctaFacade.variable. A
+// body ExprSingle runs as far as the grammar lets it, so over a child step
+// `every $v in N satisfies $v/@a and @b` is one body, which declines: the
+// parse stops before the `and`, a token no caller of exprSingle takes after
+// an ExprSingle.
 //
 // GAP(xpath): every other QuantifiedExpr declines — a range variable named
 // `$value`, which would shadow cvc-assertion clause 2.3's; two or more
 // in-clauses; a binding sequence neither valueBinding nor rangeBinding
-// parses, and one over a `$value` that is statically empty or ·special·; over
-// a child step, a body rangeBody does not parse, `or` and a body reading
-// `$v`'s value among them; over `$value`, a body the range scope declines, a
-// path over the range variable and `instance of` over it among them; and a
-// nested quantifier in either body. The direction is the withhold
+// parses, a binding predicate other than `[position() lt last()]` — `<`,
+// `ne`, `!=`, `[last()]` among them — and one over a `$value` that is
+// statically empty or ·special·; over a child step, a body opening as
+// rangeBody's forms do that rangeBody does not parse, `or` among them, and a
+// windowed binding under such a body; over a child step under any other body,
+// a binding or `following-sibling::M[1]` child of mixed content, ·special·,
+// list, union or no declared type, which no typed node reads
+// (ctaFacade.child), and a path over the range variable other than
+// `following-sibling::M[1]`; over `$value`, a body the range scope declines,
+// a path over the range variable and `instance of` over it among them; and a
+// nested quantifier in any body. The direction is the withhold
 // [CompileAssertionTest] reports. (#1042)
 func (p *ctaParser) quantifiedExpr() (ctaExpr, bool) {
 	q := ctaSome
@@ -764,11 +782,14 @@ func (p *ctaParser) quantifiedExpr() (ctaExpr, bool) {
 	if p.at(ctaDollarTok) || (p.at(ctaNameTok) && p.peek(1).kind == ctaLParen && p.functionName(p.peek(0).text) == ctaDataFunction) {
 		return p.valueQuantified(q, variable)
 	}
-	name, ok := p.rangeBinding()
+	name, window, ok := p.rangeBinding()
 	if !ok || !p.atName("satisfies") {
 		return nil, false
 	}
 	p.advance()
+	if window || !p.atTalliedBody() {
+		return p.childQuantified(q, variable, name, window)
+	}
 	negated := p.at(ctaNameTok) && p.peek(1).kind == ctaLParen && p.functionName(p.peek(0).text) == ctaNotFunction
 	if negated {
 		p.advance() // 'not'
@@ -851,24 +872,97 @@ func (p *ctaParser) valueBinding() (ctaValueVar, bool) {
 
 // rangeBinding parses a quantifier's binding sequence as far as it is one
 // abbreviated child-axis step with a QName NameTest, `N` or `./N`, resolved on
-// elementName's terms like every child step, and reports N. Anything else —
-// a wildcard, `.//N`, `@N`, `.`, a longer path or a predicate —
-// leaves a token other than `satisfies` after it, which quantifiedExpr
-// declines.
-func (p *ctaParser) rangeBinding() (xsd.QName, bool) {
+// elementName's terms like every child step, optionally filtered by the one
+// predicate ctaPositionWindow spells, and reports N and whether that
+// predicate is present. Anything else — a wildcard, `.//N`, `@N`, `.`, a longer
+// path or any other predicate — leaves a token other than `satisfies` after
+// it, which quantifiedExpr declines.
+//
+// The predicate is read as a fixed spelling and never through
+// ctaFacade.focus, so fn:position and fn:last outside it keep their façade's
+// answer: the assertion façade's decline, the facet façade's err:XPDY0002.
+func (p *ctaParser) rangeBinding() (name xsd.QName, window, ok bool) {
 	if p.at(ctaDotTok) {
 		if p.peek(1).kind != ctaSlashTok {
-			return xsd.QName{}, false
+			return xsd.QName{}, false, false
 		}
 		p.advance() // '.'
 		p.advance() // '/'
 	}
 	if !p.at(ctaNameTok) {
-		return xsd.QName{}, false
+		return xsd.QName{}, false, false
 	}
-	name := p.elementName(p.peek(0).text)
+	name = p.elementName(p.peek(0).text)
 	p.advance()
-	return name, true
+	return name, p.positionWindow(), true
+}
+
+// ctaPositionWindow is the predicate rangeBinding reads after a binding step:
+// `[position() lt last()]`, which selects every child the step selects but the
+// last (xpath20.md §3.2.2; xpath-functions.md §16.1, §16.2).
+var ctaPositionWindow = []ctaToken{
+	{kind: ctaLBracketTok}, {kind: ctaNameTok, text: "position"}, {kind: ctaLParen}, {kind: ctaRParen},
+	{kind: ctaNameTok, text: "lt"}, {kind: ctaNameTok, text: "last"}, {kind: ctaLParen}, {kind: ctaRParen},
+	{kind: ctaRBracketTok},
+}
+
+// positionWindow consumes ctaPositionWindow where the tokens at the cursor
+// spell it and reports whether they did, consuming nothing otherwise.
+func (p *ctaParser) positionWindow() bool {
+	for i, want := range ctaPositionWindow {
+		if p.peek(i) != want {
+			return false
+		}
+	}
+	p.pos += len(ctaPositionWindow)
+	return true
+}
+
+// atTalliedBody reports whether the body at the cursor opens, after an
+// optional fn:not, `'$' VarName '/' '@'` or `'$' VarName '/'
+// 'following-sibling' '::' '*'` — the openings of the two forms rangeBody
+// desugars to [Tally] keys. Every other body is childQuantified's. Nothing is
+// consumed.
+func (p *ctaParser) atTalliedBody() bool {
+	at := 0
+	if p.at(ctaNameTok) && p.peek(1).kind == ctaLParen && p.functionName(p.peek(0).text) == ctaNotFunction {
+		at = 2
+	}
+	if p.peek(at).kind != ctaDollarTok || p.peek(at+1).kind != ctaNameTok || p.peek(at+2).kind != ctaSlashTok {
+		return false
+	}
+	if p.peek(at+3).kind == ctaAtTok {
+		return true
+	}
+	return p.peek(at+3) == ctaSiblingSteps[0] && p.peek(at+4) == ctaSiblingSteps[1] && p.peek(at+5) == ctaSiblingSteps[2]
+}
+
+// childQuantified parses the rest of a quantifier over a child step, q its
+// quantifier, variable its range variable, name the binding step's ·expanded
+// name· and window whether `[position() lt last()]` filters it, from its body
+// on: one ExprSingle parsed under the façade ctaFacade.childScope answers for
+// variable over the step, which p.facade is again once the body is parsed. The
+// step is compiled as a typed child step (ctaFacade.child), and declines
+// unless it is a ctaTypedChild: its children are bound as nodes whose typed
+// values the body may read. The node is ctaQuantifiedChildren.
+func (p *ctaParser) childQuantified(q ctaQuantifier, variable, name xsd.QName, window bool) (ctaExpr, bool) {
+	step, typed := p.facade.child(ctaExactName{name: name}, p.types)
+	over, isTyped := step.(ctaTypedChild)
+	if !typed || !isTyped {
+		return nil, false
+	}
+	scoped, ok := p.facade.childScope(variable, over)
+	if !ok {
+		return nil, false
+	}
+	outer := p.facade
+	p.facade = scoped
+	body, parsed := p.exprSingle()
+	p.facade = outer
+	if !parsed {
+		return nil, false
+	}
+	return ctaQuantifiedChildren{q: q, over: over, dropLast: window, body: body}, true
 }
 
 // rangeBody parses a quantifier's body over variable, bound to each child of
@@ -923,7 +1017,9 @@ func (p *ctaParser) variableStep(variable xsd.QName) bool {
 }
 
 // ctaSiblingSteps is the spelling siblingBody reads after `$v/` and before the
-// name M: `following-sibling::*[1][self::`.
+// name M: `following-sibling::*[1][self::`. Its first three tokens are the
+// opening atTalliedBody tells that body by, and its first two the
+// `following-sibling::` atBoundSibling reads.
 var ctaSiblingSteps = []ctaToken{
 	{kind: ctaNameTok, text: "following-sibling"}, {kind: ctaAxisTok}, {kind: ctaWildcardTok, text: "*"},
 	{kind: ctaLBracketTok}, {kind: ctaNumberTok, text: "1"}, {kind: ctaRBracketTok},
@@ -2342,6 +2438,15 @@ func (ctaPredicateFacade) quantified(ctaQuantifier, ctaRangeKey) (ctaExpr, bool)
 // declines `$value` before the binding sequence is compiled.
 func (ctaPredicateFacade) rangeScope(xsd.QName, ctaValueVar) (ctaFacade, bool) { return nil, false }
 
+// childScope declines, on quantified's terms. It is never reached: child
+// declines the binding step before the body's scope is asked for.
+func (ctaPredicateFacade) childScope(xsd.QName, ctaTypedChild) (ctaFacade, bool) { return nil, false }
+
+// boundSibling declines, on variable's terms: no variable is in scope.
+func (ctaPredicateFacade) boundSibling(xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {
+	return nil, false
+}
+
 func (ctaPredicateFacade) rooted() (ctaValue, bool) { return nil, false }
 
 // contextItem compiles `.` to the candidate child (ctaCandidate).
@@ -2609,6 +2714,9 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	case ctaSlashTok, ctaSlashSlashTok:
 		return p.rootedPath()
 	case ctaDollarTok:
+		if p.atBoundSibling() {
+			return p.boundSibling()
+		}
 		return p.varRef()
 	case ctaDotTok:
 		p.advance()
@@ -2640,6 +2748,29 @@ func (p *ctaParser) varRef() (ctaValue, bool) {
 	text := p.peek(0).text
 	p.advance()
 	return p.facade.variable(p.attributeName(text), p.types)
+}
+
+// atBoundSibling reports whether the tokens at the cursor spell
+// `'$' VarName '/' 'following-sibling' '::' QName '[' '1' ']'`, a path over a
+// variable that boundSibling parses. Nothing is consumed.
+func (p *ctaParser) atBoundSibling() bool {
+	return p.peek(0).kind == ctaDollarTok && p.peek(1).kind == ctaNameTok && p.peek(2).kind == ctaSlashTok &&
+		p.peek(3) == ctaSiblingSteps[0] && p.peek(4) == ctaSiblingSteps[1] && p.peek(5).kind == ctaNameTok &&
+		p.peek(6) == ctaToken{kind: ctaLBracketTok} && p.peek(7) == ctaToken{kind: ctaNumberTok, text: "1"} &&
+		p.peek(8) == ctaToken{kind: ctaRBracketTok}
+}
+
+// boundSibling parses `$v/following-sibling::M[1]`, which atBoundSibling
+// found at the cursor, the VarName resolved on varRef's terms and M on
+// elementName's — the following-sibling axis's principal node kind is element
+// (xpath20.md §3.2.1.2) — into the node p.facade compiles it to
+// (ctaFacade.boundSibling), which may decline it. `[1]` is the IntegerLiteral
+// `1` alone: §3.2.2 makes it positional, the first M sibling however far.
+func (p *ctaParser) boundSibling() (ctaValue, bool) {
+	variable := p.attributeName(p.peek(1).text)
+	next := ctaExactName{name: p.elementName(p.peek(5).text)}
+	p.pos += 9
+	return p.facade.boundSibling(variable, next, p.types)
 }
 
 // childStep parses one abbreviated child-axis step, xpath20.md [31]

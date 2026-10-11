@@ -146,7 +146,7 @@ Assert/assert_022/instance/assert_022_2 pass
 Assert/assert_023/instance/assert_023_2 pass
 Assert/assert_024/instance/assert_024_2 pass
 Assert/assert_025/instance/assert_025_2 pass
-Assert/assert_026/instance/assert_026_2 fail
+Assert/assert_026/instance/assert_026_2 pass
 Assert/assert_027/instance/assert_027_2 pass
 Assert/assert_028/instance/assert_028_2 pass
 Assert/assert_029/instance/assert_029_2 pass

@@ -741,7 +741,9 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 // (ctaSelectedElements), a path of child steps (ctaChildPath), a child step
 // filtered by its children's existence (ctaChildrenHaving) or by a
 // `preceding::` step (ctaChildrenPreceded), the candidate `.` inside a value
-// predicate (ctaCandidate), and the two steps that raise before they select a
+// predicate (ctaCandidate), the range variable of a quantifier over a typed
+// child step and `$v/following-sibling::M[1]` over it (ctaBoundChild,
+// ctaBoundSibling), and the two steps that raise before they select a
 // node, a rooted path (ctaNoDocumentRoot) and a read of an absent context item
 // (ctaNoContextItem). Its nodes method is the ONE reading of node existence,
 // which the ·effective boolean value· of a step (ctaEffectiveBoolean.eval) and
@@ -826,6 +828,15 @@ func (m ctaMatchingChildren) nodes(env ctaEnv) (int, bool) {
 
 // nodes is 1: the candidate is one node, ·nilled· or not.
 func (ctaCandidate) nodes(ctaEnv) (int, bool) { return 1, true }
+
+// nodes is 1: the bound child is one node, ·nilled· or not (ctaBoundNodes).
+func (ctaBoundChild) nodes(env ctaEnv) (int, bool) { return ctaBoundNodes(env.rangeChild.bound()) }
+
+// nodes is 1 where a later child bears the step's name and 0 where none does
+// (ctaBoundNodes).
+func (s ctaBoundSibling) nodes(env ctaEnv) (int, bool) {
+	return ctaBoundNodes(env.rangeChild.next(s.step.name))
+}
 
 // ctaTalliedNodes is the counter the evaluation's [Tally] holds for key, which
 // the caller filled with E's subtree. The input is ctaTypedInput by
