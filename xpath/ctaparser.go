@@ -1,7 +1,9 @@
 package xpath
 
 import (
+	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -290,8 +292,9 @@ const (
 	ctaAtTok
 	// ctaAxisTok is '::', which only the unabbreviated attribute-axis form
 	// clause 2.2 admits reaches, the preceding step childrenPreceded reads,
-	// and, in a quantifier's body, the following-sibling and self steps
-	// siblingBody reads and the following-sibling step boundSibling reads.
+	// the child axis dataChildStep reads behind fn:data, and, in a
+	// quantifier's body, the following-sibling and self steps siblingBody
+	// reads and the following-sibling step boundSibling reads.
 	ctaAxisTok
 	// ctaQuestionTok is the '?' occurrence indicator of [15] ta-CastExpr.
 	ctaQuestionTok
@@ -1505,7 +1508,9 @@ func (p *ctaParser) instanceofExpr() (ctaValue, bool) {
 // the `instance of` tail that must follow it (instanceTail): fn:data returns
 // "the result of atomizing a sequence" (xpath20.md §2.4.2), which is the
 // sequence ctaInstanceOf matches, so the call is no node of its own and its
-// argument is the tail's operand. Every other arity declines (err:XPST0017).
+// argument is the tail's operand. A path of child steps is dataElementPath's
+// argument and one child step dataChildStep's; any other is parsed as a library
+// call's. Every other arity declines (err:XPST0017).
 //
 // GAP(xpath): fn:data anywhere but as the operand of `instance of`, or over
 // `$value` as a quantifier's binding sequence (valueBinding), declines, so
@@ -1516,6 +1521,9 @@ func (p *ctaParser) instanceofExpr() (ctaValue, bool) {
 func (p *ctaParser) dataInstanceOf() (ctaValue, bool) {
 	if n := p.childPathLength(2); n != 0 && p.peek(2+n).kind == ctaRParen {
 		return p.dataElementPath(n)
+	}
+	if n := p.dataChildStepLength(2); n != 0 && p.peek(2+n).kind == ctaRParen {
+		return p.dataChildStep()
 	}
 	args, ok := p.arguments()
 	if !ok || len(args) != 1 || !p.atName("instance") {
@@ -1560,6 +1568,93 @@ func (p *ctaParser) dataElementPath(n int) (ctaValue, bool) {
 		return nil, false
 	}
 	return p.instanceTail(path)
+}
+
+// dataChildStepLength is how many tokens, from offset at ahead of the cursor,
+// spell one child-axis step with a QName NameTest, its axis abbreviated or
+// spelled out, filtered by one IntegerLiteral predicate or by none, `('child'
+// '::')? QName ('[' IntegerLiteral ']')?`, and 0 where they spell none. A name
+// followed by '(' or by a '::' after anything but `child` spells none, and so
+// does a predicate holding anything but one IntegerLiteral: the step alone is
+// counted, and the '[' after it is no ')'. Nothing is consumed.
+func (p *ctaParser) dataChildStepLength(at int) int {
+	n := 0
+	if p.peek(at) == ctaChildAxis[0] && p.peek(at+1) == ctaChildAxis[1] {
+		n = 2
+	}
+	if p.peek(at+n).kind != ctaNameTok {
+		return 0
+	}
+	if next := p.peek(at + n + 1).kind; next == ctaLParen || next == ctaAxisTok {
+		return 0
+	}
+	n++
+	if p.peek(at+n).kind == ctaLBracketTok && ctaIntegerLiteral(p.peek(at+n+1)) && p.peek(at+n+2).kind == ctaRBracketTok {
+		n += 3
+	}
+	return n
+}
+
+// ctaChildAxis is the spelled-out child axis, `child::`, which xpath20.md
+// §3.2.4 makes the axis an abbreviated step omits: `child::N` and `N` are one
+// step.
+var ctaChildAxis = []ctaToken{{kind: ctaNameTok, text: "child"}, {kind: ctaAxisTok}}
+
+// dataChildStep parses a call to fn:data whose one argument is the step
+// dataChildStepLength measured after its '(', `N`, `child::N`, `N[k]` or
+// `child::N[k]`, N resolved on elementName's terms, as the operand of the
+// `instance of` tail that must follow the call (instanceTail). The step is
+// p.facade's (ctaFacade.child), which may decline it; a predicate filters it
+// on childAt's terms.
+func (p *ctaParser) dataChildStep() (ctaValue, bool) {
+	p.advance() // the function name
+	p.advance() // '('
+	if p.peek(0) == ctaChildAxis[0] && p.peek(1) == ctaChildAxis[1] {
+		p.advance() // 'child'
+		p.advance() // '::'
+	}
+	step, ok := p.childStep()
+	if !ok {
+		return nil, false
+	}
+	if p.at(ctaLBracketTok) {
+		step, ok = p.childAt(step)
+		if !ok {
+			return nil, false
+		}
+	}
+	p.advance() // ')'
+	if !p.atName("instance") {
+		return nil, false
+	}
+	return p.instanceTail(step)
+}
+
+// childAt parses the predicate `[k]` over step, whose '[' the cursor is on and
+// whose k is an IntegerLiteral (dataChildStepLength), into the ctaChildAt
+// selecting the k-th child step selects (xpath20.md §3.2.2). A step that reads
+// the absent context item raises before its predicate is read, so it stands
+// unfiltered (ctaNoContextItem).
+//
+// GAP(xpath): a step over children of mixed content (ctaUntypedChild)
+// declines under a predicate, though `data(N)` reads it: its children's values
+// are [Untyped], which ctaChildAt does not read. The direction is the withhold
+// [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) childAt(step ctaValue) (ctaValue, bool) {
+	text := p.peek(1).text
+	p.pos += 3
+	if _, absent := step.(ctaNoContextItem); absent {
+		return step, true
+	}
+	typed, isTyped := step.(ctaTypedChild)
+	if !isTyped {
+		return nil, false
+	}
+	position, err := strconv.Atoi(text)
+	if err != nil {
+		position = math.MaxInt // digits alone, so out of range: past every child
+	}
+	return ctaChildAt{step: typed, position: position}, true
 }
 
 // instanceTail parses the `"instance" "of" SequenceType` tail over v, whose
@@ -2382,10 +2477,12 @@ func (p *ctaParser) countOperand() (ctaCounted, bool) {
 // disjunction, under fn:not, with a wildcard or atomized (`c[@a = 1]`), a
 // numeric one (`c[1]`), and any predicate outside an fn:count argument but the
 // conjunction of child steps childrenHaving parses and the `preceding::` step
-// childrenPreceded parses where a child step's existence is asked — so a
-// predicate on any other axis, `ancestor::` and `preceding-sibling::` among
-// them, declines, and so does `count(N[preceding::M])`. The direction is the
-// withhold [CompileAssertionTest] reports. (#1042)
+// childrenPreceded parses where a child step's existence is asked, and the
+// IntegerLiteral childAt parses on a child step fn:data reads whole under
+// `instance of` (dataChildStep) — so a predicate on any other axis,
+// `ancestor::` and `preceding-sibling::` among them, declines, and so does
+// `count(N[preceding::M])`. The direction is the withhold
+// [CompileAssertionTest] reports. (#1042)
 func (p *ctaParser) predicate(name xsd.QName) (ctaCounted, bool) {
 	p.advance() // '['
 	n := p.existenceLength()
@@ -2826,8 +2923,9 @@ func (p *ctaParser) boundSibling() (ctaValue, bool) {
 // axis step, the default axis is child" (§3.2.4) — whose NodeTest is a QName
 // NameTest, resolved on elementName's terms. The node is p.facade's, which
 // may decline it. A [37] Wildcard NameTest is a ctaWildcardTok and never
-// reaches here, and `child::` spelled out is a name followed by a `::` no
-// production takes: both decline.
+// reaches here, and declines; `child::` spelled out is read by dataChildStep
+// alone, before the step, and anywhere else is a name followed by a `::` no
+// production takes, and declines.
 func (p *ctaParser) childStep() (ctaValue, bool) {
 	text := p.peek(0).text
 	p.advance()

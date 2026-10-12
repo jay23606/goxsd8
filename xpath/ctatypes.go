@@ -225,20 +225,21 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // exists. An fn:distinct-values call answers as its operand does, each item
 // keeping its own type (xpath-functions.md §15.1.6).
 //
-// For a typed child, through fn:distinct-values too, derived is true: each
-// item's dynamic type is item's or derived from it, and need not be item's. A
-// child's annotation is its own ·governing type definition·'s (cvc-assertion
-// clause 1.2 defines E's [[children]]' properties "in the usual way"), which
-// an xsi:type can make a type derived from the ·locally declared type· the
-// step was compiled against, and [ChildElements] carries a child only where
-// its own simple type is that one or validly derived from it. So an
-// AtomicType the compiled type derives from matches every item, and one it
-// does not derive from decides nothing (instanceTail). So for an element a path
-// of child steps reads for its value (ctaElementPath), whose annotation is its
-// own governing type's on the same terms — an xsi:type, a {type table}, a
-// substitution group member or a wildcard-resolved declaration can each make it
-// differ from the type [ElementTypes] answered — and which [Tally.ElementValue]
-// carries only where its own type is that one or validly derived from it.
+// For a typed child, through fn:distinct-values too, and for the k-th of them
+// (ctaChildAt), derived is true: each item's dynamic type is item's or derived
+// from it, and need not be item's. A child's annotation is its own ·governing
+// type definition·'s (cvc-assertion clause 1.2 defines E's [[children]]'
+// properties "in the usual way"), which an xsi:type can make a type derived
+// from the ·locally declared type· the step was compiled against, and
+// [ChildElements] carries a child only where its own simple type is that one or
+// validly derived from it. So an AtomicType the compiled type derives from
+// matches every item, and one it does not derive from decides nothing
+// (instanceTail). So for an element a path of child steps reads for its value
+// (ctaElementPath), whose annotation is its own governing type's on the same
+// terms — an xsi:type, a {type table}, a substitution group member or a
+// wildcard-resolved declaration can each make it differ from the type
+// [ElementTypes] answered — and which [Tally.ElementValue] carries only where
+// its own type is that one or validly derived from it.
 //
 // GAP(xpath): a numeric literal, an arithmetic result, a quantifier's range
 // variable over `$value` (ctaRangeItem), and one over a typed child step and
@@ -254,7 +255,7 @@ func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
 		return ctaStaticOf(v), false, n.st == t.str
 	case ctaDistinctValues:
 		return t.instanceItem(n.operand)
-	case ctaTypedChild, ctaElementPath:
+	case ctaTypedChild, ctaChildAt, ctaElementPath:
 		return ctaStaticOf(v), true, true
 	case ctaAttr, ctaTypedAttr, ctaUntypedChild, ctaValueVar, ctaUntypedValue, ctaEmptyValue,
 		ctaContextAtom, ctaNoContextItem, ctaNoDocumentRoot, ctaCast, ctaCastable, ctaInstanceOf, ctaCount,

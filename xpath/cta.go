@@ -47,24 +47,26 @@ import (
 // (ctaArith); [47] ContextItemExpr `.`, atomized to E's string value (ctaContextAtom);
 // xpath20.md [18] CastableExpr's `castable as` tail in place of [15]'s `cast as` one
 // (ctaCastable); xpath20.md [16] InstanceofExpr's `instance of` tail with an atomic
-// SequenceType over a [14] ta-ValueExpr or an fn:data call (ctaInstanceOf); and a general
-// comparison's operand may be an integer sequence, xpath20.md [11] RangeExpr or §3.3.1's comma
-// sequence over IntegerLiterals, or a string sequence, §3.3.1's comma sequence over
-// StringLiterals, evaluated in ctasequence.go (ctaIntegerRanges, ctaStringSequence). The facet
-// façade (ctaFacetFacade) takes the assertion façade's grammar but fn:count over a path, and
-// compiles every read of the context item — `.`, an attribute or child step, a rooted path —
-// to the err:XPDY0002 an assertions facet's absent context item raises (ctaNoContextItem;
-// ctaAbsentNode for `.` as a node). It is not a stage of a general XPath 2.0 evaluator: the
-// productions below reach no axis but attribute, one child step, the child-step paths and the
-// one descendant step whose existence is asked, the descendant steps fn:count counts over, the
-// preceding step of ctaChildrenPreceded and the child step filtering it, and the
-// following-sibling and self steps of a quantifier's body and the following-sibling step over
-// its range variable, no predicate or union but those in an fn:count argument, the
-// child-existence conjunction, the two of ctaChildrenPreceded, the two of that body, the `[1]`
-// of that following-sibling step and the `[position() lt last()]` filtering a quantifier's
-// binding step, no variable but `$value` and a quantifier's range variable inside its body,
-// and no function but fn:not, fn:count, the ctaParser.libraryCall names, fn:in-scope-prefixes
-// as an operand of `=` (ctaParser.prefixMember) and fn:data as the operand of `instance of`
+// SequenceType over a [14] ta-ValueExpr or an fn:data call (ctaInstanceOf), whose argument
+// may be one child step with its axis spelled out, `child::N`, or filtered by an
+// IntegerLiteral, `N[k]` (ctaChildAt); and a general comparison's operand may be an integer
+// sequence, xpath20.md [11] RangeExpr or §3.3.1's comma sequence over IntegerLiterals, or a
+// string sequence, §3.3.1's comma sequence over StringLiterals, evaluated in ctasequence.go
+// (ctaIntegerRanges, ctaStringSequence). The facet façade (ctaFacetFacade) takes the assertion
+// façade's grammar but fn:count over a path, and compiles every read of the context item —
+// `.`, an attribute or child step, a rooted path — to the err:XPDY0002 an assertions facet's
+// absent context item raises (ctaNoContextItem; ctaAbsentNode for `.` as a node). It is not a
+// stage of a general XPath 2.0 evaluator: the productions below reach no axis but attribute,
+// one child step, the child-step paths and the one descendant step whose existence is asked,
+// the descendant steps fn:count counts over, the preceding step of ctaChildrenPreceded and the
+// child step filtering it, and the following-sibling and self steps of a quantifier's body and
+// the following-sibling step over its range variable, no predicate or union but those in an
+// fn:count argument, the child-existence conjunction, the two of ctaChildrenPreceded, the two
+// of that body, the `[1]` of that following-sibling step, the `[k]` of ctaChildAt and the
+// `[position() lt last()]` filtering a quantifier's binding step, no variable but `$value` and
+// a quantifier's range variable inside its body, and no function but fn:not, fn:count, the
+// ctaParser.libraryCall names, fn:in-scope-prefixes as an operand of `=`
+// (ctaParser.prefixMember) and fn:data as the operand of `instance of`
 // (ctaParser.instanceofExpr) or over `$value` as a quantifier's binding sequence
 // (ctaParser.valueBinding), so evaluating them directly is exact where a fail-open delegation
 // to a general engine would be a guess.
@@ -881,6 +883,25 @@ type ctaBoundChild struct{ st *xsd.SimpleType }
 //
 // It is a ctaStep: it selects zero or one node, on ctaBoundChild's terms.
 type ctaBoundSibling struct{ step ctaTypedChild }
+
+// ctaChildAt is a typed child step filtered by a numeric [40] Predicate, `N[k]`
+// or `child::N[k]`, as fn:data's argument (ctaParser.dataChildStep): the k-th
+// of the children step selects, counted from 1 in document order
+// ([ChildElements]), or nothing where step selects fewer than k or k is 0
+// (xpath20.md §3.2.2: a numeric predicate is true where it equals the context
+// position, and on the forward child axis the context positions of the step's
+// own result run in document order). Its typed value is of type step.st, or
+// the empty sequence for a ·nilled· child, on ctaTypedChild's terms.
+//
+// position is the IntegerLiteral's value; one too large for an int is
+// math.MaxInt, which no child's position reaches, so it selects nothing as the
+// literal does. It is a node of its own and not a ctaTypedChild with a
+// position: a quantifier's binding step and a value predicate's filtered step
+// are ctaTypedChild, and neither takes a position.
+type ctaChildAt struct {
+	step     ctaTypedChild
+	position int
+}
 
 // ctaNoDocumentRoot is a path opening with "/" or "//", which begins at the
 // root of the tree containing the context node through `(fn:root(self::node())
@@ -2301,6 +2322,7 @@ func (ctaCandidate) ctaValue()        {}
 func (ctaRangeItem) ctaValue()        {}
 func (ctaBoundChild) ctaValue()       {}
 func (ctaBoundSibling) ctaValue()     {}
+func (ctaChildAt) ctaValue()          {}
 func (ctaChildPath) ctaValue()        {}
 func (ctaAttributePath) ctaValue()    {}
 func (ctaElementPath) ctaValue()      {}
@@ -2383,11 +2405,11 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 // its target, an fn:string call its cast's, `$value` the type of each of its
 // items, and a range variable over `$value` that same type (ctaRangeItem); a
 // range variable over a typed child step carries the step's type (ctaBoundChild),
-// and `$v/following-sibling::M[1]` M's (ctaBoundSibling). A path to an attribute
-// carries its compiled type, unless that type is ·special· and its values
-// xs:untypedAtomic, and a path of child steps read for its elements' values carries
-// its compiled type; an fn:sum call carries its static type (ctaSum), and `instance
-// of` over one xs:boolean (ctaSumInstance).
+// and `$v/following-sibling::M[1]` M's (ctaBoundSibling), as `N[k]` behind fn:data
+// does N's (ctaChildAt). A path to an attribute carries its compiled type, unless
+// that type is ·special· and its values xs:untypedAtomic, and a path of child steps
+// read for its elements' values carries its compiled type; an fn:sum call carries
+// its static type (ctaSum), and `instance of` over one xs:boolean (ctaSumInstance).
 func ctaCarriedType(v ctaValue) (*xsd.SimpleType, bool) {
 	switch n := v.(type) {
 	case ctaAttributePath:
@@ -2420,6 +2442,8 @@ func ctaCarriedType(v ctaValue) (*xsd.SimpleType, bool) {
 	case ctaBoundChild:
 		return n.st, true
 	case ctaBoundSibling:
+		return n.step.st, true
+	case ctaChildAt:
 		return n.step.st, true
 	case ctaCount:
 		return n.st, true
@@ -3170,6 +3194,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaBoundItem(env.rangeChild.bound(), n.st, c, env)
 	case ctaBoundSibling:
 		return ctaBoundItem(env.rangeChild.next(n.step.name), n.step.st, c, env)
+	case ctaChildAt:
+		return ctaChildAtItem(n, c, env)
 	case ctaChildPath:
 		// Never reached: ctaParser.childPath builds the node only where its
 		// nodes are counted and no item is read (ctaStep.nodes).
@@ -3557,6 +3583,27 @@ func ctaTypedChildItem(n ctaTypedChild, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaRaised{}
 	}
 	return ctaPromoted(matched, n.st, c, env)
+}
+
+// ctaChildAtItem atomizes the one child n selects, the n.position-th of those
+// its step selects in document order, or none, and converts the atoms into c on
+// ctaTypedChildItem's terms. Every child the step selects is read, so one
+// breaking [ChildElements]' obligation raises wherever it stands, as it does
+// under the step unfiltered.
+func ctaChildAtItem(n ctaChildAt, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	var selected []value.Value
+	position := 0
+	ok := ctaEachChild(n.step.name, env, func(child []value.Value) bool {
+		position++
+		if position == n.position {
+			selected = child
+		}
+		return true
+	})
+	if !ok {
+		return ctaRaised{}
+	}
+	return ctaPromoted(selected, n.step.st, c, env)
 }
 
 // ctaEachUntypedChild is ctaEachChild for a child of mixed content

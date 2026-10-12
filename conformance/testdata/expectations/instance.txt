@@ -109,7 +109,7 @@ Assert/assert014/instance/assert014.v1.xml pass
 Assert/assert015/instance/assert015.v1.xml pass
 Assert/assert016/instance/assert016.v1.xml pass
 Assert/assert017/instance/assert017.v1.xml pass
-Assert/assert018/instance/assert018.v1.xml fail
+Assert/assert018/instance/assert018.v1.xml pass
 Assert/assert019/instance/assert019.v1.xml pass
 Assert/assert020/instance/assert020.n1.xml pass
 Assert/assert020/instance/assert020.v1.xml pass
