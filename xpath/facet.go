@@ -177,6 +177,12 @@ func (ctaFacetFacade) castable() bool { return true }
 // a read of the absent context item raises its ctaNoContextItem's
 // err:XPDY0002, so `data(.) instance of xs:untypedAtomic` fails the facet
 // rather than answering (ctaInstanceOfItem).
+//
+// GAP(xpath): an AttributeTest over an attribute step, `@d instance of
+// attribute()`, declines rather than raising the err:XPDY0002 its step's
+// ctaNoContextItem would: ctaParser.attributeInstanceOf admits an attribute
+// node alone. The direction is the withhold [CompileAssertionTest] reports.
+// (#1042)
 func (ctaFacetFacade) instanceOf() bool { return true }
 
 // variable compiles `$value` (clause 1.1: "no namespace URI and ... 'value' as

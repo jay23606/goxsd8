@@ -207,7 +207,10 @@ func TestAssertionInstanceOfReadsChild(t *testing.T) {
 // err:XPDY0002 (cvc-assertions-valid clause 1.2's Note), failing the facet
 // under fn:not too, which an `instance of` answering false would make hold.
 // The fn:not row holds with ctaInstanceOfItem answering false where its
-// operand raises.
+// operand raises. An AttributeTest over an attribute step declines, the step
+// reading no attribute node (ctaFacetFacade.instanceOf's GAP(xpath)): with
+// attributeInstanceOf admitting any operand, the `@d instance of attribute()`
+// row fails the facet instead.
 func TestFacetAssertionsInstanceOf(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, tc := range []struct {
@@ -219,6 +222,8 @@ func TestFacetAssertionsInstanceOf(t *testing.T) {
 		{"$value instance of xs:date", value.AssertionFails},
 		{"data(.) instance of xs:untypedAtomic", value.AssertionFails},
 		{"not(data(.) instance of xs:date)", value.AssertionFails},
+		{"@d instance of attribute()", value.AssertionDeclined},
+		{"not(./@d instance of attribute(*, xs:string))", value.AssertionDeclined},
 	} {
 		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, "abc"))
 		if got != tc.want {
@@ -227,27 +232,136 @@ func TestFacetAssertionsInstanceOf(t *testing.T) {
 	}
 }
 
+// An [60] AttributeTest matches the attribute NODE one attribute step of E
+// selects (xpath20.md §2.5.4.5): `attribute()` and `attribute(*)` any,
+// `attribute(N)` one named N whatever its type, and a TypeName one whose type
+// annotation — its {attribute use}'s type — derives from it, walked up a
+// user-defined type's chain too; `./@d` and `attribute::d` decide as `@d` does.
+// An absent attribute is the empty sequence, false without an occurrence
+// indicator and true under `?` (§2.5.4.1). A ·special·-typed attribute is
+// annotated by its type, xs:anySimpleType or xs:anyAtomicType, and only its
+// typed value is xs:untypedAtomic (xpath-datamodel §3.3.1.1, §3.3.1.2), so
+// `attribute(*, xs:untypedAtomic)` matches it no more than `attribute(*,
+// xs:dateTime)` does. `@d` in the body of a quantifier over `$value` is E's
+// attribute too. With instanceofExpr not dispatching to attributeInstanceOf
+// the first row declines, failing the test; with attributeKindTest's name
+// check removed the `attribute(s)` and `attribute(s, xs:dateTime)` rows over
+// @d hold; with a ctaAttr read as annotated xs:untypedAtomic the four @u and @a
+// rows naming xs:untypedAtomic or xs:anySimpleType flip; and with
+// annotationDerives comparing the annotation for equality instead of walking
+// its chain the @d xs:anyAtomicType and xs:anySimpleType rows and the @m
+// xs:date row are false.
+func TestAssertionInstanceOfAttributeTest(t *testing.T) {
+	myDate := csRestriction(t, "MyDate", ctaBuiltin("date"))
+	types := asTypesWith(myDate)
+	builtin := asUses(t, map[string]string{"d": "dateTime", "s": "string", "u": "anySimpleType", "a": "anyAtomicType"})
+	uses := func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, bool) {
+		if len(path) == 0 && name == uq("m") {
+			return myDate, true
+		}
+		return builtin(path, name)
+	}
+	m, err := value.ValidateLexical(backend(), types, myDate, "2008-01-01", nil, FacetAssertions(time.Time{}))
+	if err != nil {
+		t.Fatalf("mapping 2008-01-01 against MyDate: %v", err)
+	}
+	carried := asValues(t, asTyped{uq("d"), "dateTime", "2008-01-01T00:00:00"}, asTyped{uq("s"), "string", "x"},
+		asTyped{uq("u"), "anySimpleType", "x"}, asTyped{uq("a"), "anyAtomicType", "x"})
+	present := TypedAttributes(func(yield func(xsd.QName, TypedValue) bool) {
+		for name, v := range carried {
+			if !yield(name, v) {
+				return
+			}
+		}
+		yield(uq("m"), Typed(m))
+	})
+	absent := asValues(t)
+	date := asBuiltin(t, "date")
+	for _, tc := range []struct {
+		expr  string
+		attrs TypedAttributes
+		want  bool
+	}{
+		{"@d instance of attribute(*, xs:dateTime)", present, true},
+		{"@s instance of attribute(*, xs:dateTime)", present, false},
+		{"@d instance of attribute(*, xs:dateTime)", absent, false},
+		{"@d instance of attribute(*, xs:dateTime)?", absent, true},
+		{"@d instance of attribute(*, xs:dateTime)?", present, true},
+		{"@d instance of attribute(*, xs:dateTime)+", absent, false},
+		{"not(@d instance of attribute(*, xs:dateTime))", present, false},
+		{"./@d instance of attribute(*, xs:dateTime)", present, true},
+		{"./@s instance of attribute(*, xs:dateTime)", present, false},
+		{"./@d instance of attribute(*, xs:dateTime)", absent, false},
+		{"attribute::d instance of attribute(*, xs:dateTime)", present, true},
+		{"@d instance of attribute()", present, true},
+		{"@s instance of attribute()", present, true},
+		{"@d instance of attribute()", absent, false},
+		{"@d instance of attribute(*)", present, true},
+		{"@d instance of attribute(d)", present, true},
+		{"@s instance of attribute(s)", present, true},
+		{"@d instance of attribute(s)", present, false},
+		{"@d instance of attribute(d, xs:dateTime)", present, true},
+		{"@d instance of attribute(d, xs:string)", present, false},
+		{"@d instance of attribute(s, xs:dateTime)", present, false},
+		{"@d instance of attribute(*, xs:anyAtomicType)", present, true},
+		{"@d instance of attribute(*, xs:anySimpleType)", present, true},
+		{"@d instance of attribute(*, xs:untypedAtomic)", present, false},
+		{"@d instance of attribute(*, xs:date)", present, false},
+		{"@m instance of attribute(*, xs:date)", present, true},
+		{"@m instance of attribute(*, xs:dateTime)", present, false},
+		{"@u instance of attribute()", present, true},
+		{"@u instance of attribute(*, xs:untypedAtomic)", present, false},
+		{"@u instance of attribute(*, xs:dateTime)", present, false},
+		{"@u instance of attribute(*, xs:anySimpleType)", present, true},
+		{"@a instance of attribute(*, xs:anySimpleType)", present, true},
+		{"@a instance of attribute(*, xs:untypedAtomic)", present, false},
+		{"some $x in data($value) satisfies @d instance of attribute(*, xs:dateTime)", present, true},
+	} {
+		if got := ioEval(t, tc.expr, types, xsd.SimpleContent{SimpleType: date}, uses, asNoElems, tc.attrs, asNoChildren, asBind(t, date, "2008-01-01")); got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}
+
 // Guard: what `instance of` does not admit declines rather than answering. A
 // Type Alternative's {test} declines it — §3.12.6's grammar has no
 // InstanceofExpr — and so does a value predicate. In an assertion, a KindTest,
 // `item()` and `empty-sequence()` SequenceType decline under sequenceType's
-// GAP(xpath) (#1042), and so does a name that is no builtin atomic type: a
-// list or xs:anySimpleType (err:XPST0051), a complex type, a user-defined
-// type, a name resolving to nothing. A node operand without fn:data — `@d`,
-// `.`, a child step — declines, and so does an operand whose static type is
-// not its dynamic one, a numeric literal and arithmetic, and a typed child,
-// directly or through fn:distinct-values, against an AtomicType its compiled
-// type does not derive from: an xsi:type can make an xs:int child an
-// xs:short; fn:data anywhere but as the operand of `instance of`, or with two
-// arguments, declines. The fn:data row compiles for a Type Alternative with
-// ctaTypeAlternativeFacade.instanceOf answering true, the value predicate
-// comparing `.` with an `instance of` compiles with
-// ctaPredicateFacade.instanceOf answering true, the three node rows compile
-// without instanceofExpr's node check, the three typed-child rows without
+// GAP(xpath) (#1042) — an AttributeTest is read over one attribute step alone,
+// never over an atomized operand, fn:data's or fn:distinct-values' argument, a
+// child read for its value, `$value` or a range variable — and so does a name
+// that is no builtin atomic type: a list or xs:anySimpleType (err:XPST0051), a
+// complex type, a user-defined type, a name resolving to nothing. Over an
+// attribute step, every SequenceType but an AttributeTest declines, an
+// AtomicType and `element()`, `node()` and `item()` among them, and so does an
+// AttributeTest whose TypeName is user-defined (err:XPST0008), xs:anyType or
+// resolves to nothing, or is xs:anyAtomicType over a ·special· attribute. A
+// node operand without fn:data — `.`, a child step — declines, and so does an
+// operand whose static type is not its dynamic one, a numeric literal and
+// arithmetic, and a typed child, directly or through fn:distinct-values,
+// against an AtomicType its compiled type does not derive from: an xsi:type
+// can make an xs:int child an xs:short; fn:data anywhere but as the operand of
+// `instance of`, or with two arguments, declines. The fn:data row compiles for
+// a Type Alternative with ctaTypeAlternativeFacade.instanceOf answering true,
+// and the AttributeTest row there with instanceofExpr's AttributeTest arm not
+// asking the façade; the value predicate comparing `.` with an `instance of`
+// compiles with ctaPredicateFacade.instanceOf answering true; the `.` and
+// child-step rows compile without instanceofExpr's node check, and `@d
+// instance of xs:date` with attributeInstanceOf handing its tail to
+// instanceTail; the `data(@event)` and `data(@d)` rows compile with an
+// AttributeTest arm in instanceTail over a ctaTypedAttr operand, and the six
+// rows from `data(@event)` to `$value` with sequenceType admitting
+// `attribute(...)`; the `$x` row compiles with an AttributeTest arm before
+// instanceItem, and the two `$v` rows only with instanceofExpr's node check
+// removed too; the `element()`, `node()` and `item()` rows over @d compile
+// with attributeKindTest admitting any name before '('; the a:MyDate,
+// xs:anyType and xs:nonesuch rows with annotationDerives admitting any
+// TypeName, and the xs:anyAtomicType row over @u with annotationDerives
+// answering it over a ctaAttr; the three typed-child rows compile without
 // instanceTail's derived check, the IntegerLiteral row without instanceItem's
 // literal check, and the arithmetic row with instanceItem admitting ctaArith.
 func TestInstanceOfDeclines(t *testing.T) {
-	for _, expr := range []string{"@a instance of xs:string", "not(@a instance of xs:string)", "data(@a) instance of xs:untypedAtomic"} {
+	for _, expr := range []string{"@a instance of xs:string", "not(@a instance of xs:string)", "data(@a) instance of xs:untypedAtomic", "@a instance of attribute()"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
@@ -255,11 +369,28 @@ func TestInstanceOfDeclines(t *testing.T) {
 	myDate := csRestriction(t, "MyDate", ctaBuiltin("date"))
 	types := asTypesWith(myDate)
 	date := asBuiltin(t, "date")
-	uses := asUses(t, map[string]string{"event": "dateTime", "d": "date"})
+	uses := asUses(t, map[string]string{"event": "dateTime", "d": "date", "u": "anySimpleType"})
 	elems := asElems(map[xsd.QName]xsd.TypeDefinition{uq("e"): date, uq("n"): asBuiltin(t, "int")})
 	for _, expr := range []string{
-		"./@event instance of attribute(*, xs:dateTime)",
 		"data(@event) instance of attribute(*, xs:dateTime)",
+		"data(@d) instance of attribute()",
+		"distinct-values(@d) instance of attribute()",
+		"data(n) instance of attribute()",
+		"data(n[1]) instance of attribute()",
+		"$value instance of attribute()",
+		"some $x in data($value) satisfies $x instance of attribute()",
+		"some $v in n satisfies $v instance of attribute()",
+		"some $v in n satisfies $v/following-sibling::n[1] instance of attribute()",
+		"count(n[@d instance of attribute()]) = 1",
+		"@* instance of attribute()",
+		"@d instance of element()",
+		"@d instance of node()",
+		"@d instance of item()",
+		"@d instance of attribute(*, xs:date?)",
+		"@d instance of attribute(*, a:MyDate)",
+		"@d instance of attribute(*, xs:anyType)",
+		"@d instance of attribute(*, xs:nonesuch)",
+		"@u instance of attribute(*, xs:anyAtomicType)",
 		"$value instance of element()",
 		"$value instance of item()",
 		"$value instance of empty-sequence()",

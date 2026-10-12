@@ -1102,33 +1102,39 @@ type AssertionTest struct {
 // (§3.2.2, §3.2.4) — true where the item count is one the indicator admits and each item's
 // type derives from the AtomicType (§2.5.4), never casting, so `data(.) instance of
 // xs:untypedAtomic` holds over every {content type} and `$value instance of xs:date` over an
-// xs:date `$value`, while an error evaluating its operand raises; [6] QuantifiedExpr
-// (xpath20.md §3.9) wherever the conditional stands, `some` or `every` over one in-clause
-// binding a range variable `$v` to each child of E a step `N` or `./N` with a QName NameTest
-// selects, whose body is `$v/@A`, a conjunction `$v/@A and $v/@B …`, or
-// `$v/following-sibling::*[1][self::M]` — the next sibling element of `$v` where it is named
-// M, empty after E's last child element (§3.2.1.1, §3.2.2) — or one of those inside fn:not, or
-// binding `$v` to each child such a step selects whose type elems answers is one a child read
-// for its value is admitted under as a TYPED value, or to each but the last of them under the
-// one predicate `[position() lt last()]` (§3.2.2), whose body is any one ExprSingle this
-// function admits, `$v` in scope in it alone as a node, ·nilled· or not, whose typed value is
-// that child's, and `$v/following-sibling::M[1]` the first later child named M however many of
-// other names lie between, or none (§3.2.1.1), typed on the same terms, or binding a range
-// variable `$x` to each item of a typed `$value`, atomic or list, written `data($value)` or
-// `$value` (xpath-functions.md §2.4), whose body is any one ExprSingle this function admits,
-// the range variable in scope in it alone as an atomic value of `$value`'s item type, `some`
-// true where a binding satisfies the body and `every` where all do, so over no binding — an
-// empty list, or the nil `$value` clause 2.3.2 binds — `some` is false and `every` true, and
-// over `$value` or a typed child step a binding whose body raises is the answer unless another
-// binding decides the quantifier (§3.6's tables); and, as an operand of a general comparison,
-// an integer sequence: [11] RangeExpr `I to J` over two IntegerLiterals, bare or
-// parenthesized, or a parenthesized comma sequence of IntegerLiterals and such ranges, `(1 to
-// 10, 20, 30)` (§3.3.1), or a string sequence, a parenthesized comma sequence of
-// StringLiterals, `('a', 'b')`. A string sequence's items are xs:string. Against a typed
-// operand outside the xs:string family, an xs:integer `$value` or child among them, xpath20.md
-// §B.2 defines no comparison and it raises err:XPTY0004, while `.`, which is not typed, casts
-// to xs:string (§3.5.2 rule 2.4) — added, and every decline [CompileCTATest] states is this
-// one's too, under the same static context (xpath-valid clause 2.2) augmented with `$value`
+// xs:date `$value`, while an error evaluating its operand raises; the same tail with an [60]
+// AttributeTest, `attribute()`, `attribute(N)`, `attribute(*, T)` or `attribute(N, T)` for T
+// a builtin simple type or xs:untypedAtomic, over one attribute step of E, `@d`,
+// `attribute::d` or `./@d`, true where the count of attributes it selects is one the
+// indicator admits and the attribute is named N and annotated with its {attribute use}'s
+// type, deriving from T (§2.5.4.5), so assert013's `./@event instance of attribute(*,
+// xs:dateTime)` holds over an xs:dateTime @event; [6] QuantifiedExpr (xpath20.md §3.9)
+// wherever the conditional stands, `some` or `every` over one in-clause binding a range
+// variable `$v` to each child of E a step `N` or `./N` with a QName NameTest selects, whose
+// body is `$v/@A`, a conjunction `$v/@A and $v/@B …`, or `$v/following-sibling::*[1][self::M]`
+// — the next sibling element of `$v` where it is named M, empty after E's last child element
+// (§3.2.1.1, §3.2.2) — or one of those inside fn:not, or binding `$v` to each child such a
+// step selects whose type elems answers is one a child read for its value is admitted under as
+// a TYPED value, or to each but the last of them under the one predicate `[position() lt
+// last()]` (§3.2.2), whose body is any one ExprSingle this function admits, `$v` in scope in
+// it alone as a node, ·nilled· or not, whose typed value is that child's, and
+// `$v/following-sibling::M[1]` the first later child named M however many of other names lie
+// between, or none (§3.2.1.1), typed on the same terms, or binding a range variable `$x` to
+// each item of a typed `$value`, atomic or list, written `data($value)` or `$value`
+// (xpath-functions.md §2.4), whose body is any one ExprSingle this function admits, the range
+// variable in scope in it alone as an atomic value of `$value`'s item type, `some` true where
+// a binding satisfies the body and `every` where all do, so over no binding — an empty list,
+// or the nil `$value` clause 2.3.2 binds — `some` is false and `every` true, and over `$value`
+// or a typed child step a binding whose body raises is the answer unless another binding
+// decides the quantifier (§3.6's tables); and, as an operand of a general comparison, an
+// integer sequence: [11] RangeExpr `I to J` over two IntegerLiterals, bare or parenthesized,
+// or a parenthesized comma sequence of IntegerLiterals and such ranges, `(1 to 10, 20, 30)`
+// (§3.3.1), or a string sequence, a parenthesized comma sequence of StringLiterals, `('a',
+// 'b')`. A string sequence's items are xs:string. Against a typed operand outside the
+// xs:string family, an xs:integer `$value` or child among them, xpath20.md §B.2 defines no
+// comparison and it raises err:XPTY0004, while `.`, which is not typed, casts to xs:string
+// (§3.5.2 rule 2.4) — added, and every decline [CompileCTATest] states is this one's too,
+// under the same static context (xpath-valid clause 2.2) augmented with `$value`
 // (cvc-assertion clause 2.2), plus these, each of which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
@@ -1319,18 +1325,20 @@ type AssertionTest struct {
 //     as xs:date` decline — and one inside a value predicate, and every
 //     `castable as T` whose `cast as T` the bullets above decline;
 //   - an `instance of` tail whose SequenceType is not atomic — a KindTest
-//     such as `attribute(*, xs:dateTime)`, `item()`, `empty-sequence()` —
-//     or whose AtomicType is user-defined or no atomic type at all (a list,
-//     xs:anySimpleType, err:XPST0051), one over a node, `@d instance of
-//     xs:date`, or over a numeric literal or an arithmetic result, whose
-//     static type here is not its dynamic one, one over a typed child, or
-//     fn:distinct-values over one, whose AtomicType the child's ·locally
-//     declared type· does not derive from — `data(e) instance of xs:token`
-//     over an xs:string e, which an xsi:type can make an xs:token — and so
-//     over a path of child steps read for its values, `data(a/b)`, against
-//     the type elems answered for it, one inside a value predicate, and
-//     fn:data anywhere but as the operand of `instance of` or as a
-//     quantifier's binding over `$value`.
+//     such as `element()`, `item()`, `empty-sequence()`, and an AttributeTest
+//     over anything but one attribute step, `data(@d)` among them, or whose
+//     TypeName is user-defined (err:XPST0008), xs:anyType, or xs:anyAtomicType
+//     over an attribute of ·special· type — or whose AtomicType is
+//     user-defined or no atomic type at all (a list, xs:anySimpleType,
+//     err:XPST0051), one over a node, `@d instance of xs:date`, or over a
+//     numeric literal or an arithmetic result, whose static type here is not
+//     its dynamic one, one over a typed child, or fn:distinct-values over one,
+//     whose AtomicType the child's ·locally declared type· does not derive
+//     from — `data(e) instance of xs:token` over an xs:string e, which an
+//     xsi:type can make an xs:token — and so over a path of child steps read
+//     for its values, `data(a/b)`, against the type elems answered for it, one
+//     inside a value predicate, and fn:data anywhere but as the operand of
+//     `instance of` or as a quantifier's binding over `$value`.
 //
 // An xs:string? argument — of every function above but fn:empty, fn:exists,
 // fn:distinct-values, fn:string and fn:concat — of any type outside the

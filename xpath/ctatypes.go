@@ -315,6 +315,51 @@ func (t ctaTypes) itemMatches(item ctaStatic, name xsd.QName) (matches, admitted
 	}
 }
 
+// annotationDerives reports derives-from(AT, name) (xpath20.md §2.5.4) for AT
+// the type annotation of the attribute node v, which an [60] AttributeTest's
+// TypeName asks (§2.5.4.5). v is an attribute of E's typed instance
+// (ctaParser.attributeInstanceOf), whose annotation is its {attribute use}'s
+// type, no xsi:type reaching an attribute: a ctaTypedAttr's st, or for a
+// ctaAttr the ·special· type itself, xs:anySimpleType or xs:anyAtomicType —
+// only its typed value is xs:untypedAtomic (xpath-datamodel §3.3.1.2). So no
+// such attribute is annotated xs:untypedAtomic, the annotation of a
+// skip-assessed one: [TypedAttributes] carries only attributes that matched an
+// {attribute use}. derives-from walks AT's {base type definition} chain
+// (ancestor), a user-defined AT's too, which is §2.5.4's
+// implementation-dependent mechanism for an AT outside the in-scope schema
+// definitions; neither ·special· type derives from any name but
+// xs:anySimpleType and, for xs:anyAtomicType, itself.
+//
+// decided is false where name is neither xs:untypedAtomic nor a simple type in
+// the XSD namespace — a user-defined type, which xpath-valid clause 2.2.5 keeps
+// out of the in-scope schema types (err:XPST0008), xs:anyType, a name
+// resolving to nothing — and for xs:anyAtomicType over a ctaAttr, which keeps
+// no record of which ·special· type annotates it.
+//
+// GAP(xpath): each of those declines, the err:XPST0008 arm folded into the
+// withhold as castTarget folds err:XPST0051. The direction is the withhold
+// [CompileAssertionTest] reports. (#1042)
+func (t ctaTypes) annotationDerives(v ctaValue, name xsd.QName) (derives, decided bool) {
+	if _, simple := t.simple(name); name.Space != xsd.XMLSchemaNS || !simple && name != ctaBuiltin("untypedAtomic") {
+		return false, false
+	}
+	switch n := v.(type) {
+	case ctaTypedAttr:
+		at, err := t.ancestor(n.st, name)
+		if err != nil {
+			return false, false
+		}
+		return at != nil, true
+	case ctaAttr:
+		if name == ctaBuiltin("anyAtomicType") {
+			return false, false
+		}
+		return name == ctaBuiltin("anySimpleType"), true
+	default:
+		return false, false
+	}
+}
+
 // castsFrom reports whether this engine casts the operand v to target, a type
 // castTarget admitted, at all. A literal reaches castsFrom under either cast
 // spelling and any target, and literalCastsTo judges it. Of every other

@@ -47,7 +47,8 @@ import (
 // (ctaArith); [47] ContextItemExpr `.`, atomized to E's string value (ctaContextAtom);
 // xpath20.md [18] CastableExpr's `castable as` tail in place of [15]'s `cast as` one
 // (ctaCastable); xpath20.md [16] InstanceofExpr's `instance of` tail with an atomic
-// SequenceType over a [14] ta-ValueExpr or an fn:data call (ctaInstanceOf), whose argument
+// SequenceType over a [14] ta-ValueExpr or an fn:data call, or with an AttributeTest over
+// one attribute step, `@d` or `./@d` (ctaInstanceOf), the fn:data call's argument
 // may be one child step with its axis spelled out, `child::N`, or filtered by an
 // IntegerLiteral, `N[k]` (ctaChildAt); and a general comparison's operand may be an integer
 // sequence, xpath20.md [11] RangeExpr or §3.3.1's comma sequence over IntegerLiterals, or a
@@ -1444,6 +1445,13 @@ type ctaCastable struct {
 // answer and the evaluation counts the items alone (ctaInstanceOfItem). read is
 // the type the items are read in to be counted: the operand's own type, or
 // xs:string for an xs:untypedAtomic operand, as ctaDistinctValues reads one.
+//
+// T is an [60] AttributeTest instead where E is one attribute step of E's
+// typed instance, a ctaTypedAttr or ctaAttr (ctaParser.attributeInstanceOf):
+// matches is then whether the attribute NODE the step selects matches T
+// (§2.5.4.5), settled at compile time from its name and type annotation
+// (ctaTypes.annotationDerives), and the step's one atom per attribute is
+// counted in its place.
 type ctaInstanceOf struct {
 	operand    ctaValue
 	read       *xsd.SimpleType
