@@ -2907,6 +2907,14 @@ func mappedFacetElement(local string) bool {
 //     the <enumeration> [children]'s value [attributes]" — one member per
 //     sibling, in document order.
 //
+// Each facet's {value} is "the actual value of the value [attribute]"
+// (f-l-value, f-mil-value, f-mal-value, f-w-value, f-td-value, f-fd-value,
+// f-tz-value; f-ms-value and f-mns-value in xsd-precisionDecimal.md), read
+// after the attribute type's whiteSpace normalization (Structures key-vv,
+// key-nv): facetValueLexical collapses the kinds whose value is typed with
+// whiteSpace = collapse and leaves <pattern> and the four bounds raw, and
+// <enumeration> members keep their literal too.
+//
 // The non-facet children <annotation> and the inline base <simpleType> are
 // skipped. src-simple-type clause 1 excepts xs:enumeration, xs:pattern and
 // xs:assertion from its no-two-children-with-one-name rule, which is what makes
@@ -3002,7 +3010,7 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 		if err != nil {
 			return nil, err
 		}
-		facets = append(facets, xsd.NewFacet(kind, []string{val}, fixed))
+		facets = append(facets, xsd.NewFacet(kind, []string{facetValueLexical(kind, val)}, fixed))
 	}
 	if len(assertions) == 0 {
 		return facets, nil
@@ -4007,6 +4015,33 @@ func childElements(el *Element, space, local string) []*Element {
 		}
 	}
 	return found
+}
+
+// facetValueLexical is the literal a facet element's value attribute contributes to its
+// {value}: the attribute's ·normalized value· under the whiteSpace its declared type fixes
+// (Structures key-vv, key-nv). The kinds whose value is typed with whiteSpace = collapse —
+// length, minLength, maxLength and fractionDigits (xs:nonNegativeInteger), totalDigits
+// (xs:positiveInteger), whiteSpace and explicitTimezone (xs:NMTOKEN enumerations), and
+// maxScale and minScale (xs:integer, xsd-precisionDecimal.md f-ms-value, f-mns-value) — get
+// §4.3.6's full collapse: every run of XML S (#x9, #xA, #xD, #x20) becomes one #x20 and the
+// ends are dropped, so " 5 " and "&#x9;5&#xA;" are the literal "5", and no other Unicode
+// space is touched. The only other kinds that reach here, the four bounds, keep the
+// attribute verbatim: their value is an xs:anySimpleType (preserve), read later through the
+// base type's own lexical mapping, which applies that type's whiteSpace itself. <pattern>
+// (xs:string, preserve) and <enumeration> are read raw by restrictionFacets before this.
+//
+// The collapse is done here, where the attribute is read, and not in
+// xsd.NewFacet or the value and xsd readers of {value}: those take a
+// programmatic caller's literal as given.
+func facetValueLexical(kind xsd.FacetKind, lexical string) string {
+	switch kind {
+	case xsd.FacetLength, xsd.FacetMinLength, xsd.FacetMaxLength, xsd.FacetFractionDigits,
+		xsd.FacetTotalDigits, xsd.FacetWhiteSpace, xsd.FacetExplicitTimezone,
+		xsd.FacetMaxScale, xsd.FacetMinScale:
+		return strings.Join(xmlSpaceFields(lexical), " ")
+	default:
+		return lexical
+	}
 }
 
 // collapseTrim strips the four characters §4.3.6's whiteSpace facet is

@@ -32,6 +32,9 @@ func TestProduceFacetCountValueRejected(t *testing.T) {
 		{"maxLength non-numeric", "string", `<xs:maxLength value="a"/>`, `<maxLength> value "a" is not a nonNegativeInteger`},
 		{"maxLength exponent", "string", `<xs:maxLength value="1e2"/>`, `<maxLength> value "1e2" is not a nonNegativeInteger`},
 		{"length negative", "string", `<xs:length value="-1"/>`, `<length> value "-1" is not a nonNegativeInteger`},
+		// Collapsing the padding (#2481) brings neither literal into its space.
+		{"length padded negative", "string", `<xs:length value=" -1 "/>`, `<length> value " -1 " is not a nonNegativeInteger`},
+		{"totalDigits padded zero", "decimal", `<xs:totalDigits value=" 0 "/>`, `<totalDigits> value " 0 " is not a positiveInteger`},
 		{"minLength non-numeric", "string", `<xs:minLength value="a"/>`, `<minLength> value "a" is not a nonNegativeInteger`},
 		{"fractionDigits exponent", "decimal", `<xs:fractionDigits value="1e2"/>`, `<fractionDigits> value "1e2" is not a nonNegativeInteger`},
 		{"fractionDigits non-XML-whitespace padding", "decimal", "<xs:fractionDigits value=\"\u00a05\"/>", `<fractionDigits> value "\u00a05" is not a nonNegativeInteger`},
