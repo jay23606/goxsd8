@@ -93,7 +93,7 @@ func (r documentRoot) enter(a *assembly) error {
 		return err
 	}
 	if !doc.IsSchema() {
-		return fmt.Errorf("parser: assembling a schema requires a <schema> document root at %q, got %s", r.location, doc.Root().Name().Local())
+		return fmt.Errorf("parser: <%s> at %s is not a <schema> document root: assembling a schema requires one", doc.Root().Name().Local(), doc.Root().Loc())
 	}
 	// The root document's effective target namespace is its own: there is no
 	// including document to borrow one from (§4.2.3 clause 2.3 needs one).

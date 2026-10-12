@@ -84,7 +84,7 @@ func TestParseSetReportsAsFarAsAssemblyGot(t *testing.T) {
 	if err == nil {
 		t.Fatal("ParseSet accepted a root whose element is not <schema>")
 	}
-	if want := `parser: assembling a schema requires a <schema> document root at "foo.xml", got foo`; err.Error() != want {
+	if want := `parser: <foo> at foo.xml:1:1 is not a <schema> document root: assembling a schema requires one`; err.Error() != want {
 		t.Errorf("error = %q, want %q", err, want)
 	}
 	if got, want := locations(report), []string{"a.xsd"}; !slices.Equal(got, want) {

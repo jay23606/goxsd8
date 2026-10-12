@@ -31,13 +31,13 @@
 //	    have inside the sentence rather than as the <loc>: prefix.
 //	    Nothing is stamped on that message — not a rule ID, and not the
 //	    goxsd8: <subcommand>: lead-in this binary's own diagnoses open
-//	    with — so the line opens however that component wrote it, which
-//	    for some is an internal package name. A document whose root is
-//	    not <xs:schema> and a rejection in the s4s-grammar class
-//	    (xsderr/doc.go) are examples, not the whole class: an I/O fault
-//	    reading a document the argument REFERENCES prints the same way
-//	    and is charged 1 like a rejection, though nothing about the
-//	    schema was decided.
+//	    with — so the line is that message as the component wrote it:
+//	    no <loc>: prefix, no [rule], its location named inside the
+//	    sentence. A document whose root is not <xs:schema> and a
+//	    rejection in the s4s-grammar class (xsderr/doc.go) are
+//	    examples, not the whole class: an I/O fault reading a document
+//	    the argument REFERENCES prints the same way and is charged 1
+//	    like a rejection, though nothing about the schema was decided.
 //	    An <xs:include>, <xs:import>, <xs:override> or empty
 //	    <xs:redefine> whose schemaLocation resolves to no document is
 //	    named on stderr at its own position, with no rule ID and no

@@ -1131,13 +1131,19 @@ func TestProduceAnonymousInlineBaseRestriction(t *testing.T) {
 	}
 }
 
+// TestProduceNonSchemaRootRejected pins the whole message, its subject and
+// <file>:<line>:<col> leading, so a swapped or dropped argument fails (#1048).
 func TestProduceNonSchemaRootRejected(t *testing.T) {
 	d, err := parser.ReadDocument(produceURI, strings.NewReader(`<notschema/>`))
 	if err != nil {
 		t.Fatalf("ReadDocument: %v", err)
 	}
-	if _, err := parser.Produce(d, strict.New()); err == nil {
+	_, err = parser.Produce(d, strict.New())
+	if err == nil {
 		t.Fatalf("Produce accepted a non-<schema> root")
+	}
+	if want := "parser: <notschema> at " + produceURI + ":1:1 is not a <schema> document root: Produce requires one"; err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
 	}
 }
 

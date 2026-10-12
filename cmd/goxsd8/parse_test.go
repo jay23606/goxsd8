@@ -276,10 +276,10 @@ func TestParseS4SGrammarRejectionCarriesNoRule(t *testing.T) {
 // It is exit 1 and not exit 2: rootLocation has already proved the file
 // readable, so the rejection is a verdict about what the document IS.
 //
-// The whole message is pinned, not a bracket-free shape: the location it
-// carries is the path alone, without the line:col an s4s-grammar message
-// holds, so an assertion that stopped at "no [" would pass against a line that
-// had lost its subject or its file (#1048).
+// The whole message is pinned, not a bracket-free shape: it carries its
+// location as an s4s-grammar message does, <file>:<line>:<col> inside the
+// sentence, so an assertion that stopped at "no [" would pass against a line
+// that had lost its subject, its file or its position (#1048).
 func TestParseNonSchemaRootCarriesNoRule(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"parse", "testdata/notschema.xml"}, &stdout, &stderr)
@@ -302,7 +302,7 @@ func TestParseNonSchemaRootCarriesNoRule(t *testing.T) {
 	}
 	// The location is inside the sentence: a line opening with abs+":" would
 	// be the contract's <loc>: prefix, which this rejection does not print.
-	want := fmt.Sprintf("parser: assembling a schema requires a <schema> document root at %q, got foo", abs)
+	want := "parser: <foo> at " + abs + ":5:1 is not a <schema> document root: assembling a schema requires one"
 	if line != want {
 		t.Errorf("stderr = %q, want %q", line, want)
 	}
