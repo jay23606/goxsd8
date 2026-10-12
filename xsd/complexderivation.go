@@ -411,7 +411,29 @@ func restrictionVarietyPairOK(tct, bct ContentType) bool {
 // charging C for it would be a FALSE REJECT. In the charge direction the fold on
 // B is what makes checkAttributeRestrictionRequired see a required attribute T
 // inherits from higher up the chain rather than only the ones B declares itself.
+//
+// GAP(xsd): a b that is ·xs:anyType· is not compared at all, a deliberate
+// divergence from derivation-ok-restriction clause 3, not a reading of it. Its
+// {attribute uses} are empty and its {attribute wildcard} is ##any lax with no
+// {disallowed names} (§3.4.7), so the one obligation checkAttributeRestriction
+// can charge over it is checkAttributeRestrictionWildcard's keyword comparison,
+// and the spec does charge it: clause 2.1 satisfies clause 2 only, no clause
+// exempts xs:anyType from clause 3, and loc-testSubP clause 2 ("G is lax and S
+// is not skip") refuses anyType's lax G over a skip S, rejecting every complex
+// type whose own <anyAttribute processContents="skip"/> restricts xs:anyType,
+// implicitly or explicitly. The conformance suite declares such schemas valid,
+// so the arm accepts them for the suite's sake: RULED permanent by #2548
+// (issuecomment-6134245663 owns the divergence; it is a ruling on the arm, and
+// the oracle's spec reading on that thread is the rejection above). Skipping is
+// FAIL-OPEN against this function's one reader, checkDerivationOKRestriction,
+// whose two callers — checkComplexTypeRestriction and
+// checkExtensionTwoStepDerivable — each charge on a non-nil error only. The
+// second never passes ·xs:anyType· as b: its M carries the {name} of an
+// ancestor whose own base is ·xs:anyType· (newCollapsedExtension).
 func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
+	if b.Name() == anyTypeName {
+		return nil
+	}
 	return s.checkAttributeRestriction(complexTypeAttributeRestriction(t, b))
 }
 

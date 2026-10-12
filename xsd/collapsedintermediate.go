@@ -203,7 +203,9 @@ func (s *Schema) collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse 
 //
 //   - checkAttributeRestrictionWildcard (attributerestriction.go) asks
 //     wildcardSubset(T's constraint, M's). A wider M can only turn a rejection
-//     into an acceptance: FAIL-OPEN.
+//     into an acceptance: FAIL-OPEN. Past that gate it compares M's {process
+//     contents} with T's, and M's is T's own, so that comparison never charges
+//     here.
 //   - Schema.attributeDefaultBinding, reached from checkRestrictionAttributes,
 //     consults M.{attribute uses} FIRST and falls back to the wildcard only for a
 //     name no use covers. Where the fallback is reached, more admitted names

@@ -28,12 +28,14 @@ func restrictionDoc(baseAttr, restrAttr string) string {
 // author nothing (#359).
 //
 // The four sub-clauses below are every one of loc-testSubP clause 5's rejection
-// sites reachable from a parsed document. Clause 5's remaining two sites in
-// defaultbinding.go — checkBindingSubsumes' mismatched-kind fallthrough and
-// checkKeywordSubsumes' keyword charge (clauses 2 and 3) — cannot be driven from any
-// document, because checkRestrictionAttributes always passes an attributeUseBinding
-// as the specific binding; xsd's own TestBindingSubsumesChargesTheRestrictingType
-// covers those two directly.
+// sites reachable from a parsed document. checkBindingSubsumes' two remaining
+// sites in defaultbinding.go — its mismatched-kind fallthrough and its route to
+// checkKeywordSubsumes' keyword charge (clauses 2 and 3) — cannot be driven
+// from any document, because checkAttributeRestriction always passes it an
+// attributeUseBinding as the specific binding; xsd's own
+// TestBindingSubsumesChargesTheRestrictingType covers those two directly. The
+// keyword charge's other route, through checkAttributeRestrictionWildcard, is
+// TestRestrictionAttributeWildcardKeyword's.
 //
 // Asserting the exact line, rather than merely a non-zero Loc, is what makes the
 // test fail if the sites are charged b.Loc() instead of t.Loc().

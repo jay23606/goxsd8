@@ -1161,9 +1161,11 @@ func TestParseRedefineGroupClause622NotChargedOnSelfReference(t *testing.T) {
 // rejected, charged to src-redefine — never to derivation-ok-restriction, which
 // is a rule about a complex type that does not exist here.
 //
-// The three shapes are the three the W3C suite's MS-AttributeGroup redefine
-// cohort mixes: an added attribute the original neither declares nor admits, a
-// re-typing that is not a derivation, and a required attribute dropped.
+// The first three shapes are the three the W3C suite's MS-AttributeGroup
+// redefine cohort mixes: an added attribute the original neither declares nor
+// admits, a re-typing that is not a derivation, and a required attribute
+// dropped. The fourth is c-ran clause 3's keyword comparison over the two
+// {attribute wildcard}s (loc-testSubP clause 3, checkAttributeRestrictionWildcard).
 func TestParseRedefineAttributeGroupClause722Rejected(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
@@ -1183,6 +1185,10 @@ func TestParseRedefineAttributeGroupClause722Rejected(t *testing.T) {
 			`<xs:attribute name="a" type="xs:string"/>`,
 			`<xs:attribute name="a" type="xs:string"/><xs:attribute name="r" type="xs:string" use="required"/>`,
 			"r"},
+		{"a lax wildcard over a strict one",
+			`<xs:anyAttribute processContents="lax"/>`,
+			`<xs:anyAttribute/>`,
+			"the redefining attribute group {urn:a}ag must restrict the original attribute group {urn:a}ag, but the original attribute group {urn:a}ag binds an attribute both {attribute wildcard}s admit and no declaration governs to a strict wildcard while the restriction binds it to a lax wildcard, and loc-testSubP clause 3 "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parseMap(t, "main.xsd", map[string]string{

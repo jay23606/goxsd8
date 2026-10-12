@@ -158,13 +158,16 @@ func TestBindingSubsumesKeywords(t *testing.T) {
 // and checkKeywordSubsumes: both are charged to the restricting complex type —
 // the spec's T, whose own §3.4.6.3 obligation clause 3 is (#359).
 //
-// These two sites are unreachable from a parsed document, because
-// checkRestrictionAttributes (complexderivation.go) always passes an
-// attributeUseBinding as the specific binding: no keyword general binding can
-// then fail keywordSubsumes, and no pair can reach the mismatched-kind
-// fallthrough. They are pinned here rather than in parser's end-to-end
-// TestRestrictionAttributeRejectionsCiteTheRestrictingType for exactly that
-// reason. b carries a DIFFERENT position, so charging the base instead fails.
+// Through checkBindingSubsumes these two sites are unreachable from a parsed
+// document, because checkAttributeRestriction (attributerestriction.go) always
+// passes it an attributeUseBinding as the specific binding: no keyword general
+// binding can then fail keywordSubsumes, and no pair can reach the
+// mismatched-kind fallthrough. They are pinned here rather than in parser's
+// end-to-end TestRestrictionAttributeRejectionsCiteTheRestrictingType for
+// exactly that reason. checkKeywordSubsumes' other caller,
+// checkAttributeRestrictionWildcard, does reach its keyword charge from a
+// document; parser's TestRestrictionAttributeWildcardKeyword pins that one. b
+// carries a DIFFERENT position, so charging the base instead fails.
 func TestBindingSubsumesChargesTheRestrictingType(t *testing.T) {
 	tLoc := xsderr.Loc{URI: "t.xsd", Line: 11, Col: 3}
 	bLoc := xsderr.Loc{URI: "b.xsd", Line: 22, Col: 5}

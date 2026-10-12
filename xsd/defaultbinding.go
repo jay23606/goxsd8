@@ -289,7 +289,7 @@ func (s *Schema) ResolvedInheritable(u AttributeUse) bool {
 // guarantee.
 func (s *Schema) checkBindingSubsumes(n QName, r attributeRestriction, general, specific defaultBinding) error {
 	if g, ok := general.(wildcardKeywordBinding); ok {
-		return checkKeywordSubsumes(n, r, g, specific)
+		return checkKeywordSubsumes("attribute "+n.String(), r, g, specific)
 	}
 	g, gIsUse := general.(attributeUseBinding)
 	sp, sIsUse := specific.(attributeUseBinding)
@@ -304,8 +304,11 @@ func (s *Schema) checkBindingSubsumes(n QName, r attributeRestriction, general, 
 // binding G is one of the three keywords, and charges the ways they can fail.
 // The predicate itself is keywordSubsumes, which the element half of the
 // definition shares (STYLE T4); only the message is built here. Every refusal
-// has a keyword S, one of the pairings keywordSubsumes' doc lists.
-func checkKeywordSubsumes(n QName, r attributeRestriction, general wildcardKeywordBinding, specific defaultBinding) error {
+// has a keyword S, one of the pairings keywordSubsumes' doc lists. subject names
+// the attribute the two bindings are for: one expanded name from
+// checkBindingSubsumes, the wildcards' witness (wildcardWitness) from
+// checkAttributeRestrictionWildcard.
+func checkKeywordSubsumes(subject string, r attributeRestriction, general wildcardKeywordBinding, specific defaultBinding) error {
 	if keywordSubsumes(general, specific) {
 		return nil
 	}
@@ -314,7 +317,7 @@ func checkKeywordSubsumes(n QName, r attributeRestriction, general wildcardKeywo
 		requirement = "loc-testSubP clause 3 requires the specific binding to be strict too"
 	}
 	return xsderr.New(r.rule, r.loc,
-		"%s %s %s, but %s binds attribute %s to a %s wildcard while the restriction binds it to %s, and %s (%s)", r.derived.label, r.verb, r.base.label, r.base.label, n, general.keyword, describeRefusedBinding(specific), requirement, r.clause)
+		"%s %s %s, but %s binds %s to a %s wildcard while the restriction binds it to %s, and %s (%s)", r.derived.label, r.verb, r.base.label, r.base.label, subject, general.keyword, describeRefusedBinding(specific), requirement, r.clause)
 }
 
 // describeRefusedBinding names the specific binding keywordSubsumes refused, for
@@ -351,8 +354,8 @@ func describeRefusedBinding(specific defaultBinding) string {
 // "for all elements E in ES" with no episode parameter, so that one item
 // decides the clause (#2546). The argument needs an S wildcard that admits a
 // namespace: contentModelRestricts takes no transition on one that admits
-// none, and the attribute half never passes a keyword S
-// (checkAttributeRestriction).
+// none, and the attribute half passes a keyword S only from
+// checkAttributeRestrictionWildcard, past an admitsSomeNamespace test.
 func keywordSubsumes(general wildcardKeywordBinding, specific defaultBinding) bool {
 	switch general.keyword {
 	case ProcessSkip:

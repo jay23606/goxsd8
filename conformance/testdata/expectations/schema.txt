@@ -4670,7 +4670,7 @@ MS-Errata102006-07-15/errC005/schema/errC005 pass
 MS-Errata102006-07-15/errC006/schema/errC006 pass
 MS-Errata102006-07-15/errC007/schema/errC007 pass
 MS-Errata102006-07-15/errC008/schema/errC008 pass
-MS-Errata102006-07-15/errC009/schema/errC009 fail
+MS-Errata102006-07-15/errC009/schema/errC009 pass
 MS-Errata102006-07-15/errE001/schema/errE001 pass
 MS-Errata102006-07-15/errE002/schema/errE002 pass
 MS-Errata102006-07-15/errE003/schema/errE003 pass

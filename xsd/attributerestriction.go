@@ -91,8 +91,10 @@ func attributeGroupAttributeSide(g AttributeGroupDefinition, label string) attri
 //     ·subsume· T's, which for an {attribute use} is loc-testSubP clause 5;
 //   - every expanded name T admits through its {attribute wildcard} AND no
 //     {attribute use} of T's already claims must be admitted by B too
-//     (cvc-complex-type clause 2.2, c-avaw, which clause 2.1 pre-empts per name —
-//     checkAttributeRestrictionWildcard);
+//     (cvc-complex-type clause 2.2, c-avaw, which clause 2.1 pre-empts per name),
+//     and B's binding for such a name must ·subsume· T's, which for two
+//     wildcard keywords is loc-testSubP clauses 1-3
+//     (checkAttributeRestrictionWildcard);
 //   - every attribute B marks {required} must stay required in T
 //     (cvc-complex-type clause 3, checkAttributeRestrictionRequired).
 //
@@ -172,6 +174,21 @@ func (s *Schema) checkAttributeRestriction(r attributeRestriction) error {
 //     checkAttributeRestriction charges the same shape first, through
 //     attributeDefaultBinding; this half is what holds when a caller reaches it
 //     directly.)
+//
+// Past that gate, c-ran clause 3's ·default binding· conjunct is charged over
+// the same names: B's binding must ·subsume· T's (loc-testSubP), and here both
+// are the wildcards' {process contents} keywords, compared by keywordSubsumes
+// through checkKeywordSubsumes (defaultbinding.go, the one encoding; STYLE T4).
+// That comparison is exact, by keywordSubsumes' own argument: a T wildcard that
+// admits a namespace admits some name that no {attribute use} on either side
+// claims and that has no ·governing attribute declaration·, so T binds an item
+// carrying it to T's keyword (key-dft-binding cases 4-6), and B, which admits it
+// too once the subset gate has passed, binds it to B's. A T wildcard that admits
+// NO namespace — an empty enumeration, namespace="" — has no item ·attributed·
+// to it (cvc-wildcard clause 1), so it binds nothing, and admitsSomeNamespace
+// returns before the comparison. That includes an empty ·complete wildcard·
+// intersected out of <attributeGroup ref> wildcards (§3.4.2.5 clause 1,
+// §3.6.2.2).
 func checkAttributeRestrictionWildcard(r attributeRestriction) error {
 	if !r.derived.hasWildcard {
 		return nil
@@ -181,12 +198,22 @@ func checkAttributeRestrictionWildcard(r attributeRestriction) error {
 			"%s %s %s and declares an {attribute wildcard}, but %s has none, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (%s, via cvc-complex-type clause 2.2, c-avaw)", r.derived.label, r.verb, r.base.label, r.base.label, r.clause)
 	}
 	bnc := r.base.wildcard.NamespaceConstraint().withoutDisallowedNames(sharedAttributeUseNames(r))
-	if wildcardSubset(r.derived.wildcard.NamespaceConstraint(), bnc) {
-		return nil
+	if !wildcardSubset(r.derived.wildcard.NamespaceConstraint(), bnc) {
+		return xsderr.New(r.rule, r.loc,
+			"%s %s %s but its {attribute wildcard} admits expanded names %s's does not, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (%s, via cvc-complex-type clause 2.2, c-avaw, and cos-ns-subset)", r.derived.label, r.verb, r.base.label, r.base.label, r.clause)
 	}
-	return xsderr.New(r.rule, r.loc,
-		"%s %s %s but its {attribute wildcard} admits expanded names %s's does not, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (%s, via cvc-complex-type clause 2.2, c-avaw, and cos-ns-subset)", r.derived.label, r.verb, r.base.label, r.base.label, r.clause)
+	if !admitsSomeNamespace(r.derived.wildcard.NamespaceConstraint()) {
+		return nil // no item is ·attributed· to it, so it binds nothing
+	}
+	return checkKeywordSubsumes(wildcardWitness, r,
+		wildcardKeywordBinding{keyword: r.base.wildcard.ProcessContents()},
+		wildcardKeywordBinding{keyword: r.derived.wildcard.ProcessContents()})
 }
+
+// wildcardWitness is how checkKeywordSubsumes' message names the attribute
+// checkAttributeRestrictionWildcard compares bindings for: no one expanded name,
+// but the witness that function's doc argues exists.
+const wildcardWitness = "an attribute both {attribute wildcard}s admit and no declaration governs"
 
 // sharedAttributeUseNames is the set of expanded names cvc-complex-type clause
 // 2.1 claims on BOTH sides of the comparison: the {attribute declaration} name of
