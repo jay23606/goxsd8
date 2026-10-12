@@ -150,7 +150,7 @@ func TestAssertionQuantifiedOverValueReads(t *testing.T) {
 	list := asList(t, "IntegerList", ctaBuiltin("integer"))
 	types := asTypesWith(list)
 	content := xsd.SimpleContent{SimpleType: list}
-	elems := func(xsd.QName) (xsd.TypeDefinition, bool) { return asBuiltin(t, "integer"), true }
+	elems := func([]xsd.QName) (xsd.TypeDefinition, bool) { return asBuiltin(t, "integer"), true }
 	compile := func(expr string) AssertionTest {
 		t.Helper()
 		test, ok := CompileAssertionTest(asRecord(expr), types, content, asUses(t, nil), elems)

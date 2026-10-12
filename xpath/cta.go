@@ -791,9 +791,9 @@ type ctaTypedAttr struct {
 // [[children]] under the ·expanded name· name, in document order
 // ([ChildElements]), the typed value of each of which is of type st — the
 // simple type ctaAssertionFacade.child read off the ·locally declared type·
-// [ElementTypes] answered for that name at compile time, which is why the node
-// carries it and the operand's static type is st (xpath-datamodel §6.2.4,
-// §3.3.1.2).
+// [ElementTypes] answered for the one-step path [name] at compile time, which
+// is why the node carries it and the operand's static type is st
+// (xpath-datamodel §6.2.4, §3.3.1.2).
 //
 // A ·nilled· child is a node of the sequence whose typed value is the empty
 // sequence (xpath-datamodel §6.2.4): it counts for the step's node existence
@@ -811,14 +811,15 @@ type ctaTypedChild struct {
 
 // ctaUntypedChild is an abbreviated child-axis step over an assertion's
 // instance whose children under the ·expanded name· name have a ·locally
-// declared type· — the one [ElementTypes] answered at compile time — that is a
-// complex type whose {content type}.{variety} is mixed, xs:anyType among them
-// (ctaAssertionFacade.child): the sequence of E's element [[children]] under
-// that name, in document order ([ChildElements]), the typed value of each of
-// which is its string-value as one xs:untypedAtomic value (xpath-datamodel
-// §6.2.4), so the operand's static type is xs:untypedAtomic, as a ctaAttr's is.
-// A ·nilled· child is a node whose typed value is the empty sequence, on
-// ctaTypedChild's terms (xpath20.md §2.5.2 item 4.1).
+// declared type· — the one [ElementTypes] answered for the one-step path [name]
+// at compile time — that is a complex type whose {content type}.{variety} is
+// mixed, xs:anyType among them (ctaAssertionFacade.child): the sequence of E's
+// element [[children]] under that name, in document order ([ChildElements]),
+// the typed value of each of which is its string-value as one xs:untypedAtomic
+// value (xpath-datamodel §6.2.4), so the operand's static type is
+// xs:untypedAtomic, as a ctaAttr's is. A ·nilled· child is a node whose typed
+// value is the empty sequence, on ctaTypedChild's terms (xpath20.md §2.5.2 item
+// 4.1).
 //
 // It is a node of its own and not a ctaTypedChild with a flag: it holds no
 // type, and it reads the [Untyped] arm of [ChildElements] where ctaTypedChild
@@ -997,6 +998,12 @@ type ctaFacade interface {
 	// with the type types classifies, as attribute's is: its nodes are
 	// atomized.
 	attributePath(steps []xsd.QName, test ctaNameTest, types ctaTypes) (ctaValue, bool)
+	// elementPath compiles a relative path of two or more child-axis steps
+	// whose QName NameTests resolved to steps, `N1/…/Nk`, standing as fn:data's
+	// argument (ctaParser.dataInstanceOf), into its node, reporting false where
+	// the façade declines it, on attribute's terms. The last step is typed with
+	// the type types classifies, as child's is: its nodes are atomized.
+	elementPath(steps []xsd.QName, types ctaTypes) (ctaValue, bool)
 	// childrenHaving compiles a child step whose QName NameTest resolved to
 	// name, filtered by a predicate that is a conjunction of child steps whose
 	// QName NameTests resolved to required, `N[a and b]`, standing where
@@ -1150,6 +1157,13 @@ func (ctaTypeAlternativeFacade) childPath([]xsd.QName, ctaElementTest) (ctaValue
 // childPath's terms. It is never reached: callsLibrary is false, so `sum(…)`
 // reaches constructorFunction and declines there.
 func (ctaTypeAlternativeFacade) attributePath([]xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {
+	return nil, false
+}
+
+// elementPath declines every path of child steps read for its values, on
+// childPath's terms. It is never reached: instanceOf is false, so fn:data
+// reaches constructorFunction and declines there.
+func (ctaTypeAlternativeFacade) elementPath([]xsd.QName, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }
 
@@ -1703,13 +1717,42 @@ func ctaChildPathOf(parents []xsd.QName, last ctaElementTest) (ctaChildPath, boo
 // xs:untypedAtomic where st is ·special· (xpath-datamodel §3.3.1.2).
 //
 // The values are read off the [Tally] the evaluation carries, which is why
-// the node is a counter key (ctaKey) whose counter collects them
+// the node is a collected key (ctaCollectedKey) whose collector keeps them
 // (ctaAttributeCollector) rather than reading [TypedAttributes] or
 // [ChildElements], neither of which reaches below E's children.
 type ctaAttributePath struct {
 	steps []xsd.QName
 	name  xsd.QName
 	st    *xsd.SimpleType
+}
+
+// ctaElementPath is a relative path of two or more abbreviated child-axis steps
+// with QName NameTests, `N1/…/Nk` (xpath20.md [26] RelativePathExpr, §3.2.1.1,
+// §3.2.4), read for its elements' typed values as fn:data's argument
+// (xpath-functions.md §2.4), which only the assertion façade admits
+// (ctaFacade.elementPath) and only there (ctaParser.dataInstanceOf): the
+// elements whose chain of names below E is steps — each a distinct node, in
+// document order (§3.2) — atomized to their typed values (§2.4.2). Each value
+// is of type st, the simple type the type [ElementTypes] answered for steps at
+// compile time has its typed value in (xpath-datamodel §6.2.4), and a ·nilled·
+// element's is the empty sequence.
+//
+// The values are read off the [Tally] the evaluation carries, on
+// ctaAttributePath's terms (ctaElementCollector): [ChildElements] carries E's
+// children alone. Its one constructor is ctaElementPathOf.
+type ctaElementPath struct {
+	steps []xsd.QName
+	st    *xsd.SimpleType
+}
+
+// ctaElementPathOf is the ctaElementPath over steps, of type st, false where
+// steps holds fewer than two: one step is a child step's (ctaTypedChild).
+// steps is held, not copied: the parser builds it fresh.
+func ctaElementPathOf(steps []xsd.QName, st *xsd.SimpleType) (ctaValue, bool) {
+	if len(steps) < 2 {
+		return nil, false
+	}
+	return ctaElementPath{steps: steps, st: st}, true
 }
 
 // ctaChildrenHaving is a child step with a QName NameTest filtered by a
@@ -1908,15 +1951,18 @@ func ctaSelectedElementsOf(p ctaCountPath) (ctaSelectedElements, bool) {
 	return ctaSelectedElements{}, false
 }
 
-// ctaKey is the sealed sum of the keys a [Tally] keeps a counter under: the
-// keys one [Tally.Element] report decides alone (ctaTallied), a child step
+// ctaKey is the sealed sum of the keys a [Tally] keeps a counter
+// (ctaCountedKey) or a collector (ctaCollectedKey) under: the keys one
+// [Tally.Element] report decides alone (ctaTallied), a child step
 // filtered by its children's existence (ctaChildrenHaving), which the reports
 // below the child decide, a child step filtered by a `preceding::` step
 // (ctaChildrenPreceded), which the reports before the child decide, the
 // children followed by a sibling of a name (ctaChildrenFollowedBy), which the
-// report of the next child decides, and a path to an attribute
-// (ctaAttributePath), whose values the [Tally.Attribute] calls after each
-// report bring. The grammar closes the set (STYLE T2's schema-closed-set
+// report of the next child decides, and a path to an attribute (ctaAttributePath),
+// whose values the [Tally.Attribute] calls after each report bring, and a path of
+// child steps read for its elements' values (ctaElementPath), whose values the
+// [Tally.ElementValue] calls after each such element's subtree bring — the two
+// collected keys. The grammar closes the set (STYLE T2's schema-closed-set
 // exception). Two keys are compared by same and never with ==, which a
 // slice-holding arm cannot take.
 type ctaKey interface {
@@ -1926,10 +1972,29 @@ type ctaKey interface {
 	// being E ([Tally.ReadsAttributesAt]).
 	selectsAttributesAt(depth int) bool
 	// same reports whether the key and other select the same nodes, which is
-	// what makes one counter serve both.
+	// what makes one counter or collector serve both.
 	same(other ctaKey) bool
+	// file adds the key to into's slice its own type fits — counted for a
+	// ctaCountedKey, collected for a ctaCollectedKey — unless a key the same
+	// as it is already there ([AssertionTest.countedPaths]).
+	file(into *ctaKeys)
+}
+
+// ctaCountedKey is a ctaKey a [Tally] keeps a ctaCounter under: every arm but
+// ctaAttributePath and ctaElementPath. No arm is also a ctaCollectedKey.
+type ctaCountedKey interface {
+	ctaKey
 	// counter is a fresh counter for the key, which has counted nothing.
 	counter() ctaCounter
+}
+
+// ctaCollectedKey is a ctaKey a [Tally] keeps a ctaCollector under, whose
+// values [AssertionTest.Evaluate] reads rather than a count: ctaAttributePath
+// and ctaElementPath.
+type ctaCollectedKey interface {
+	ctaKey
+	// collector is a fresh collector for the key, which holds no value.
+	collector() ctaCollector
 }
 
 // ctaTallied is the sealed sum of the keys whose every [Tally.Element] report
@@ -1960,6 +2025,17 @@ func (ctaChildrenPreceded) ctaKey() {}
 func (ctaChildrenFollowedBy) ctaKey() {}
 
 func (ctaAttributePath) ctaKey() {}
+func (ctaElementPath) ctaKey()   {}
+
+func (p ctaCountPath) file(into *ctaKeys)          { into.count(p) }
+func (f ctaFilteredChildren) file(into *ctaKeys)   { into.count(f) }
+func (u ctaUnion) file(into *ctaKeys)              { into.count(u) }
+func (p ctaChildPath) file(into *ctaKeys)          { into.count(p) }
+func (h ctaChildrenHaving) file(into *ctaKeys)     { into.count(h) }
+func (p ctaChildrenPreceded) file(into *ctaKeys)   { into.count(p) }
+func (s ctaChildrenFollowedBy) file(into *ctaKeys) { into.count(s) }
+func (p ctaAttributePath) file(into *ctaKeys)      { into.collect(p) }
+func (p ctaElementPath) file(into *ctaKeys)        { into.collect(p) }
 
 func (ctaCountPath) ctaTallied()        {}
 func (ctaFilteredChildren) ctaTallied() {}
@@ -2078,8 +2154,8 @@ func (p ctaCountPath) same(other ctaKey) bool {
 	return isCount && o == p
 }
 
-// counter is a fresh ctaAttributeCollector over p, which holds no value.
-func (p ctaAttributePath) counter() ctaCounter { return &ctaAttributeCollector{read: p} }
+// collector is a fresh ctaAttributeCollector over p, which holds no value.
+func (p ctaAttributePath) collector() ctaCollector { return &ctaAttributeCollector{read: p} }
 
 // selectsAttributesAt is true at the depth of the elements p's steps select,
 // whose attribute names decide which values p reads, and false at every other.
@@ -2097,6 +2173,24 @@ func (p ctaAttributePath) same(other ctaKey) bool {
 func (p ctaAttributePath) reads(path []xsd.QName, name xsd.QName) bool {
 	return name == p.name && slices.Equal(path, p.steps)
 }
+
+// collector is a fresh ctaElementCollector over p, which holds no value.
+func (p ctaElementPath) collector() ctaCollector { return &ctaElementCollector{read: p} }
+
+// selectsAttributesAt is false at every depth: p reads element values, and no
+// attribute name decides which.
+func (ctaElementPath) selectsAttributesAt(int) bool { return false }
+
+// same reports whether other is a ctaElementPath over p's steps: both were
+// compiled against one [ElementTypes], so their types agree.
+func (p ctaElementPath) same(other ctaKey) bool {
+	o, isPath := other.(ctaElementPath)
+	return isPath && slices.Equal(o.steps, p.steps)
+}
+
+// reads reports whether p reads the value of the element whose chain below E
+// is path.
+func (p ctaElementPath) reads(path []xsd.QName) bool { return slices.Equal(path, p.steps) }
 
 // selectsElement reports whether path is p's parents followed by one name its
 // last step matches, whatever the element's attributes.
@@ -2209,6 +2303,7 @@ func (ctaBoundChild) ctaValue()       {}
 func (ctaBoundSibling) ctaValue()     {}
 func (ctaChildPath) ctaValue()        {}
 func (ctaAttributePath) ctaValue()    {}
+func (ctaElementPath) ctaValue()      {}
 func (ctaChildrenHaving) ctaValue()   {}
 func (ctaChildrenPreceded) ctaValue() {}
 func (ctaSelectedElements) ctaValue() {}
@@ -2287,17 +2382,20 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 // fn:distinct-values call, whose static type is its operand's. A cast carries
 // its target, an fn:string call its cast's, `$value` the type of each of its
 // items, and a range variable over `$value` that same type (ctaRangeItem); a
-// range variable over a typed child step carries the step's type
-// (ctaBoundChild), and `$v/following-sibling::M[1]` M's (ctaBoundSibling). A
-// path to an attribute carries its compiled type, unless that type is ·special·
-// and its values xs:untypedAtomic; an fn:sum call carries its static type
-// (ctaSum), and `instance of` over one xs:boolean (ctaSumInstance).
+// range variable over a typed child step carries the step's type (ctaBoundChild),
+// and `$v/following-sibling::M[1]` M's (ctaBoundSibling). A path to an attribute
+// carries its compiled type, unless that type is ·special· and its values
+// xs:untypedAtomic, and a path of child steps read for its elements' values carries
+// its compiled type; an fn:sum call carries its static type (ctaSum), and `instance
+// of` over one xs:boolean (ctaSumInstance).
 func ctaCarriedType(v ctaValue) (*xsd.SimpleType, bool) {
 	switch n := v.(type) {
 	case ctaAttributePath:
 		if n.st.IsSpecial() {
 			return nil, false
 		}
+		return n.st, true
+	case ctaElementPath:
 		return n.st, true
 	case ctaSum:
 		return n.st, true
@@ -3033,7 +3131,9 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //     been applied to its arguments (ctafunc.go).
 //   - a path to an attribute below E yields each value the [Tally] collected
 //     for it, typed or xs:untypedAtomic, on the typed attribute's or the
-//     untyped attribute's terms (ctaAttributePathItem).
+//     untyped attribute's terms (ctaAttributePathItem), and a path of child
+//     steps read for its elements' values each typed value collected for it,
+//     on a typed child's terms (ctaElementPathItem).
 //   - a rooted path raises err:XPDY0050 before it yields anything, and a read
 //     of an absent context item, or of an absent focus by fn:position or
 //     fn:last, err:XPDY0002.
@@ -3122,6 +3222,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaDistinctValuesItem(n, c, env)
 	case ctaAttributePath:
 		return ctaAttributePathItem(n, c, env)
+	case ctaElementPath:
+		return ctaElementPathItem(n, c, env)
 	case ctaSum:
 		return ctaSumItem(n, c, env)
 	case ctaSumInstance:
@@ -3358,6 +3460,38 @@ func ctaAttributePathItem(n ctaAttributePath, c *xsd.SimpleType, env ctaEnv) cta
 	}
 	vs := make([]value.Value, 0, len(collected))
 	for _, v := range collected {
+		tv, isTyped := v.(tvTyped)
+		if !isTyped {
+			return ctaRaised{}
+		}
+		vs = append(vs, tv.v)
+	}
+	return ctaPromoted(vs, n.st, c, env)
+}
+
+// ctaElementPathItem atomizes the elements n selects (xpath20.md §2.4.2) to the
+// typed values the evaluation's [Tally] collected for n, in the order they were
+// reported, which is document order ([Tally.ElementValue]), each converted into
+// c on ctaTypedAttrItem's terms; a nil value, a ·nilled· element's, contributes
+// no item. A value of the [Untyped] arm breaks the obligation
+// [Tally.ElementValue] states and raises, as does a Tally holding no collector
+// for n, which [AssertionTest.Evaluate] refuses before the tree is read. The
+// input is ctaTypedInput by construction (ctaInput); the other arm carries no
+// Tally and raises.
+func ctaElementPathItem(n ctaElementPath, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return ctaRaised{}
+	}
+	collected, held := in.counts.values(n)
+	if !held {
+		return ctaRaised{}
+	}
+	vs := make([]value.Value, 0, len(collected))
+	for _, v := range collected {
+		if v == nil {
+			continue
+		}
 		tv, isTyped := v.(tvTyped)
 		if !isTyped {
 			return ctaRaised{}

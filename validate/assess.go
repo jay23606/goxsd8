@@ -1021,15 +1021,16 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // (assertionAncestry.below). e is reported to every counting ancestor's
 // Tallies on entry, its own attributes to its own ([walk.tallyElement]), and
 // e hands its parent's state its typed value last, once everything that can
-// find e invalid has run ([walk.keepChild]) — a value of mixed content the
-// string-value e's frame collected from its subtree as it streamed past,
-// opened on entry ([walk.stringValue]): cvc-assertion clause 1.1 validates the
-// parent's [[children]] "in the usual way" before any {test} of the parent
-// reads them. e's own string value, which its own {test}s read as `.`, is
-// collected the same way into a frame of its own ([ownStringValue]), and what
-// e contributes to every open frame beyond its text runs is settled once its
-// [[children]] are exhausted, before its own {test}s are evaluated
-// ([collectEnd]).
+// find e invalid has run ([walk.keepChild]), and every counting ancestor
+// reading e's value through a path of child steps that value at the same point
+// ([walk.tallyValue]) — a value of mixed content the string-value e's frame
+// collected from its subtree as it streamed past, opened on entry
+// ([walk.stringValue]): cvc-assertion clause 1.1 validates the parent's
+// [[children]] "in the usual way" before any {test} of the parent reads them.
+// e's own string value, which its own {test}s read as `.`, is collected the
+// same way into a frame of its own ([ownStringValue]), and what e contributes
+// to every open frame beyond its text runs is settled once its [[children]]
+// are exhausted, before its own {test}s are evaluated ([collectEnd]).
 func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAncestry, inherited []inheritedAttribute) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
@@ -1070,8 +1071,9 @@ func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAnc
 	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
-	w.keepChild(up.parent, e, g, content, frame,
-		len(w.res.violations) > violationsBefore || len(w.res.unevaluated) > unevaluatedBefore)
+	recorded := len(w.res.violations) > violationsBefore || len(w.res.unevaluated) > unevaluatedBefore
+	w.keepChild(up.parent, e, g, content, frame, recorded)
+	w.tallyValue(e, g, content, up, recorded)
 }
 
 // abstractDeclaration settles cvc-elt (§3.3.4.3) clause 2 for e: its

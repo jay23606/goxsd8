@@ -84,7 +84,7 @@ func asValues(t *testing.T, attrs ...asTyped) TypedAttributes {
 
 // asNoElems is the [ElementTypes] of an element whose governing type declares
 // no child element, so every child-axis step declines.
-func asNoElems(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false }
+func asNoElems([]xsd.QName) (xsd.TypeDefinition, bool) { return nil, false }
 
 // asNoChildren is the [ChildElements] of an element with no element child.
 func asNoChildren(func(ChildElement) bool) {}

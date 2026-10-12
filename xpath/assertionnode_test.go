@@ -196,12 +196,7 @@ func TestAssertionNodeArgumentsReadNoStringValue(t *testing.T) {
 // with equalsAt reading every general comparator as `=` the `!=` row does.
 func TestAssertionNodeFunctionsDeclineOtherShapes(t *testing.T) {
 	uses := asUses(t, map[string]string{"a": "string"})
-	elems := func(name xsd.QName) (xsd.TypeDefinition, bool) {
-		if name != uq("c") {
-			return nil, false
-		}
-		return asBuiltin(t, "string"), true
-	}
+	elems := asElems(map[xsd.QName]xsd.TypeDefinition{uq("c"): asBuiltin(t, "string")})
 	for _, expr := range []string{
 		"namespace-uri(@a) = ''",
 		"namespace-uri(c) = ''",

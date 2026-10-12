@@ -329,7 +329,7 @@ func TestAssertionQuantifiedOutsideTheAssertionFacade(t *testing.T) {
 // the node and ctaComparisonRooted answering true for it, and with either alone
 // it still passes.
 func TestAssertionQuantifiedInAPredicateDeclines(t *testing.T) {
-	elems := func(xsd.QName) (xsd.TypeDefinition, bool) { return asBuiltin(t, "string"), true }
+	elems := func([]xsd.QName) (xsd.TypeDefinition, bool) { return asBuiltin(t, "string"), true }
 	expr := "count(c[(every $d in d satisfies $d/@a)]) = 0"
 	if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, nil), elems); ok {
 		t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)

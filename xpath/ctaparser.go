@@ -1514,11 +1514,52 @@ func (p *ctaParser) instanceofExpr() (ctaValue, bool) {
 // still read the node, which fn:data does not return. The direction is the
 // withhold [CompileAssertionTest] reports. (#1042)
 func (p *ctaParser) dataInstanceOf() (ctaValue, bool) {
+	if n := p.childPathLength(2); n != 0 && p.peek(2+n).kind == ctaRParen {
+		return p.dataElementPath(n)
+	}
 	args, ok := p.arguments()
 	if !ok || len(args) != 1 || !p.atName("instance") {
 		return nil, false
 	}
 	return p.instanceTail(args[0])
+}
+
+// dataElementPath parses a call to fn:data whose one argument is the n tokens
+// childPathLength measured after its '(', a relative path of two or more
+// abbreviated child-axis steps, `data(N1/…/Nk)` (xpath20.md [26]
+// RelativePathExpr), each QName resolved on elementName's terms, into the node
+// p.facade builds for the path (ctaFacade.elementPath), as the operand of the
+// `instance of` tail that must follow the call (instanceTail). It is the ONE
+// place a ctaElementPath is built.
+//
+// GAP(xpath): a path read for its elements' values anywhere but as fn:data's
+// argument under `instance of` declines, on dataInstanceOf's and childPath's
+// terms — `a/b = 1`, `count(a/b)`, `string(a/b)` — and so does one whose last
+// step is the [37] Wildcard `*`, whose elements' types are not fixed at
+// compile time. The direction is the withhold [CompileAssertionTest] reports.
+// (#1042)
+func (p *ctaParser) dataElementPath(n int) (ctaValue, bool) {
+	p.advance() // the function name
+	p.advance() // '('
+	var steps []xsd.QName
+	for end := p.pos + n; p.pos < end; p.advance() {
+		if p.at(ctaSlashTok) {
+			continue
+		}
+		if !p.at(ctaNameTok) {
+			return nil, false
+		}
+		steps = append(steps, p.elementName(p.peek(0).text))
+	}
+	p.advance() // ')'
+	if !p.atName("instance") {
+		return nil, false
+	}
+	path, ok := p.facade.elementPath(steps, p.types)
+	if !ok {
+		return nil, false
+	}
+	return p.instanceTail(path)
 }
 
 // instanceTail parses the `"instance" "of" SequenceType` tail over v, whose
@@ -2419,6 +2460,13 @@ func (ctaPredicateFacade) childPath([]xsd.QName, ctaElementTest) (ctaValue, bool
 // attributePath declines. It is never reached: callsLibrary is false, so
 // `sum(…)` in a predicate reaches constructorFunction and declines there.
 func (ctaPredicateFacade) attributePath([]xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {
+	return nil, false
+}
+
+// elementPath declines, on child's terms. It is never reached: instanceOf is
+// false, so `data(…)` in a predicate reaches constructorFunction and declines
+// there.
+func (ctaPredicateFacade) elementPath([]xsd.QName, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }
 

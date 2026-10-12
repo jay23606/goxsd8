@@ -233,7 +233,12 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // step was compiled against, and [ChildElements] carries a child only where
 // its own simple type is that one or validly derived from it. So an
 // AtomicType the compiled type derives from matches every item, and one it
-// does not derive from decides nothing (instanceTail).
+// does not derive from decides nothing (instanceTail). So for an element a path
+// of child steps reads for its value (ctaElementPath), whose annotation is its
+// own governing type's on the same terms — an xsi:type, a {type table}, a
+// substitution group member or a wildcard-resolved declaration can each make it
+// differ from the type [ElementTypes] answered — and which [Tally.ElementValue]
+// carries only where its own type is that one or validly derived from it.
 //
 // GAP(xpath): a numeric literal, an arithmetic result, a quantifier's range
 // variable over `$value` (ctaRangeItem), and one over a typed child step and
@@ -249,7 +254,7 @@ func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
 		return ctaStaticOf(v), false, n.st == t.str
 	case ctaDistinctValues:
 		return t.instanceItem(n.operand)
-	case ctaTypedChild:
+	case ctaTypedChild, ctaElementPath:
 		return ctaStaticOf(v), true, true
 	case ctaAttr, ctaTypedAttr, ctaUntypedChild, ctaValueVar, ctaUntypedValue, ctaEmptyValue,
 		ctaContextAtom, ctaNoContextItem, ctaNoDocumentRoot, ctaCast, ctaCastable, ctaInstanceOf, ctaCount,
@@ -608,11 +613,11 @@ func (t ctaTypes) stringArgument(v ctaValue) ctaStringArgument {
 
 // typedAtomic reports whether this engine reads a value of type st off the
 // instance as a typed operand — an attribute whose type [AttributeTypes]
-// answered, a child element whose type [ElementTypes] answered, or one item of
-// `$value` (valueVariable) — classified the way castTarget classifies a cast
-// target: by its {primitive type definition}, which is ·absent· for EXACTLY
-// the types whose atomized value is not one atomic value of a type known at
-// compile time:
+// answered, an element whose type [ElementTypes] answered for its path, a child
+// for the one-step path [N], or one item of `$value` (valueVariable) —
+// classified the way castTarget classifies a cast target: by its {primitive
+// type definition}, which is ·absent· for EXACTLY the types whose atomized
+// value is not one atomic value of a type known at compile time:
 //
 //   - a list or union {variety}: a list atomizes to a sequence, and a union's
 //     value takes the type of its ·validating· member, which only the instance

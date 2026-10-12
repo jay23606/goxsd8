@@ -45,10 +45,14 @@ func asElementContent(t *testing.T, mixed bool) xsd.ElementContent {
 }
 
 // asElems is the [ElementTypes] of an element whose governing type declares
-// one child element per entry of elems, name to type.
+// one child element per entry of elems, name to type, and no element below
+// them: a path of any length but one answers false.
 func asElems(elems map[xsd.QName]xsd.TypeDefinition) ElementTypes {
-	return func(name xsd.QName) (xsd.TypeDefinition, bool) {
-		td, ok := elems[name]
+	return func(path []xsd.QName) (xsd.TypeDefinition, bool) {
+		if len(path) != 1 {
+			return nil, false
+		}
+		td, ok := elems[path[0]]
 		return td, ok
 	}
 }
