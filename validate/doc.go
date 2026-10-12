@@ -406,31 +406,35 @@
 // [[children]] a {test} names, read TYPED by their ·locally declared types· once
 // each child's own assessment is over — as the string-value of the child's subtree,
 // xs:untypedAtomic, where that type has mixed content (xpath-datamodel §6.2.4) —
-// the counts of the nodes of its subtree, reported to each counting {test}'s
-// xpath.Tally as the walk passes them, each element by its chain of names below the
-// counting element, a ·skipped· subtree's by name alone, with the typed values of the
-// attributes below it a {test} reads through a path, and of the elements below it a
-// {test} reads through a path of child steps, each once its own assessment is over,
-// its own string value — its ·initial value· under simple content, and the text of
-// its subtree under any other {content type} — and its simple content's ·actual
-// value· — is evaluated over those values and charged where it is false or raises a
-// dynamic or type error. A member xpath declines, and every member of an element one
-// of whose use-matched or ·defaulted· attributes has no ·actual value·, one of whose
-// read children is not known ·valid· or not ·validly substitutable· for its ·locally
-// declared type·, or, read for its string-value, has no mixed content of its own, a
-// string-value of which — a read child's, or its own a {test} reads — spans a
-// ·skipped· element, one of simple content whose raw characters are not its [schema
-// normalized value] or that holds a run of white space alone, one of a type not
-// determined, a mixed one that took its {value constraint} default, a ·nilled· one
-// with character [[children]], or a run that is not white space alone in one of
-// element-only or empty content, whose counted subtree holds an element whose
-// ·governing type definition· was not determined and whose attribute nodes a {test}
-// counts or reads, or an attribute, or an element, a {test} reads through a path that
-// has no typed value under the type it was compiled to read, whose simple content's
-// ·actual value· is undecided, or whose string value was not gathered because it has
-// simple content and element [[children]] or is ·nilled· and has any [[children]]
-// under simple content or a {test} reading `.`, are recorded as [Unevaluated] under
-// cvc-assertion instead (cvcassertion.go).
+// with the attributes of such a child, carried or ·defaulted·, a {test} reads through
+// a range variable bound to it, read TYPED as an attribute below it is, its value
+// read only where a {test} reads that too, the counts of the nodes of its subtree,
+// reported to each counting {test}'s xpath.Tally as the walk passes them, each
+// element by its chain of names below the counting element, a ·skipped· subtree's by
+// name alone, with the typed values of the attributes below it a {test} reads through
+// a path, and of the elements below it a {test} reads through a path of child steps,
+// each once its own assessment is over, its own string value — its ·initial value·
+// under simple content, and the text of its subtree under any other {content type} —
+// and its simple content's ·actual value· — is evaluated over those values and
+// charged where it is false or raises a dynamic or type error. A member xpath
+// declines, and every member of an element one of whose use-matched or ·defaulted·
+// attributes has no ·actual value·, one of whose read children is not known ·valid·
+// or not ·validly substitutable· for its ·locally declared type·, or, read for its
+// string-value, has no mixed content of its own, a string-value of which — a read
+// child's, or its own a {test} reads — spans a ·skipped· element, one of simple
+// content whose raw characters are not its [schema normalized value] or that holds a
+// run of white space alone, one of a type not determined, a mixed one that took its
+// {value constraint} default, a ·nilled· one with character [[children]], or a run
+// that is not white space alone in one of element-only or empty content, whose
+// counted subtree holds an element whose ·governing type definition· was not
+// determined and whose attribute nodes a {test} counts or reads, or an attribute, or
+// an element, a {test} reads through a path, or an attribute of a read child a {test}
+// reads through a range variable, that has no typed value under the type it was
+// compiled to read, whose simple content's ·actual value· is undecided, or whose
+// string value was not gathered because it has simple content and element
+// [[children]] or is ·nilled· and has any [[children]] under simple content or a
+// {test} reading `.`, are recorded as [Unevaluated] under cvc-assertion instead
+// (cvcassertion.go).
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day

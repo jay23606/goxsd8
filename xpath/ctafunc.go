@@ -16,8 +16,9 @@ import (
 // (xpath-functions.md §7.5.1–7.5.3, ctaMatch), fn:string-length and
 // fn:normalize-space (§7.4.4, §7.4.5, ctaUnaryString), fn:empty and fn:exists
 // (§15.1.4, §15.1.5, ctaPresence), fn:distinct-values (§15.1.6,
-// ctaDistinctValues), fn:string (§2.3, ctaStringFunction) and fn:concat
-// (§7.4.1, ctaConcat) — and fn:count over an argument that is no path
+// ctaDistinctValues), fn:string (§2.3, ctaStringFunction), fn:concat
+// (§7.4.1, ctaConcat), fn:substring-after (§7.5.5, ctaSubstringAfter) and
+// fn:number (§14.4, ctaNumber) — and fn:count over an argument that is no path
 // (§15.4.1, ctaCountedItems), whose items are counted as fn:empty and
 // fn:exists count them, and fn:sum with one argument over a path to an
 // attribute below E (§15.4.5, ctaSum), whose values the [Tally] collects.
@@ -122,6 +123,29 @@ type ctaConcat struct {
 	st   *xsd.SimpleType
 }
 
+// ctaSubstringAfter is a call to fn:substring-after with two arguments
+// (xpath-functions.md §7.5.5, ctaParser.substringAfterCall), whose result is
+// st, xs:string: the part of left's string after the first occurrence of
+// right's, under the codepoint collation (ctaSubstringAfterItem).
+type ctaSubstringAfter struct {
+	left, right ctaStringArgument
+	st          *xsd.SimpleType
+}
+
+// ctaNumber is a call to fn:number with one argument, written or implicit
+// (xpath-functions.md §14.4, ctaParser.numberCall), whose result is st,
+// xs:double: the operand's one item cast to xs:double (§17.1.3.2), and NaN
+// where the operand is empty or the cast fails (ctaNumberItem). read is the
+// type the operand's items are read in before that cast: the operand's own
+// static type where it is typed, and xs:string otherwise — an xs:untypedAtomic
+// item cast to xs:string keeps its string, and the statically empty operand
+// holds no item to read.
+type ctaNumber struct {
+	operand ctaValue
+	read    *xsd.SimpleType
+	st      *xsd.SimpleType
+}
+
 // ctaDistinctValues is a call to fn:distinct-values with its one
 // `xs:anyAtomicType*` argument (xpath-functions.md §15.1.6): the atomized
 // operand with every item eq to an earlier one dropped (ctaDistinctValues.eval).
@@ -207,6 +231,8 @@ func (ctaUnaryString) ctaValue()    {}
 func (ctaPresence) ctaValue()       {}
 func (ctaStringFunction) ctaValue() {}
 func (ctaConcat) ctaValue()         {}
+func (ctaSubstringAfter) ctaValue() {}
+func (ctaNumber) ctaValue()         {}
 func (ctaDistinctValues) ctaValue() {}
 func (ctaCurrentDate) ctaValue()    {}
 func (ctaNoFocus) ctaValue()        {}
@@ -594,6 +620,49 @@ func ctaConcatItem(n ctaConcat, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	return ctaConvert(b.String(), n.st, c, env)
 }
 
+// ctaSubstringAfterItem evaluates n, its left argument first, and converts the
+// xs:string it returns into c on ctaMatchItem's terms: an empty argument is the
+// zero-length string (ctaStringOf), a zero-length right yields left whole, a
+// right left does not contain yields the zero-length string, and otherwise the
+// result is what follows right's first occurrence in left, matched code point
+// by code point (xpath-functions.md §7.5.5 under the default collation).
+func ctaSubstringAfterItem(n ctaSubstringAfter, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	s, ok := ctaStringOf(n.left, env)
+	if !ok {
+		return ctaRaised{}
+	}
+	sub, ok := ctaStringOf(n.right, env)
+	if !ok {
+		return ctaRaised{}
+	}
+	_, after, found := strings.Cut(s, sub)
+	if !found {
+		after = ""
+	}
+	return ctaConvert(after, n.st, c, env)
+}
+
+// ctaNumberItem evaluates n and converts the xs:double it returns into c on
+// ctaMatchItem's terms (xpath-functions.md §14.4): the operand's items, read
+// in n.read, raise where the operand raises, and two or more are err:XPTY0004
+// (xpath20.md §3.1.5); none is NaN, and so is one whose cast to xs:double
+// (§17.1.3.2, ctaPromote) fails — "If the conversion to xs:double fails, the
+// xs:double value NaN is returned".
+func ctaNumberItem(n ctaNumber, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	atoms, ok := ctaItemOf(n.operand, n.read, env).(ctaAtoms)
+	if !ok || len(atoms.vs) > 1 {
+		return ctaRaised{}
+	}
+	if len(atoms.vs) == 0 {
+		return ctaConvert("NaN", n.st, c, env)
+	}
+	d, converted := ctaValidated(ctaPromote(atoms.vs[0], n.read, n.st, env))
+	if !converted {
+		return ctaConvert("NaN", n.st, c, env)
+	}
+	return ctaPromote(d, n.st, c, env)
+}
+
 // ctaCurrentDateLayout renders a [time.Time] as the xs:date lexical of its
 // date in its own UTC offset: the timezoneFrag is Z for the zero offset and
 // ±hh:mm otherwise, which is §17.1.5's cast of an xs:dateTime to xs:date.
@@ -742,14 +811,15 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 // `preceding::` step (ctaChildrenPreceded), the candidate `.` inside a value
 // predicate (ctaCandidate), the range variable of a quantifier over a typed
 // child step and `$v/following-sibling::M[1]` over it (ctaBoundChild,
-// ctaBoundSibling), and the three that raise before they select a node, a
-// rooted path (ctaNoDocumentRoot), a read of an absent context item
-// (ctaNoContextItem) and an fn:doc call (ctaNoDocument). Its nodes method is
-// the ONE reading of node existence, which the ·effective boolean value· of a
-// step (ctaEffectiveBoolean.eval) and fn:empty and fn:exists
-// (ctaSequenceLength) both take; every other operand's items are atomic values
-// the caller reads its own way. A quantifier's range variable over `$value`
-// (ctaRangeItem) is one such atomic value and no step.
+// ctaBoundSibling), an attribute step over either (ctaBoundAttribute), and the
+// three that raise before they select a node, a rooted path
+// (ctaNoDocumentRoot), a read of an absent context item (ctaNoContextItem) and
+// an fn:doc call (ctaNoDocument). Its nodes method is the ONE reading of node
+// existence, which the ·effective boolean value· of a step
+// (ctaEffectiveBoolean.eval) and fn:empty and fn:exists (ctaSequenceLength)
+// both take; every other operand's items are atomic values the caller reads
+// its own way. A quantifier's range variable over `$value` (ctaRangeItem) is
+// one such atomic value and no step.
 type ctaStep interface {
 	ctaValue
 	// nodes is how many nodes the step selects, a ·nilled· child counting as a
@@ -837,6 +907,14 @@ func (ctaBoundChild) nodes(env ctaEnv) (int, bool) { return ctaBoundNodes(env.ra
 // (ctaBoundNodes).
 func (s ctaBoundSibling) nodes(env ctaEnv) (int, bool) {
 	return ctaBoundNodes(env.rangeChild.next(s.step.name))
+}
+
+// nodes is 1 where the child the owner selects has the attribute, and 0 where
+// the owner selects none or the child has none so named
+// (ctaBoundAttributeValues).
+func (s ctaBoundAttribute) nodes(env ctaEnv) (int, bool) {
+	vs, ok := ctaBoundAttributeValues(s, env)
+	return len(vs), ok
 }
 
 // ctaTalliedNodes is the counter the evaluation's [Tally] holds for key, which

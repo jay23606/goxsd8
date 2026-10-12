@@ -248,10 +248,14 @@ func TestAssertionQuantifiedChildrenReads(t *testing.T) {
 // Every form outside the admitted one declines. A binding or sibling child of
 // mixed content (m) or of a list type (l) has no typed node to bind; a
 // predicate on the binding step other than `[position() lt last()]` — `<`,
-// `ne`, `[last()]`, `[1]` — and a path over the range variable other than
-// `following-sibling::M[1]` decline; a windowed binding under a body
-// rangeBody reads off the [Tally] declines, as does any quantifier nested in
-// the body. fn:position and fn:last outside that one predicate keep the
+// `ne`, `[last()]`, `[1]` — and an element step over the range variable other
+// than `following-sibling::M[1]` decline, as does any quantifier nested in the
+// body. Two rows step to an attribute of the bound child: windowed, `$y/@a`
+// declines here only because aqcCompile's attrs (asUses(t, nil)) answer no
+// type for y's a; unwindowed, `$y/@a = 1` opens as the [Tally]'s body
+// (ctaParser.atTalliedBody), which declines it whatever a's type.
+// TestAssertionBoundAttributesDecline states what such a step admits now and
+// what it declines. fn:position and fn:last outside that one predicate keep the
 // assertion façade's decline (ctaAssertionFacade.focus), in the body and out
 // of it, the window being a fixed spelling and no read of the focus.
 func TestAssertionQuantifiedChildrenDeclines(t *testing.T) {
@@ -273,12 +277,12 @@ func TestAssertionQuantifiedChildrenDeclines(t *testing.T) {
 		{"every $y in y[last()] satisfies $y lt 3", "[last()]"},
 		{"every $y in y[1] satisfies $y lt 3", "[1]"},
 		{"every $y in y[position() lt last()][1] satisfies $y lt 3", "a second predicate"},
-		{"every $y in y[position() lt last()] satisfies $y/@a", "a windowed binding under a Tally body"},
+		{"every $y in y[position() lt last()] satisfies $y/@a", "an attribute attrs answers no type for"},
 		{"every $y in y[position() lt last()] satisfies $y/following-sibling::*[1][self::y]", "a windowed binding under a sibling body"},
 		{"every $y in y satisfies (some $z in y[position() lt last()] satisfies $z = $y)", "a nested windowed quantifier"},
 		{"every $y in y satisfies (some $z in y satisfies $z/@a)", "a nested Tally quantifier"},
 		{"every $y in y satisfies (some $x in data($value) satisfies $x = $y)", "a nested quantifier over $value"},
-		{"every $y in y satisfies $y/@a = 1", "an attribute of the bound child"},
+		{"every $y in y satisfies $y/@a = 1", "a body opening as the Tally's"},
 		{"every $y in y satisfies data($y) instance of xs:integer", "instance of over the bound child (ctaTypes.instanceItem)"},
 		{"every $y in y satisfies data($y/following-sibling::y[1]) instance of xs:integer", "instance of over the sibling (ctaTypes.instanceItem)"},
 		{"every $y in y satisfies position() = 1", "position() in the body"},

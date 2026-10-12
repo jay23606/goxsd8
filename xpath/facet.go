@@ -279,6 +279,11 @@ func (ctaFacetFacade) childScope(xsd.QName, ctaTypedChild) (ctaFacade, bool) {
 	return nil, false
 }
 
+// boundAttribute declines, on boundSibling's terms.
+func (ctaFacetFacade) boundAttribute(ctaValue, ctaNameTest, ctaTypes) (ctaBoundAttribute, bool) {
+	return ctaBoundAttribute{}, false
+}
+
 // boundSibling declines: `$value` is the one variable in scope, bound to
 // atomic values (clause 1.1), from which no axis steps.
 func (ctaFacetFacade) boundSibling(xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {

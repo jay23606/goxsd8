@@ -134,7 +134,7 @@ Assert/assert_011/instance/assert_011_2 pass
 Assert/assert_012/instance/assert_012_2 pass
 Assert/assert_013/instance/assert_013_2 pass
 Assert/assert_014/instance/assert_014_2 pass
-Assert/assert_015/instance/assert_015_2 fail
+Assert/assert_015/instance/assert_015_2 pass
 Assert/assert_016/instance/assert_016_2 pass
 Assert/assert_017/instance/assert_017_2 pass
 Assert/assert_018/instance/assert_018_2 pass

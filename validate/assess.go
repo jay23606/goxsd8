@@ -1020,17 +1020,19 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // and it travels down beside parent as e's own travels to e's [[children]]
 // (assertionAncestry.below). e is reported to every counting ancestor's
 // Tallies on entry, its own attributes to its own ([walk.tallyElement]), and
-// e hands its parent's state its typed value last, once everything that can
-// find e invalid has run ([walk.keepChild]), and every counting ancestor
-// reading e's value through a path of child steps that value at the same point
-// ([walk.tallyValue]) — a value of mixed content the string-value e's frame
-// collected from its subtree as it streamed past, opened on entry
-// ([walk.stringValue]): cvc-assertion clause 1.1 validates the parent's
-// [[children]] "in the usual way" before any {test} of the parent reads them.
-// e's own string value, which its own {test}s read as `.`, is collected the
-// same way into a frame of its own ([ownStringValue]), and what e contributes
-// to every open frame beyond its text runs is settled once its [[children]]
-// are exhausted, before its own {test}s are evaluated ([collectEnd]).
+// e hands its parent's state its typed value, and the typed values of its
+// attributes a {test} of the parent reads through a range variable, last,
+// once everything that can find e invalid has run ([walk.keepChild]), and
+// every counting ancestor reading e's value through a path of child steps that
+// value at the same point ([walk.tallyValue]) — a value of mixed content the
+// string-value e's frame collected from its subtree as it streamed past,
+// opened on entry ([walk.stringValue]): cvc-assertion clause 1.1 validates the
+// parent's [[children]] "in the usual way" before any {test} of the parent
+// reads them. e's own string value, which its own {test}s read as `.`, is
+// collected the same way into a frame of its own ([ownStringValue]), and what
+// e contributes to every open frame beyond its text runs is settled once its
+// [[children]] are exhausted, before its own {test}s are evaluated
+// ([collectEnd]).
 func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAncestry, inherited []inheritedAttribute) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
@@ -1489,7 +1491,7 @@ func (w *walk) text(t Text) {
 // inherited is the [inherited attributes] each element [[child]] gets, the
 // same for all of them ([walk.handedDown]), and below is their
 // [assertionAncestry], whose parent is e's clause 6 state, which each of them
-// hands its typed value to ([walk.keepChild]).
+// hands its typed value and its read attributes to ([walk.keepChild]).
 func (w *walk) children(e Element, content *contentCheck, id *icCheck, below assertionAncestry, inherited []inheritedAttribute) {
 	kids := e.Children()
 	for {
