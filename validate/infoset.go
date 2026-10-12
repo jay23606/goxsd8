@@ -45,10 +45,20 @@ type Element interface {
 	// whose first Next reports false.
 	Children() Children
 
-	// LookupPrefix resolves prefix against E.[[in-scope namespaces]], so a
-	// QName-valued lexical occurring here (xsi:type="p:foo") resolves in
-	// the context it was written in (Datatypes §3.3.18). The empty prefix
-	// yields the default namespace; ok is false for an unbound prefix.
+	// A QName-valued lexical occurring here (xsi:type="p:foo") resolves
+	// through LookupPrefix in the context it was written in (Datatypes
+	// §3.3.18).
+	//
+	// LookupPrefix resolves prefix against E's [in-scope namespaces], the
+	// bindings E inherits included. The empty prefix yields the default
+	// namespace with ok true: uri is "" where none is in scope or `xmlns=""`
+	// undeclares it. Any other prefix yields its namespace name with ok true
+	// where it is bound, and ("", false) where it is unbound or `xmlns:p=""`
+	// undeclares it; "xml" is always bound.
+	//
+	// The engine reads ok: a QName or NOTATION lexical whose prefix answers ok
+	// false is rejected, so an Element that answers ("", false) for the empty
+	// prefix rejects every unprefixed one.
 	LookupPrefix(prefix string) (uri string, ok bool)
 
 	// Loc reports where the element begins in its source document.

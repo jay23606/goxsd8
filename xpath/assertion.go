@@ -331,17 +331,25 @@ func BindValue(text string, v TypedValue) ValueBinding { return ValueBinding{tex
 // context item of an assertion's {test}, as the functions that take `.` as a
 // NODE read it: fn:namespace-uri reads its [namespace name] off Name, and
 // fn:in-scope-prefixes asks LookupPrefix whether a prefix is in E's [in-scope
-// namespaces]. It must be non-nil. validate.Element satisfies it as it stands.
+// namespaces]. It must be non-nil, even for a {test} that reads neither:
+// [AssertionTest.Evaluate] states what a nil one does. validate.Element
+// satisfies it as it stands. A parser/xmltree StartElement answers
+// LookupPrefix by this rule already, but its Name returns an xmltree.Name, not
+// an xsd.QName, so it needs a wrapper; validate/xmlsrc's element is one.
 type ContextElement interface {
 	// Name is E's ·expanded name·; its Space is E's [namespace name], "" for
 	// none.
 	Name() xsd.QName
 	// LookupPrefix resolves prefix against E's [in-scope namespaces], the
-	// bindings E inherits included; the empty prefix asks for the default
-	// namespace. For every prefix, the empty one included, a zero-length uri
-	// means the prefix is not in scope, whatever ok reports: no prefix is ever
-	// bound to a zero-length namespace name, and `xmlns=""` or `xmlns:p=""`
-	// undeclares.
+	// bindings E inherits included. The empty prefix yields the default
+	// namespace with ok true: uri is "" where none is in scope or `xmlns=""`
+	// undeclares it. Any other prefix yields its namespace name with ok true
+	// where it is bound, and ("", false) where it is unbound or `xmlns:p=""`
+	// undeclares it; "xml" is always bound.
+	//
+	// fn:in-scope-prefixes reads uri alone: a prefix is in scope exactly where
+	// uri is non-empty. validate reads ok as well, so an implementation
+	// answers both as stated.
 	LookupPrefix(prefix string) (uri string, ok bool)
 }
 
@@ -1517,13 +1525,17 @@ func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 // filled for this E is the caller's part.
 //
 // e is E itself, the context item cvc-xpath clause 1 names, and must be
-// non-nil. It is read only by the two functions that take `.` as a NODE and
-// not atomized: fn:namespace-uri, over `.` or with no argument, reads E's
-// [namespace name] off e.Name, and fn:in-scope-prefixes, over `.` as an
-// operand of `=` ([CompileAssertionTest]), asks e.LookupPrefix about each
-// prefix the other operand names. The compiled tree holds no element, so one
-// [AssertionTest] serves every E its governing type governs.
+// non-nil: a nil e panics, whatever the {test} reads. It is read only by the
+// two functions that take `.` as a NODE and not atomized: fn:namespace-uri,
+// over `.` or with no argument, reads E's [namespace name] off e.Name, and
+// fn:in-scope-prefixes, over `.` as an operand of `=`
+// ([CompileAssertionTest]), asks e.LookupPrefix about each prefix the other
+// operand names. The compiled tree holds no element, so one [AssertionTest]
+// serves every E its governing type governs.
 func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e ContextElement, attrs TypedAttributes, children ChildElements, counts *Tally, v ValueBinding, now time.Time) bool {
+	if e == nil {
+		panic("xpath: AssertionTest.Evaluate: nil ContextElement")
+	}
 	if !counts.fits(t.countedPaths()) || !counts.settled() {
 		return false
 	}

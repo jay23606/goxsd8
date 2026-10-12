@@ -396,9 +396,8 @@ func (n ctaPrefixMember) eval(env ctaEnv) ctaAnswer {
 //     of which a binding can be under; e is not asked about either;
 //   - any other prefix, the zero-length one (the default namespace) included,
 //     where e answers it a non-empty namespace name. No prefix is ever bound
-//     to a zero-length one — `xmlns=""` and XML 1.1's `xmlns:p=""` undeclare
-//     — and [ContextElement.LookupPrefix] may answer ok over an undeclaration,
-//     so ok is not read.
+//     to a zero-length one, and the empty prefix answers ok true with no
+//     default namespace in scope, so uri alone decides and ok is not read.
 func ctaInScopePrefix(e ContextElement, p string) bool {
 	switch {
 	case p == "xml":

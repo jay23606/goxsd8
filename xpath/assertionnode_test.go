@@ -231,6 +231,20 @@ func TestAssertionNodeFunctionsDeclineOtherShapes(t *testing.T) {
 	}
 }
 
+// A nil e panics in Evaluate whatever the {test} reads, so `true()`, which
+// reads neither E's name nor its bindings, panics too. With Evaluate's nil
+// guard removed this row fails, recovering nothing.
+func TestAssertionNilContextElementPanics(t *testing.T) {
+	test := asCompile(t, "true()", asUses(t, nil))
+	defer func() {
+		const want = "xpath: AssertionTest.Evaluate: nil ContextElement"
+		if got := recover(); got != want {
+			t.Errorf("Evaluate(%q) over a nil e: recovered %v, want the panic %q", "true()", got, want)
+		}
+	}()
+	test.Evaluate(backend(), seededTypes, nil, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{})
+}
+
 // An assertions facet has no context item (cvc-assertions-valid clause 1.2),
 // so either function over `.` raises err:XPDY0002 and fails the facet — never
 // declined, and never the answer a fabricated element would give, which for
