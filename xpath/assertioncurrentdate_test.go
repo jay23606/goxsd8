@@ -71,6 +71,22 @@ func TestAssertionCurrentDateReadsTheInstantHandedIn(t *testing.T) {
 	}
 }
 
+// The zero [time.Time] is an ordinary instant, 0001-01-01T00:00:00Z, and never
+// the current time: fn:current-date over it is 0001-01-01Z, both for an
+// element's assertion and for an assertions facet.
+func TestCurrentDateZeroInstant(t *testing.T) {
+	const expr = "string(current-date()) = '0001-01-01Z'"
+	if !cdEval(t, expr, time.Time{}) {
+		t.Errorf("Evaluate(%q) at the zero instant = false, want true", expr)
+	}
+	date := asBuiltin(t, "date")
+	const test = "$value eq current-date()"
+	got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, ctaExprRecord(test, ""), fcValue(t, date, "0001-01-01Z"))
+	if got != value.AssertionHolds {
+		t.Errorf("FacetAssertions(zero instant).Evaluate(%q over 0001-01-01Z) = %d, want %d", test, got, value.AssertionHolds)
+	}
+}
+
 // An instant whose offset no timezoneFrag spells — not a whole number of
 // minutes, or beyond ±14:00 — is read in UTC: 2026-10-07T00:30 at +01:00:30 or
 // +15:00 is 2026-10-06 in UTC, dated 2026-10-06Z. With ctaCurrentDateItem

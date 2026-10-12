@@ -2544,9 +2544,9 @@ func (a ctaAnswer) negated() ctaAnswer {
 
 // ctaEval evaluates one boolean-valued node.
 //
-// The default arm covers exactly one shape: the nil root of a zero CTATest,
-// which no successful [CompileCTATest] produces. Every branch of the sum above
-// is named.
+// The default arm covers exactly one shape: the nil root of a zero CTATest or
+// AssertionTest, which no successful [CompileCTATest] or [CompileAssertionTest]
+// produces. Every branch of the sum above is named.
 func ctaEval(x ctaExpr, env ctaEnv) ctaAnswer {
 	switch n := x.(type) {
 	case ctaOr:

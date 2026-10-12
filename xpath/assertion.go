@@ -1026,6 +1026,12 @@ func (c *Tally) fits(keys ctaKeys) bool {
 // element types. It is a distinct type from [CTATest] so a tree typed for an
 // assertion can never be evaluated over a Type Alternative's [Attributes],
 // nor a Type Alternative tree over [TypedAttributes].
+//
+// The zero AssertionTest, which [CompileAssertionTest] returns with ok false,
+// holds no {test} and is safe to use: [AssertionTest.ReadsContextItem] is
+// false, [AssertionTest.ReadsChild] is false for every name,
+// [AssertionTest.Tally] is nil, and [AssertionTest.Evaluate] answers false for
+// every non-nil e.
 type AssertionTest struct {
 	root             ctaExpr
 	readsContextItem bool
@@ -1319,7 +1325,7 @@ type AssertionTest struct {
 //     none of an IntegerLiteral, such a range and a StringLiteral, a sequence
 //     mixing StringLiterals with the other two, `('a', 1)`, a nested or empty
 //     parenthesis, a misplaced comma, `('a',)`, an IntegerLiteral beyond
-//     int64, and a sequence of more than ctaMaxSequenceLength items;
+//     int64, and a sequence of more than 4096 items;
 //   - fn:string, and an fn:concat argument, over a typed attribute, a typed
 //     child, an fn:count call, an arithmetic result, `$value`, a function
 //     result or a cast of one of them outside the xs:string family and the
@@ -1495,6 +1501,13 @@ func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 // expression as having evaluated to false" (cvc-xpath, §3.13.4.2). Every
 // decline happened at [CompileAssertionTest].
 //
+// The bool carries no diagnostic; validate makes the one its caller reads. It
+// charges a false answer as an entry of validate's Result.Violations() under
+// cvc-assertion, at E's location. An assertion it does not evaluate — one whose
+// {test} [CompileAssertionTest] declined, or one validate itself declines —
+// never reaches Evaluate, and is an entry of Result.Unevaluated() under
+// cvc-assertion instead.
+//
 // The dynamic context is cvc-xpath's — context item E, position and size 1 —
 // with the one variable cvc-assertion clause 2.3 adds to it, `$value`, bound
 // to v's typed value; `.` atomizes to v's string value. A tree compiled for a
@@ -1511,7 +1524,10 @@ func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 // clause 6 makes the current dateTime constant during an assessment episode,
 // so the caller hands every evaluation of one episode the same instant. Its
 // consumer is validate, which reads the clock once per Validator.Assess and
-// passes that instant here and to [FacetAssertions].
+// passes that instant here and to [FacetAssertions]. This package reads no
+// clock: the zero [time.Time] is the instant 0001-01-01T00:00:00Z like any
+// other and never stands for the current time, so fn:current-date over it is
+// 0001-01-01Z.
 //
 // counts is the [Tally] t.Tally() made for this evaluation, filled with E's
 // subtree on the terms that type states, and nil exactly where t.Tally() is
@@ -1543,7 +1559,7 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e Conte
 	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: in}) == ctaTrue
 }
 
-// Tally is a fresh, empty [Tally] for one evaluation of t, holding one counter
+// Tally returns a fresh, empty [Tally] for one evaluation of t, holding one counter
 // for each distinct relative path an fn:count call in t counts over — a step,
 // a child step filtered by attribute existence, or a union, one counter serving `c[@a and @b]`
 // and `c[@b and @a]`, and `e | e` and `e` — and each distinct path — one element step, a child

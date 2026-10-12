@@ -77,10 +77,11 @@ import (
 // now is the dynamic context's current dateTime, which every {test} the
 // evaluator decides reads on [AssertionTest.Evaluate]'s terms: fn:current-date
 // is the xs:date of now in now's own UTC offset, or in UTC where no
-// timezoneFrag spells that offset. validate builds one evaluator
-// per call site from the one instant it reads at the start of each
-// Validator.Assess, so every facet of one assessment episode sees the same
-// current dateTime (cvc-xpath clause 6).
+// timezoneFrag spells that offset. A zero now is the instant
+// 0001-01-01T00:00:00Z on those terms, never the current time. validate builds
+// one evaluator per call site from the one instant it reads at the start of
+// each Validator.Assess, so every facet of one assessment episode sees the
+// same current dateTime (cvc-xpath clause 6).
 //
 // Nothing is cached: each call compiles its {test} afresh (STYLE D3), and b and
 // r are read as [AssertionTest.Evaluate] reads them and stored nowhere.

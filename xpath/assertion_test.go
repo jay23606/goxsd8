@@ -711,3 +711,42 @@ func TestImplicitTimezoneIsATimezone(t *testing.T) {
 		t.Errorf("2000-01-01%s as xs:date carries no timezone", ctaImplicitTimezone)
 	}
 }
+
+// The zero AssertionTest is what CompileAssertionTest returns with ok false,
+// and every method answers on the terms AssertionTest's doc states: no `.`
+// read, no child read for any name, a nil Tally, and false from Evaluate over
+// a non-nil e, with the nil Tally a test counting nothing takes and with one
+// another test made. `ancestor::a = 'x'` declines (an axis beyond the
+// grammar); `a`, read by `a = 'x'`, is a name asChildTypes types, and
+// `exists(a)` counts, so its Tally is non-nil.
+func TestZeroAssertionTestContract(t *testing.T) {
+	const declined = "ancestor::a = 'x'"
+	zero, ok := afCompile(t, declined, xsd.EmptyContent{})
+	if ok {
+		t.Fatalf("CompileAssertionTest(%q): compiled, want declined", declined)
+	}
+	if zero != (AssertionTest{}) {
+		t.Errorf("CompileAssertionTest(%q) with ok false = %+v, want the zero AssertionTest", declined, zero)
+	}
+	if zero.ReadsContextItem() {
+		t.Error("the zero AssertionTest's ReadsContextItem = true, want false")
+	}
+	if reads, ok := afCompile(t, "a = 'x'", xsd.EmptyContent{}); !ok || !reads.ReadsChild(uq("a")) {
+		t.Fatalf("CompileAssertionTest(%q): compiled %v, reads a %v, want both true", "a = 'x'", ok, ok && reads.ReadsChild(uq("a")))
+	}
+	if zero.ReadsChild(uq("a")) {
+		t.Error("the zero AssertionTest's ReadsChild(a) = true, want false")
+	}
+	if c := zero.Tally(); c != nil {
+		t.Errorf("the zero AssertionTest's Tally = %v, want nil", c)
+	}
+	other, ok := afCompile(t, "exists(a)", xsd.EmptyContent{})
+	if !ok || other.Tally() == nil {
+		t.Fatalf("CompileAssertionTest(%q): compiled %v, want compiled with a non-nil Tally", "exists(a)", ok)
+	}
+	for _, counts := range []*Tally{nil, other.Tally()} {
+		if zero.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, counts, ValueBinding{}, time.Time{}) {
+			t.Errorf("the zero AssertionTest's Evaluate over a non-nil e with counts %v = true, want false", counts)
+		}
+	}
+}
