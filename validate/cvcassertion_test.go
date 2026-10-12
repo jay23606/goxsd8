@@ -593,6 +593,21 @@ func TestAssertionRaisingATypeErrorIsCharged(t *testing.T) {
 	wantAssertionCharge(t, aAssess(t, schema, aRoot("b", "true")), "the element root is not ·valid·")
 }
 
+// assert011's {test} calls fn:doc, which raises err:FODC0005 because cvc-xpath
+// clause 8 leaves no available document (F&O §15.5.4), so the assertion is
+// charged, never recorded Unevaluated, whatever @event holds. It is recorded
+// Unevaluated instead with xpath's fn:doc arm removed, and with its `./@`
+// attribute step declined.
+func TestAssertionCallingDocIsCharged(t *testing.T) {
+	const test = "./@event = doc('assert011-event-list.xml')//event/@name"
+	schema := aSimple(t, "date", false, []xsd.AttributeUse{typedUse(t, "event", icBuiltin("string"), false, nil, nil)}, test)
+	root := cRoot("#2008-07-01")
+	root.attrs = append(root.attrs, &testAttribute{name: local("event"), value: "birth", loc: loc(1, 10)})
+
+	wantAssertionCharge(t, aAssess(t, schema, root),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "`+test+`",`)
+}
+
 // A {test} outside what xpath compiles is DECLINED through walk.decline —
 // recorded under cvc-assertion at the element, never charged, never satisfied
 // — whatever the attribute values would have made of it.

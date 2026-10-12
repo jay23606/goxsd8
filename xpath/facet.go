@@ -55,9 +55,11 @@ import (
 //     {test} [CompileAssertionTest] would decline over a simple {content type}
 //     of the same type, on that function's terms — the grammar is the same and
 //     so is every decline it states — a {test} calling fn:count over a
-//     path, `count(@a)`, which `count($value)` is not, and one holding a
+//     path, `count(@a)`, which `count($value)` is not, one holding a
 //     quantified expression, over a child step, `every $c in c satisfies
-//     $c/@a`, or over `$value`, `every $x in data($value) satisfies $x gt 0`.
+//     $c/@a`, or over `$value`, `every $x in data($value) satisfies $x gt 0`,
+//     and one calling fn:doc over a StringLiteral, `exists(doc('x.xml'))`,
+//     which `empty(doc(()))` is not.
 //
 // A union's own assertions facet is evaluated like any other: the pipeline
 // hands this evaluator the union's ·active basic member· as st, the type under
@@ -69,7 +71,9 @@ import (
 // raise err:XPDY0002 over the absent context item (ctaFacetFacade.count), and
 // so is a quantified expression, whose binding step would raise it
 // (ctaFacetFacade.quantified, ctaParser.childQuantified), and one over
-// `$value`, which would not (ctaFacetFacade.rangeScope). Every other decline
+// `$value`, which would not (ctaFacetFacade.rangeScope), and an fn:doc call
+// over a StringLiteral, which [CompileAssertionTest] admits and which would
+// raise err:FODC0005 (ctaFacetFacade.document). Every other decline
 // is [CompileAssertionTest]'s, under its GAP(xpath). The direction is the
 // withhold: the caller declines the value's Datatype Valid verdict, never
 // charging it and never showing it satisfied. (#1042)
@@ -292,6 +296,19 @@ func (ctaFacetFacade) contextItem() (ctaValue, bool) {
 // ""` fails the facet rather than declining or holding.
 func (ctaFacetFacade) contextNode() (ctaNodeArg, bool) {
 	return ctaAbsentNode{}, true
+}
+
+// document declines every call to fn:doc whose argument is a StringLiteral.
+// cvc-assertions-valid clause 1 evaluates the {test} on cvc-xpath's rules with
+// modifications that leave the available documents alone, which reads as
+// clause 8's empty set and err:FODC0005; no grounding has ruled on it, so the
+// call is withheld rather than charged. `doc(())` never reaches here: it is
+// the empty sequence on every façade (ctaParser.docCall).
+//
+// GAP(xpath): the call declines where it would raise. The direction is
+// [FacetAssertions]' withhold. (#1042)
+func (ctaFacetFacade) document() (ctaValue, bool) {
+	return nil, false
 }
 
 // focus compiles a call to fn:position or fn:last to ctaNoFocus, typed st:

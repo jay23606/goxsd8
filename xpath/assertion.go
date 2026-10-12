@@ -1058,51 +1058,52 @@ type AssertionTest struct {
 // [AssertionTest.Evaluate] is handed, under every content, a nil one included.
 //
 // The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
-// abbreviated child-axis step, a "/" or "//" opening one child or attribute
-// step, a relative path of two or more abbreviated child-axis steps with QName
-// NameTests, `a/b`, the last of which may instead be the wildcard `*`, `a/*`,
-// which selects every element child (§3.2.1.2), one element step, `a`, `./a`
-// or `.//a`, or a child step filtered by one predicate that is a conjunction
-// of child steps with QName NameTests, `a[b and c]`, which selects each child
-// a that has a child of each name (§3.2.2), or by one predicate that is one
-// `preceding::` step with a QName NameTest, unfiltered or filtered by one QName child step or
-// fn:not over one, `a[preceding::a]`, `a[preceding::a[b]]` or `a[preceding::a[not(b)]]`, which
-// selects each child a with an element so named and so filtered before it in E's subtree, at
-// any depth, E never among them (§3.2.1.1, cvc-assertion clause 1.3), standing as the whole
-// operand of fn:exists, fn:empty or an ·effective boolean value· (xpath20.md §3.2, §3.2.4,
-// §2.4.3), an fn:count call, whose argument may filter a child step by one predicate or join
-// operands with `|` or `union` (§3.2.2, §3.3.3; the bullets below bound both), or be an
-// operand that is no path — `$value`, `()`, a literal or a function call, read as any argument
-// of the functions below is — the binary arithmetic operators `+`, `-`, `*`, `div`, `idiv` and
-// `mod` (xpath20.md §3.4), and a call to one of the F&O string and sequence functions —
-// fn:contains, fn:starts-with and fn:ends-with with two arguments, fn:string-length,
-// fn:normalize-space and fn:string with one or none, the implicit argument being `.`,
-// fn:concat with two or more, each cast to xs:string, fn:empty, fn:exists and
-// fn:distinct-values with one, and fn:true, fn:false and fn:current-date with none
-// (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3, §7.4.1, §15.1.4, §15.1.5, §15.1.6,
-// §9.1.1, §9.1.2, §16.4), any argument of which may be the empty sequence `()`, and any of
-// which a constructor function may take as its operand, as it may any other argument
-// (xpath20.md §3.1.5), and fn:sum with one argument that is a relative path of one or more
-// child steps and one attribute step, each with a QName NameTest, `sum(a/b/@p)` (§15.4.5,
-// xpath20.md §3.2), the attribute typed as attrs answers for the path — over the typed values
-// of the attributes it selects below E in document order, xs:untypedAtomic ones cast to
-// xs:double, the xs:integer 0 over none, the one item over one, and over more their sum in
-// their numeric type (§6.2), exact over xs:decimal ones, err:FORG0006 over items whose type is
-// not numeric, and an `instance of` over the call reading the type of the value it returns
-// rather than its static type — and fn:namespace-uri with `.` or no argument (§14.3), E's
-// [namespace name] as one xs:anyURI, the zero-length one for no namespace, and
-// fn:in-scope-prefixes with `.` (§11.2.6) as one operand of `=` whose other is a StringLiteral
-// or a parenthesized comma sequence of them, on either side, true where one of those is a
-// prefix of E's [in-scope namespaces] (`xml` always, the zero-length string where a default
-// namespace is in scope, never `xmlns`), each `.` there E as a node — the conditional `if
-// (Expr) then ExprSingle else ExprSingle` (xpath20.md §3.8) as the whole {test}, inside
-// parentheses, as fn:not's argument or as an operand of another, whose test's ·effective
-// boolean value· selects the one branch evaluated, so a dynamic error in the other is never
-// raised, and both of whose branches are compiled, so a decline in either declines the {test};
-// the [47] ContextItemExpr `.`, atomized (§3.1.4, §2.4.2); [18] CastableExpr's `castable as`
-// tail over a [16] ta-SimpleValue, `$value castable as xs:double`, an xs:boolean true exactly
-// where the same `cast as` yields a value and false where that cast raises — the empty
-// sequence without `?`, two or more items, a lexical or facet mismatch — while an error
+// abbreviated child-axis step, an attribute step behind `./`, `./@a` or `./attribute::a`,
+// which steps from `.`, E, and is E's attribute `@a` (xpath20.md §3.2, §3.2.4), a "/" or "//"
+// opening one child or attribute step, a relative path of two or more abbreviated child-axis
+// steps with QName NameTests, `a/b`, the last of which may instead be the wildcard `*`, `a/*`,
+// which selects every element child (§3.2.1.2), one element step, `a`, `./a` or `.//a`, or a
+// child step filtered by one predicate that is a conjunction of child steps with QName
+// NameTests, `a[b and c]`, which selects each child a that has a child of each name (§3.2.2),
+// or by one predicate that is one `preceding::` step with a QName NameTest, unfiltered or
+// filtered by one QName child step or fn:not over one, `a[preceding::a]`, `a[preceding::a[b]]`
+// or `a[preceding::a[not(b)]]`, which selects each child a with an element so named and so
+// filtered before it in E's subtree, at any depth, E never among them (§3.2.1.1, cvc-assertion
+// clause 1.3), standing as the whole operand of fn:exists, fn:empty or an ·effective boolean
+// value· (xpath20.md §3.2, §3.2.4, §2.4.3), an fn:count call, whose argument may filter a
+// child step by one predicate or join operands with `|` or `union` (§3.2.2, §3.3.3; the
+// bullets below bound both), or be an operand that is no path — `$value`, `()`, a literal or a
+// function call, read as any argument of the functions below is — the binary arithmetic
+// operators `+`, `-`, `*`, `div`, `idiv` and `mod` (xpath20.md §3.4), and a call to one of the
+// F&O string and sequence functions — fn:contains, fn:starts-with and fn:ends-with with two
+// arguments, fn:string-length, fn:normalize-space and fn:string with one or none, the implicit
+// argument being `.`, fn:concat with two or more, each cast to xs:string, fn:empty, fn:exists
+// and fn:distinct-values with one, fn:true, fn:false and fn:current-date with none, and fn:doc
+// with one that is a StringLiteral or statically empty, either followed by a relative path of
+// QName child or attribute steps (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3,
+// §7.4.1, §15.1.4, §15.1.5, §15.1.6, §9.1.1, §9.1.2, §16.4, §15.5.4), any argument of which
+// may be the empty sequence `()`, and any of which a constructor function may take as its
+// operand, as it may any other argument (xpath20.md §3.1.5), and fn:sum with one argument that
+// is a relative path of one or more child steps and one attribute step, each with a QName
+// NameTest, `sum(a/b/@p)` (§15.4.5, xpath20.md §3.2), the attribute typed as attrs answers for
+// the path — over the typed values of the attributes it selects below E in document order,
+// xs:untypedAtomic ones cast to xs:double, the xs:integer 0 over none, the one item over one,
+// and over more their sum in their numeric type (§6.2), exact over xs:decimal ones,
+// err:FORG0006 over items whose type is not numeric, and an `instance of` over the call
+// reading the type of the value it returns rather than its static type — and fn:namespace-uri
+// with `.` or no argument (§14.3), E's [namespace name] as one xs:anyURI, the zero-length one
+// for no namespace, and fn:in-scope-prefixes with `.` (§11.2.6) as one operand of `=` whose
+// other is a StringLiteral or a parenthesized comma sequence of them, on either side, true
+// where one of those is a prefix of E's [in-scope namespaces] (`xml` always, the zero-length
+// string where a default namespace is in scope, never `xmlns`), each `.` there E as a node —
+// the conditional `if (Expr) then ExprSingle else ExprSingle` (xpath20.md §3.8) as the whole
+// {test}, inside parentheses, as fn:not's argument or as an operand of another, whose test's
+// ·effective boolean value· selects the one branch evaluated, so a dynamic error in the other
+// is never raised, and both of whose branches are compiled, so a decline in either declines
+// the {test}; the [47] ContextItemExpr `.`, atomized (§3.1.4, §2.4.2); [18] CastableExpr's
+// `castable as` tail over a [16] ta-SimpleValue, `$value castable as xs:double`, an xs:boolean
+// true exactly where the same `cast as` yields a value and false where that cast raises — the
+// empty sequence without `?`, two or more items, a lexical or facet mismatch — while an error
 // evaluating its operand raises (§3.10.3), and which declines wherever that cast does; [16]
 // InstanceofExpr's `instance of` tail with an atomic SequenceType, a builtin [53] AtomicType
 // or xs:untypedAtomic and an optional `?`, `*` or `+` (§3.10.1), over an operand that is no
@@ -1111,44 +1112,43 @@ type AssertionTest struct {
 // among them, `data(a/b) instance of xs:date*`, its last step typed as elems answers for the
 // path on a child's terms, over the typed values of the elements it selects below E in
 // document order, a ·nilled· one contributing none, and one typed child step, its axis
-// abbreviated or spelled out, `data(child::d)`, filtered by one IntegerLiteral predicate or
-// by none, `data(d[1]) instance of xs:date`, the k-th d child in document order or none
-// (§3.2.2, §3.2.4) — true where the item count is one the indicator admits and each item's
-// type derives from the AtomicType (§2.5.4), never casting, so `data(.) instance of
-// xs:untypedAtomic` holds over every {content type} and `$value instance of xs:date` over an
-// xs:date `$value`, while an error evaluating its operand raises; the same tail with an [60]
-// AttributeTest, `attribute()`, `attribute(N)`, `attribute(*, T)` or `attribute(N, T)` for T
-// a builtin simple type or xs:untypedAtomic, over one attribute step of E, `@d`,
-// `attribute::d` or `./@d`, true where the count of attributes it selects is one the
-// indicator admits and the attribute is named N and annotated with its {attribute use}'s
-// type, deriving from T (§2.5.4.5), so assert013's `./@event instance of attribute(*,
-// xs:dateTime)` holds over an xs:dateTime @event; [6] QuantifiedExpr (xpath20.md §3.9)
-// wherever the conditional stands, `some` or `every` over one in-clause binding a range
-// variable `$v` to each child of E a step `N` or `./N` with a QName NameTest selects, whose
-// body is `$v/@A`, a conjunction `$v/@A and $v/@B …`, or `$v/following-sibling::*[1][self::M]`
-// — the next sibling element of `$v` where it is named M, empty after E's last child element
-// (§3.2.1.1, §3.2.2) — or one of those inside fn:not, or binding `$v` to each child such a
-// step selects whose type elems answers is one a child read for its value is admitted under as
-// a TYPED value, or to each but the last of them under the one predicate `[position() lt
-// last()]` (§3.2.2), whose body is any one ExprSingle this function admits, `$v` in scope in
-// it alone as a node, ·nilled· or not, whose typed value is that child's, and
-// `$v/following-sibling::M[1]` the first later child named M however many of other names lie
-// between, or none (§3.2.1.1), typed on the same terms, or binding a range variable `$x` to
-// each item of a typed `$value`, atomic or list, written `data($value)` or `$value`
-// (xpath-functions.md §2.4), whose body is any one ExprSingle this function admits, the range
-// variable in scope in it alone as an atomic value of `$value`'s item type, `some` true where
-// a binding satisfies the body and `every` where all do, so over no binding — an empty list,
-// or the nil `$value` clause 2.3.2 binds — `some` is false and `every` true, and over `$value`
-// or a typed child step a binding whose body raises is the answer unless another binding
-// decides the quantifier (§3.6's tables); and, as an operand of a general comparison, an
-// integer sequence: [11] RangeExpr `I to J` over two IntegerLiterals, bare or parenthesized,
-// or a parenthesized comma sequence of IntegerLiterals and such ranges, `(1 to 10, 20, 30)`
-// (§3.3.1), or a string sequence, a parenthesized comma sequence of StringLiterals, `('a',
-// 'b')`. A string sequence's items are xs:string. Against a typed operand outside the
-// xs:string family, an xs:integer `$value` or child among them, xpath20.md §B.2 defines no
-// comparison and it raises err:XPTY0004, while `.`, which is not typed, casts to xs:string
-// (§3.5.2 rule 2.4) — added, and every decline [CompileCTATest] states is this one's too,
-// under the same static context (xpath-valid clause 2.2) augmented with `$value`
+// abbreviated or spelled out, `data(child::d)`, filtered by one IntegerLiteral predicate or by
+// none, `data(d[1]) instance of xs:date`, the k-th d child in document order or none (§3.2.2,
+// §3.2.4) — true where the item count is one the indicator admits and each item's type derives
+// from the AtomicType (§2.5.4), never casting, so `data(.) instance of xs:untypedAtomic` holds
+// over every {content type} and `$value instance of xs:date` over an xs:date `$value`, while
+// an error evaluating its operand raises; the same tail with an [60] AttributeTest,
+// `attribute()`, `attribute(N)`, `attribute(*, T)` or `attribute(N, T)` for T a builtin simple
+// type or xs:untypedAtomic, over one attribute step of E, `@d`, `attribute::d` or `./@d`, true
+// where the count of attributes it selects is one the indicator admits and the attribute is
+// named N and annotated with its {attribute use}'s type, deriving from T (§2.5.4.5), so
+// assert013's `./@event instance of attribute(*, xs:dateTime)` holds over an xs:dateTime
+// @event; [6] QuantifiedExpr (xpath20.md §3.9) wherever the conditional stands, `some` or
+// `every` over one in-clause binding a range variable `$v` to each child of E a step `N` or
+// `./N` with a QName NameTest selects, whose body is `$v/@A`, a conjunction `$v/@A and $v/@B
+// …`, or `$v/following-sibling::*[1][self::M]` — the next sibling element of `$v` where it is
+// named M, empty after E's last child element (§3.2.1.1, §3.2.2) — or one of those inside
+// fn:not, or binding `$v` to each child such a step selects whose type elems answers is one a
+// child read for its value is admitted under as a TYPED value, or to each but the last of them
+// under the one predicate `[position() lt last()]` (§3.2.2), whose body is any one ExprSingle
+// this function admits, `$v` in scope in it alone as a node, ·nilled· or not, whose typed
+// value is that child's, and `$v/following-sibling::M[1]` the first later child named M
+// however many of other names lie between, or none (§3.2.1.1), typed on the same terms, or
+// binding a range variable `$x` to each item of a typed `$value`, atomic or list, written
+// `data($value)` or `$value` (xpath-functions.md §2.4), whose body is any one ExprSingle this
+// function admits, the range variable in scope in it alone as an atomic value of `$value`'s
+// item type, `some` true where a binding satisfies the body and `every` where all do, so over
+// no binding — an empty list, or the nil `$value` clause 2.3.2 binds — `some` is false and
+// `every` true, and over `$value` or a typed child step a binding whose body raises is the
+// answer unless another binding decides the quantifier (§3.6's tables); and, as an operand of
+// a general comparison, an integer sequence: [11] RangeExpr `I to J` over two IntegerLiterals,
+// bare or parenthesized, or a parenthesized comma sequence of IntegerLiterals and such ranges,
+// `(1 to 10, 20, 30)` (§3.3.1), or a string sequence, a parenthesized comma sequence of
+// StringLiterals, `('a', 'b')`. A string sequence's items are xs:string. Against a typed
+// operand outside the xs:string family, an xs:integer `$value` or child among them, xpath20.md
+// §B.2 defines no comparison and it raises err:XPTY0004, while `.`, which is not typed, casts
+// to xs:string (§3.5.2 rule 2.4) — added, and every decline [CompileCTATest] states is this
+// one's too, under the same static context (xpath-valid clause 2.2) augmented with `$value`
 // (cvc-assertion clause 2.2), plus these, each of which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
@@ -1239,9 +1239,10 @@ type AssertionTest struct {
 //     and a union operand that is rooted or filtered by its value decline, and
 //     so does a step behind `./` or `.//` anywhere but in an fn:count call or
 //     as the whole operand of fn:exists, fn:empty or an ·effective boolean
-//     value·, and a predicate or a union anywhere but in an fn:count argument,
-//     but the child-existence and `preceding::` predicates the next bullet
-//     admits;
+//     value· — but an attribute step behind `./`, `./@N`, which is `@N`
+//     wherever an attribute step stands — and a predicate or a union anywhere
+//     but in an fn:count argument, but the child-existence and `preceding::`
+//     predicates the next bullet admits;
 //   - outside an fn:count argument, a predicate on any step but one child
 //     step standing as the whole operand of fn:exists, fn:empty or an
 //     ·effective boolean value·, or as fn:data's whole argument under
@@ -1319,6 +1320,10 @@ type AssertionTest struct {
 //     comma sequence of them — so `in-scope-prefixes(.)`,
 //     `count(in-scope-prefixes(.))`, `in-scope-prefixes(.) != 'a'`,
 //     `in-scope-prefixes(.) eq 'a'` and `in-scope-prefixes(.) = @a` decline;
+//   - fn:doc over any argument but a StringLiteral or a statically empty one
+//     — `doc(@a)`, `doc($value)` over simple content, `doc(1)` — and with a
+//     path after it holding a wildcard, an axis spelled out, a predicate or a
+//     "/" with no step after it, `doc('a')/*`, `doc('a')[1]`;
 //   - an integer or string sequence anywhere but as a general comparison's
 //     operand — `. eq (1 to 3)`, `(1 to 3) + 1`, `exists(('a', 'b'))` — a
 //     range operand that is not an IntegerLiteral, `1 to .`, a member that is
@@ -1407,6 +1412,15 @@ type AssertionTest struct {
 // so the path raises err:XPDY0050 (xpath20.md §3.2) before it selects a node,
 // and the {test} is false whatever E is named and whatever its subtree holds.
 //
+// Nor is a call to fn:doc whose argument is a StringLiteral: cvc-xpath clause
+// 8 makes the available documents the empty set, so the call raises
+// err:FODC0005 (xpath-functions.md §15.5.4) and the {test} is false whatever E
+// carries. Over a statically empty argument, `doc(())`, the call is the empty
+// sequence. A path after the call, `doc('a.xml')//event/@name`, steps from a
+// call that raises first or from the empty sequence, so no step of it is
+// evaluated and no document node is built: its names are resolved, an unbound
+// prefix declining, and discarded.
+//
 // GAP(xpath): unlike a Type Alternative's, an assertion's {test} has no
 // required subset to stop at — §3.13 admits full XPath 2.0 — so every decline
 // above is this engine's limit and not the spec's license: paths of more than
@@ -1493,13 +1507,13 @@ func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 // So false is ONE answer for two outcomes the caller treats alike — the {test}
 // was false, or it raised (err:FORG0001, err:XPTY0004, which a function
 // argument's conversion or cardinality raises too, err:FORG0006,
-// err:XPDY0050, err:FOAR0001 for a `div`, `idiv` or `mod` by zero over
-// xs:decimal or xs:integer operands and for any `idiv` by zero, err:FOAR0002
-// for an `idiv` over a NaN operand or an infinite dividend or whose quotient
-// overflows to an infinity) — and either way E is not ·valid· with respect to the
-// assertion. A processor that raises a type error dynamically "will treat the
-// expression as having evaluated to false" (cvc-xpath, §3.13.4.2). Every
-// decline happened at [CompileAssertionTest].
+// err:XPDY0050, err:FODC0005 for an fn:doc call, err:FOAR0001 for a `div`, `idiv`
+// or `mod` by zero over xs:decimal or xs:integer operands and for any `idiv` by
+// zero, err:FOAR0002 for an `idiv` over a NaN operand or an infinite dividend or
+// whose quotient overflows to an infinity) — and either way E is not ·valid· with
+// respect to the assertion. A processor that raises a type error dynamically
+// "will treat the expression as having evaluated to false" (cvc-xpath,
+// §3.13.4.2). Every decline happened at [CompileAssertionTest].
 //
 // The bool carries no diagnostic; validate makes the one its caller reads. It
 // charges a false answer as an entry of validate's Result.Violations() under
@@ -1797,6 +1811,7 @@ func (ctaAttr) readsChild(xsd.QName) bool           { return false }
 func (ctaTypedAttr) readsChild(xsd.QName) bool      { return false }
 func (ctaNoDocumentRoot) readsChild(xsd.QName) bool { return false }
 func (ctaNoContextItem) readsChild(xsd.QName) bool  { return false }
+func (ctaNoDocument) readsChild(xsd.QName) bool     { return false }
 func (ctaLiteral) readsChild(xsd.QName) bool        { return false }
 func (ctaValueVar) readsChild(xsd.QName) bool       { return false }
 func (ctaEmptyValue) readsChild(xsd.QName) bool     { return false }
@@ -2041,6 +2056,7 @@ func (ctaTypedChild) counted(into []ctaKey) []ctaKey     { return into }
 func (ctaUntypedChild) counted(into []ctaKey) []ctaKey   { return into }
 func (ctaNoDocumentRoot) counted(into []ctaKey) []ctaKey { return into }
 func (ctaNoContextItem) counted(into []ctaKey) []ctaKey  { return into }
+func (ctaNoDocument) counted(into []ctaKey) []ctaKey     { return into }
 func (ctaLiteral) counted(into []ctaKey) []ctaKey        { return into }
 func (ctaValueVar) counted(into []ctaKey) []ctaKey       { return into }
 func (ctaEmptyValue) counted(into []ctaKey) []ctaKey     { return into }
@@ -2532,4 +2548,12 @@ func (ctaAssertionFacade) contextNode() (ctaNodeArg, bool) {
 // reports. (#1042)
 func (ctaAssertionFacade) focus(*xsd.SimpleType) (ctaValue, bool) {
 	return nil, false
+}
+
+// document compiles a call to fn:doc whose argument is a StringLiteral to
+// ctaNoDocument: cvc-xpath clause 8 makes the available documents empty, so
+// the call raises err:FODC0005 (xpath-functions.md §15.5.4) and the {test}
+// does not evaluate to true (cvc-assertion).
+func (ctaAssertionFacade) document() (ctaValue, bool) {
+	return ctaNoDocument{}, true
 }

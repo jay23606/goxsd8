@@ -742,21 +742,23 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 // `preceding::` step (ctaChildrenPreceded), the candidate `.` inside a value
 // predicate (ctaCandidate), the range variable of a quantifier over a typed
 // child step and `$v/following-sibling::M[1]` over it (ctaBoundChild,
-// ctaBoundSibling), and the two steps that raise before they select a
-// node, a rooted path (ctaNoDocumentRoot) and a read of an absent context item
-// (ctaNoContextItem). Its nodes method is the ONE reading of node existence,
-// which the ·effective boolean value· of a step (ctaEffectiveBoolean.eval) and
-// fn:empty and fn:exists (ctaSequenceLength) both take; every other operand's
-// items are atomic values the caller reads its own way. A quantifier's range
-// variable over `$value` (ctaRangeItem) is one such atomic value and no step.
+// ctaBoundSibling), and the three that raise before they select a node, a
+// rooted path (ctaNoDocumentRoot), a read of an absent context item
+// (ctaNoContextItem) and an fn:doc call (ctaNoDocument). Its nodes method is
+// the ONE reading of node existence, which the ·effective boolean value· of a
+// step (ctaEffectiveBoolean.eval) and fn:empty and fn:exists
+// (ctaSequenceLength) both take; every other operand's items are atomic values
+// the caller reads its own way. A quantifier's range variable over `$value`
+// (ctaRangeItem) is one such atomic value and no step.
 type ctaStep interface {
 	ctaValue
 	// nodes is how many nodes the step selects, a ·nilled· child counting as a
 	// node, reporting false where it raises: a rooted path (err:XPDY0050), a
-	// read of an absent context item (err:XPDY0002), a matched value breaking
-	// the caller's obligation ([TypedAttributes], [ChildElements]), and a
-	// [Tally] holding no counter for an element step or a child path, which
-	// [AssertionTest.Evaluate] refuses before the tree is read.
+	// read of an absent context item (err:XPDY0002), an fn:doc call
+	// (err:FODC0005), a matched value breaking the caller's obligation
+	// ([TypedAttributes], [ChildElements]), and a [Tally] holding no counter
+	// for an element step or a child path, which [AssertionTest.Evaluate]
+	// refuses before the tree is read.
 	nodes(env ctaEnv) (int, bool)
 }
 
@@ -851,3 +853,4 @@ func ctaTalliedNodes(key ctaKey, env ctaEnv) (int, bool) {
 
 func (ctaNoDocumentRoot) nodes(ctaEnv) (int, bool) { return 0, false } // err:XPDY0050
 func (ctaNoContextItem) nodes(ctaEnv) (int, bool)  { return 0, false } // err:XPDY0002
+func (ctaNoDocument) nodes(ctaEnv) (int, bool)     { return 0, false } // err:FODC0005

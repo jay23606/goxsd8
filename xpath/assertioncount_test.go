@@ -328,8 +328,10 @@ func TestTallyReadsAttributesAt(t *testing.T) {
 // fn:count's path argument is one QName step, a rooted one, a child step
 // filtered by one predicate, or a union (the predicate and union rows below):
 // every other path declines, a positional predicate among them, and so does
-// `.//` or `./` in a comparison operand, and a cast from a count, which [16]
-// ta-SimpleValue, the operand of the cast spelling, does not admit.
+// `.//` or a child step behind `./` in a comparison operand — an attribute
+// step behind `./` is `@N` there (TestAssertionOwnAttributeStep) — and a cast
+// from a count, which [16] ta-SimpleValue, the operand of the cast spelling,
+// does not admit.
 func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"count(*) = 0", "a wildcard NameTest"},
@@ -352,7 +354,7 @@ func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 		{"count(/) = 0", "a bare slash"},
 		{"count(@p:a) = 0", "an unbound prefix"},
 		{".//e1 = 'a'", "a descendant step in a comparison"},
-		{"./@length = 1", "a context-item path in a comparison"},
+		{"./e1 = 'a'", "a child step behind ./ in a comparison"},
 		{"count(e1) cast as xs:string = '1'", "a cast from an xs:integer count"},
 	} {
 		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"length": "int"}), asChildTypes(t)); ok {
