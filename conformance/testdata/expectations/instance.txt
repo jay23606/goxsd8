@@ -116,8 +116,8 @@ Assert/assert020/instance/assert020.v1.xml pass
 Assert/assert021/instance/assert021.n1.xml pass
 Assert/assert021/instance/assert021.v1.xml pass
 Assert/assert022/instance/assert022.v1.xml pass
-Assert/assert023/instance/assert023.v1.xml fail
-Assert/assert023/instance/assert023.v2.xml fail
+Assert/assert023/instance/assert023.v1.xml pass
+Assert/assert023/instance/assert023.v2.xml pass
 Assert/assert024/instance/assert024.v1.xml fail
 Assert/assert_001/instance/assert_001_2 pass
 Assert/assert_002/instance/assert_002_2 pass

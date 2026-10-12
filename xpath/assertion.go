@@ -1057,17 +1057,18 @@ type AssertionTest struct {
 // node fn:namespace-uri and fn:in-scope-prefixes take is E itself, which
 // [AssertionTest.Evaluate] is handed, under every content, a nil one included.
 //
-// The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
-// abbreviated child-axis step, an attribute step behind `./`, `./@a` or `./attribute::a`,
-// which steps from `.`, E, and is E's attribute `@a` (xpath20.md §3.2, §3.2.4), a "/" or "//"
-// opening one child or attribute step, a relative path of two or more abbreviated child-axis
-// steps with QName NameTests, `a/b`, the last of which may instead be the wildcard `*`, `a/*`,
-// which selects every element child (§3.2.1.2), one element step, `a`, `./a` or `.//a`, or a
-// child step filtered by one predicate that is a conjunction of child steps with QName
-// NameTests, `a[b and c]`, which selects each child a that has a child of each name (§3.2.2),
-// or by one predicate that is one `preceding::` step with a QName NameTest, unfiltered or
-// filtered by one QName child step or fn:not over one, `a[preceding::a]`, `a[preceding::a[b]]`
-// or `a[preceding::a[not(b)]]`, which selects each child a with an element so named and so
+// The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an abbreviated
+// child-axis step, an attribute step behind `./`, `./@a` or `./attribute::a`, which steps from
+// `.`, E, and is E's attribute `@a` (xpath20.md §3.2, §3.2.4), a "/" or "//" opening one child
+// or attribute step, a relative path of two or more abbreviated child-axis steps with QName
+// NameTests, `a/b`, the last of which may instead be the wildcard `*`, `a/*`, which selects
+// every element child (§3.2.1.2), one element step, `a`, `./a` or `.//a`, one step whose
+// NodeTest is [58] CommentTest, `comment()`, `./comment()` or `.//comment()`, or a child step
+// filtered by one predicate that is a conjunction of child steps with QName NameTests, `a[b
+// and c]`, which selects each child a that has a child of each name (§3.2.2), or by one
+// predicate that is one `preceding::` step with a QName NameTest, unfiltered or filtered by
+// one QName child step or fn:not over one, `a[preceding::a]`, `a[preceding::a[b]]` or
+// `a[preceding::a[not(b)]]`, which selects each child a with an element so named and so
 // filtered before it in E's subtree, at any depth, E never among them (§3.2.1.1, cvc-assertion
 // clause 1.3), standing as the whole operand of fn:exists, fn:empty or an ·effective boolean
 // value· (xpath20.md §3.2, §3.2.4, §2.4.3), an fn:count call, whose argument may filter a
@@ -1421,46 +1422,64 @@ type AssertionTest struct {
 // evaluated and no document node is built: its names are resolved, an unbound
 // prefix declining, and discarded.
 //
+// Nor is one step whose NodeTest is xpath20.md [58] CommentTest, a [54]
+// KindTest — `comment()`, `./comment()` or `.//comment()` — as the whole
+// operand of fn:exists, fn:empty or an ·effective boolean value·: cvc-assertion
+// clause 1.2 excludes comments from the partial ·PSVI· clause 1.3 builds the
+// data model instance from, retaining them only ·at user option·, which this
+// engine offers none of, so the step selects the empty sequence whatever E
+// carries, `empty(.//comment())` is true and `exists(.//comment())` false.
+// Anywhere else — under fn:count, behind an axis spelled out,
+// `child::comment()`, after a child step, in a predicate — it declines, under
+// the GAP(xpath) below, and so does every other KindTest, [59] PITest
+// `processing-instruction()` among them, which clause 1.2 excludes on the same
+// terms but whose argument, an NCName or a StringLiteral that raises
+// err:XPTY0004 where its normalized value is no NCName (xpath20.md §3.2.1.2),
+// this grammar does not parse. A Type Alternative's {test} declines the step
+// in every position, and an assertions facet's, which has no context item to
+// step from, raises err:XPDY0002 over it and fails ([FacetAssertions]).
+//
 // GAP(xpath): unlike a Type Alternative's, an assertion's {test} has no
 // required subset to stop at — §3.13 admits full XPath 2.0 — so every decline
 // above is this engine's limit and not the spec's license: paths of more than
-// one step outside fn:exists, fn:empty, an ·effective boolean value·,
-// fn:sum's argument and fn:data's under `instance of`, axes beyond the
-// attribute step, one child step, the child steps of such a path, the one
-// element step whose existence is asked, the one counted step, the preceding
-// step and its child step in a predicate on a child step whose existence is
-// asked — `ancestor::` and `preceding-sibling::` among the axes beyond them —
-// the following-sibling and self steps of a quantifier's sibling body, and the
+// one step outside fn:exists, fn:empty, an ·effective boolean value·, fn:sum's
+// argument and fn:data's under `instance of`, axes beyond the attribute step,
+// one child step, the child steps of such a path, the one element step whose
+// existence is asked, the one counted step, the preceding step and its child
+// step in a predicate on a child step whose existence is asked — `ancestor::`
+// and `preceding-sibling::` among the axes beyond them — the following-sibling
+// and self steps of a quantifier's sibling body, and the
 // `following-sibling::M[1]` step over a range variable bound to a typed child,
 // quantified expressions beyond one in-clause over a child step with the two
 // body forms read off the [Tally], over a typed child step, filtered by
-// `[position() lt last()]` or not, whose body reads its bound children, or
-// over a typed `$value`, wildcards but a `*` ending a child path whose
-// existence is asked, predicates beyond the two kinds on a counted child step
-// and the child-existence conjunction and the `preceding::` step on a child
-// step whose existence is asked and the IntegerLiteral one on a child step
-// fn:data reads under `instance of`, positional ones among them, unions outside
-// fn:count or over other operands, children read for their value whose type is
-// element-only, empty or ·special·, elements a path of child steps reads for
-// their value whose type is mixed, a value predicate over a mixed child,
-// arithmetic outside the numeric operands and the binary operators,
-// conditionals whose value is read as an item rather than for its ·effective
-// boolean value·, `.` under a nil content or where it is a node, but as the
-// argument of the two functions below, sequence expressions beyond the integer
-// and string sequences of a general comparison's operand, `castable as` over
-// any operand but a [16] ta-SimpleValue or inside a value predicate, `instance
-// of` beyond an atomic SequenceType over the operands above, the collation
-// argument, fn:sum with two arguments, over any argument but a path to an
-// attribute below E, over duration items, or over floating items, bare or
-// under fn:distinct-values, as an arithmetic operand or against an xs:decimal
-// operand, fn:avg, fn:min and fn:max, and every F&O function but fn:count,
-// those listed above, fn:namespace-uri over `.` or with no argument, and
-// fn:in-scope-prefixes over `.` only as an operand of `=`, among them —
-// fn:in-scope-prefixes elsewhere because its sequence needs a listing of E's
-// [in-scope namespaces], a capability validate.Element lacks, [ContextElement]
-// answering one prefix at a time. The direction is the withhold: the caller
-// records the assertion as unevaluated and neither charges it nor shows it
-// satisfied (PRINCIPLES 20). (#1042)
+// `[position() lt last()]` or not, whose body reads its bound children, or over
+// a typed `$value`, wildcards but a `*` ending a child path whose existence is
+// asked, KindTests but the comment step whose existence is asked, predicates
+// beyond the two kinds on a counted child step and the child-existence
+// conjunction and the `preceding::` step on a child step whose existence is
+// asked and the IntegerLiteral one on a child step fn:data reads under
+// `instance of`, positional ones among them, unions outside fn:count or over
+// other operands, children read for their value whose type is element-only,
+// empty or ·special·, elements a path of child steps reads for their value
+// whose type is mixed, a value predicate over a mixed child, arithmetic outside
+// the numeric operands and the binary operators, conditionals whose value is
+// read as an item rather than for its ·effective boolean value·, `.` under a
+// nil content or where it is a node, but as the argument of the two functions
+// below, sequence expressions beyond the integer and string sequences of a
+// general comparison's operand, `castable as` over any operand but a [16]
+// ta-SimpleValue or inside a value predicate, `instance of` beyond an atomic
+// SequenceType over the operands above, the collation argument, fn:sum with two
+// arguments, over any argument but a path to an attribute below E, over
+// duration items, or over floating items, bare or under fn:distinct-values, as
+// an arithmetic operand or against an xs:decimal operand, fn:avg, fn:min and
+// fn:max, and every F&O function but fn:count, those listed above,
+// fn:namespace-uri over `.` or with no argument, and fn:in-scope-prefixes over
+// `.` only as an operand of `=`, among them — fn:in-scope-prefixes elsewhere
+// because its sequence needs a listing of E's [in-scope namespaces], a
+// capability validate.Element lacks, [ContextElement] answering one prefix at a
+// time. The direction is the withhold: the caller records the assertion as
+// unevaluated and neither charges it nor shows it satisfied (PRINCIPLES 20).
+// (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
@@ -2314,6 +2333,17 @@ func (ctaAssertionFacade) elements(path ctaCountPath) (ctaValue, bool) {
 		return nil, false
 	}
 	return selected, true
+}
+
+// comments compiles one comment step, `comment()`, `./comment()` or
+// `.//comment()`, to ctaEmptyValue, consulting neither attrs nor elems:
+// cvc-assertion clause 1.2 excludes comments from the partial ·PSVI· clause
+// 1.3 builds the data model instance from, retaining them only ·at user
+// option·, which this engine offers none of, so E's subtree holds no comment
+// node and the step selects the empty sequence whatever E carries. Nothing is
+// counted and nothing read.
+func (ctaAssertionFacade) comments() (ctaValue, bool) {
+	return ctaEmptyValue{}, true
 }
 
 // quantified compiles a quantified expression over one child step to its

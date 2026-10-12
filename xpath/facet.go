@@ -248,6 +248,14 @@ func (ctaFacetFacade) elements(ctaCountPath) (ctaValue, bool) {
 	return ctaNoContextItem{}, true
 }
 
+// comments compiles any comment step, `comment()`, `./comment()` or
+// `.//comment()`, to ctaNoContextItem, on elements' terms: what the step would
+// select is never asked, the context item it steps from being absent
+// (cvc-assertions-valid clause 1.2), so `empty(.//comment())` fails the facet.
+func (ctaFacetFacade) comments() (ctaValue, bool) {
+	return ctaNoContextItem{}, true
+}
+
 // quantified declines every quantified expression. Its binding sequence is a
 // child step of the absent context item and would raise err:XPDY0002, but the
 // body is counted off a [Tally] the facet evaluation has none of; that decline
