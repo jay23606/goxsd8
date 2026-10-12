@@ -2407,7 +2407,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 }
 
 // ctaCarriedType is the simple type a typed operand carries — its static type,
-// which ctaStaticOf reports and ctaTypes.castSource judges a cast by — or false
+// which ctaStaticOf reports, ctaTypes.castSource judges a cast by and
+// ctaEffectiveBoolean.eval decides a bare operand under — or false
 // for one that carries none: an untyped or statically empty operand, and an
 // fn:distinct-values call, whose static type is its operand's. A cast carries
 // its target, an fn:string call its cast's, `$value` the type of each of its
@@ -2946,8 +2947,10 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // included, and the untyped one by rule 4 (ctaUntypedBoolean). An
 // fn:distinct-values call is decided by ctaBoolean over the items it keeps,
 // read in the type it compares them in — xs:string for an xs:untypedAtomic
-// operand, whose rule 4 is xs:string's. Every other operand is a singleton
-// atomic value or the empty sequence, which ctaBoolean decides.
+// operand, whose rule 4 is xs:string's — not its static type, which is why it
+// keeps an arm of its own. Every other operand is a singleton atomic value or
+// the empty sequence, which ctaBoolean decides in the type it carries
+// (ctaCarriedType), the static type ctaStaticOf reports.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	if step, isStep := e.operand.(ctaStep); isStep {
 		nodes, ok := step.nodes(env)
@@ -2957,51 +2960,18 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaAnswerOf(nodes != 0)
 	}
 	switch n := e.operand.(type) {
-	case ctaLiteral:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaCast:
-		return ctaBoolean(e.operand, n.target, env)
-	case ctaCastable:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaInstanceOf:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaCount:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaArith:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaMatch:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaUnaryString:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaPresence:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaStringFunction:
-		return ctaBoolean(e.operand, n.cast.target, env)
-	case ctaConcat:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaCurrentDate:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaNoFocus:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaNamespaceURI:
-		return ctaBoolean(e.operand, n.st, env)
 	case ctaDistinctValues:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaSum:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaSumInstance:
-		return ctaBoolean(e.operand, n.st, env)
-	case ctaValueVar:
-		return ctaBoolean(e.operand, n.atom, env)
-	case ctaRangeItem:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaEmptyValue:
 		return ctaFalse
 	case ctaUntypedValue:
 		return ctaUntypedBoolean(env)
-	default:
+	}
+	st, typed := ctaCarriedType(e.operand)
+	if !typed {
 		return ctaFalse
 	}
+	return ctaBoolean(e.operand, st, env)
 }
 
 // ctaBoolean is fn:boolean over a singleton atomic operand of type st

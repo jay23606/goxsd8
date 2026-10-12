@@ -275,12 +275,13 @@ func TestAssertionStringArgumentTypeErrors(t *testing.T) {
 // the result as xs:untypedAtomic would cast the other operand and hold; the
 // bare rows are each result's effective boolean value; the cast rows decline
 // fn:string over a non-string result and admit it over fn:normalize-space's.
-// Removing one arm's case from ctaItemOf or ctaEffectiveBoolean.eval fails
-// that arm's row of the matching table. Removing it from ctaCarriedType, the
-// static type ctaStaticOf and castsFrom both read, fails the arm's static row
-// and, for the three non-string results, its item and decline rows;
-// castsFrom's answer for ctaStringFunction's xs:string is what it gives an
-// unjudged operand, so no row tells that part apart.
+// Removing one arm's case from ctaItemOf fails that arm's row of the matching
+// table. Removing it from ctaCarriedType, the static type ctaStaticOf and
+// castsFrom both read and the type ctaEffectiveBoolean.eval decides a bare
+// result in, fails the arm's static and bare rows and, for the three
+// non-string results, its item and decline rows; castsFrom's answer for
+// ctaStringFunction's xs:string is what it gives an unjudged operand, so no
+// row tells that part apart.
 func TestStringFunctionArmsInEverySwitch(t *testing.T) {
 	s := []asTyped{{uq("s"), "string", "1"}}
 	for _, tc := range []struct {
@@ -412,12 +413,13 @@ func TestAssertionConcat(t *testing.T) {
 // would cast "1" to the number and hold; the instance row asks its static
 // type; the item row reads its string; the bare rows are its ·effective
 // boolean value·; the ReadsChild and Tally rows ask what its arguments read.
-// With the ctaConcat arm deleted from ctaCarriedType the static and instance
-// rows fail; from ctaTypes.instanceItem the instance row declines; from
-// ctaEffectiveBoolean.eval `concat('a', 'b')` fails; from ctaItemOf the
-// instance, item and `concat('a', 'b')` rows fail; with ctaConcat.readsChild
-// answering false the ReadsChild row fails, and with ctaConcat.counted
-// appending nothing the Tally row does.
+// With the ctaConcat arm deleted from ctaCarriedType the static, instance and
+// `concat('a', 'b')` rows fail; from ctaTypes.instanceItem the instance row
+// declines; with ctaEffectiveBoolean.eval's ctaCarriedType read deleted
+// `concat('a', 'b')` fails; from ctaItemOf the instance, item and
+// `concat('a', 'b')` rows fail; with ctaConcat.readsChild answering false the
+// ReadsChild row fails, and with ctaConcat.counted appending nothing the
+// Tally row does.
 func TestConcatArmsInEverySwitch(t *testing.T) {
 	for _, tc := range []struct {
 		expr string

@@ -120,10 +120,10 @@ func TestAssertionQuantifiedOverValueErrors(t *testing.T) {
 // over an xs:integer is xpath20.md §B.2's err:XPTY0004 — read untyped, it
 // would cast to xs:string and hold — and `$x`'s ·effective boolean value· is
 // fn:boolean's over the integer (§2.4.3 rule 5), false for 0. With the
-// ctaRangeItem arm of ctaCarriedType removed the `= '2'` row holds, among
-// other failures; with ctaEffectiveBoolean.eval's removed the "0 1" and the
-// `every` rows are false; with ctaItemOf's removed the `2 4 6` rows of
-// TestAssertionQuantifiedOverValue fail, among others.
+// ctaRangeItem arm of ctaCarriedType removed the `= '2'` row holds and the
+// "0 1" and the `every` rows are false, among other failures; with
+// ctaItemOf's removed the `2 4 6` rows of TestAssertionQuantifiedOverValue
+// fail, among others.
 func TestAssertionQuantifiedRangeItem(t *testing.T) {
 	list := asList(t, "IntegerList", ctaBuiltin("integer"))
 	for _, tc := range []vcCase{

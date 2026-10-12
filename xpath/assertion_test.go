@@ -418,7 +418,9 @@ func asBind(t *testing.T, st *xsd.SimpleType, lexical string) ValueBinding {
 // type definition} (cvc-assertion clause 2.3.1), typed — so `$value eq 5`
 // compares xs:int values and "+05" is 5 — and `$value` in the zero
 // ValueBinding is the empty sequence clause 2.3.2 gives an invalid or ·nilled·
-// E, false under a value comparison and true under fn:not of one.
+// E, false under a value comparison and true under fn:not of one. With
+// ctaEffectiveBoolean.eval's ctaCarriedType read deleted the bare `$value` row
+// over "+05" fails.
 func TestAssertionValueOverSimpleContent(t *testing.T) {
 	content := xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}
 	uses := asUses(t, map[string]string{"max": "int"})
@@ -452,6 +454,9 @@ func TestAssertionValueOverSimpleContent(t *testing.T) {
 // mixed — is the empty sequence (cvc-assertion clause 2.3.2), decided at
 // compile time, so `$value eq 1` is the empty sequence and false and its
 // negation true, whatever the evaluation binds: a stray binding is never read.
+// With ctaEffectiveBoolean.eval's ctaEmptyValue arm answering true the bare
+// `$value` and `not($value)` rows fail; with it deleted none does, the operand
+// carrying no type (ctaCarriedType) and so answering the same false.
 func TestAssertionValueOverNonSimpleContent(t *testing.T) {
 	stray := asBind(t, asBuiltin(t, "int"), "1")
 	for _, content := range []xsd.ContentType{
@@ -528,6 +533,8 @@ func TestAssertionValueOverListContent(t *testing.T) {
 // value is false only for the zero-length string (§2.4.3 rule 4). `$value` in the zero
 // ValueBinding is the empty sequence, and a [Typed] binding breaks [BindValue]'s obligation
 // and raises. Each row fails with ctaTypes.valueVariable declining a ·special· type.
+// With ctaEffectiveBoolean.eval's ctaUntypedValue arm deleted, the `$value` row
+// over "0" and the `not($value)` row over the [Typed] binding fail.
 func TestAssertionValueOverSpecialContent(t *testing.T) {
 	five, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil, FacetAssertions(time.Time{}))
 	if err != nil {

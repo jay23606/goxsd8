@@ -119,9 +119,9 @@ func smDec(local, lexical string) asChild {
 // tax of 10.81 and a bill of 118.91, follow, and a bare call's ·effective
 // boolean value· closes the table. With the items added in float64 and the
 // sum rendered as a decimal lexical, the four 0.1 + 0.2 rows that hold fail,
-// and no other: po.xml's own figures cannot tell the two sums apart. The bare
-// `sum(a/b/@p)` over 5 fails with ctaSum's arm of ctaEffectiveBoolean.eval
-// removed.
+// and no other: po.xml's own figures cannot tell the two sums apart. With
+// ctaSum's arm of ctaCarriedType removed the bare `sum(a/b/@p)` over 5 fails,
+// and so do `c eq sum(a/b/@p)` and `c = sum(a/b/@p) + t` over 0.1 and 0.2.
 func TestAssertionSumDecimalExact(t *testing.T) {
 	for _, tc := range []struct {
 		expr     string

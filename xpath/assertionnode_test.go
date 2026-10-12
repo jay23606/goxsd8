@@ -30,12 +30,12 @@ func anEval(t *testing.T, expr string, e ContextElement) bool {
 // compares with an xs:string by B.1's promotion, in a value comparison too.
 //
 // With libraryCall's namespace-uri arm removed the first row declines. With
-// ctaNamespaceURI's arm removed from ctaCarriedType, the exists, count and
-// instance-of rows answer false; from ctaEffectiveBoolean.eval, the bare row
-// over urn:x answers false; from ctaTypes.instanceItem, the instance-of row
-// declines; with the call reading E's local name, both `= 'urn:x'` rows over
-// urn:x, `= ""` over no namespace, both bare rows over no namespace, the `eq`,
-// sequence and fn:starts-with rows fail.
+// ctaNamespaceURI's arm removed from ctaCarriedType, the exists, count,
+// instance-of and bare-over-urn:x rows answer false; from
+// ctaTypes.instanceItem, the instance-of row declines; with the call reading
+// E's local name, both `= 'urn:x'` rows over urn:x, `= ""` over no namespace,
+// both bare rows over no namespace, the `eq`, sequence and fn:starts-with rows
+// fail.
 func TestAssertionNamespaceURIIsTheNamespaceName(t *testing.T) {
 	inX := asElement{name: xsd.QName{Space: "urn:x", Local: "e"}}
 	inNone := asElement{name: uq("e")}

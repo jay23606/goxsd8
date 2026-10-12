@@ -26,15 +26,15 @@ func fcValue(t *testing.T, st *xsd.SimpleType, lexical string) value.Value {
 // FAILS — `.`, fn:not over it (the error propagates rather than inverting), an
 // attribute step, a child-axis step and a rooted path alike. Each such row
 // declines with the ctaFacetFacade method that builds its node answering
-// false; `not(.)` and `not(@a)` hold with the ctaNoContextItem arm of
-// ctaEffectiveBoolean.eval removed, and `not(. = 'x')` with the one of
-// ctaItemOf removed. fn:position and fn:last raise it too, there being no
+// false; `not(.)` and `not(@a)` hold with ctaNoContextItem.nodes answering
+// (0, true), and `not(. = 'x')` with the ctaNoContextItem arm of ctaItemOf
+// removed. fn:position and fn:last raise it too, there being no
 // context position or size (clause 1.3): `position() le 50` and `last() le
 // 50` fail, and so do they under fn:not, which a call evaluating to false
 // would make hold, and so do `position()` and `last()` read for their
 // ·effective boolean value·, bare or under fn:not, and under `instance of
 // xs:integer`. `not(position())` and `not(last())` hold with the ctaNoFocus
-// arm of ctaEffectiveBoolean.eval removed, and the two `instance of` rows
+// arm of ctaCarriedType removed, and the two `instance of` rows
 // decline with ctaNoFocus removed from ctaTypes.instanceItem. fn:string over
 // either fails too, the call raising before there is a value to cast
 // (castsFrom): `string(position()) = '1'` and `string(last()) = '1'` decline
