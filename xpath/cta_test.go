@@ -397,7 +397,7 @@ func TestCompileClassifiesCastTargets(t *testing.T) {
 		{"@k cast as xs:IDREFS", "(c) a list builtin is no atomic type: err:XPST0051"},
 		{"@k cast as xs:anyAtomicType", "(c) excluded by name: err:XPST0080"},
 		{"@k cast as xs:NOTATION", "(c) excluded by name: err:XPST0080"},
-		{"@k cast as xs:QName", "context-dependent, declined under its own marker"},
+		{"@k cast as xs:QName", "an xs:untypedAtomic operand to xs:QName is err:XPTY0004 (F&O §17.1), declined under castsFrom's marker"},
 		{"@k cast as Kind", "an unprefixed target is in the {default namespace}, which declares none"},
 	} {
 		if _, ok := CompileCTATest(ctaExprRecord(tc.expr, "", bindings...), types); ok {
@@ -1224,9 +1224,9 @@ func TestComparisonType(t *testing.T) {
 // The table names both directions B.2 disagrees with a value-space judgment
 // in. The types with eq and ne rows and no ordering rows are xs:duration, the
 // five Gregorian types, xs:hexBinary and xs:base64Binary; xs:boolean has all
-// six, its ordering rows included. xs:QName and xs:NOTATION are the eq/ne-only
-// pair the table cannot reach, both being declined as cast targets before a
-// comparison over them can be built (ctaTypes.castTarget).
+// six, its ordering rows included, and xs:QName has eq and ne alone. xs:NOTATION
+// is the eq/ne-only type the table cannot reach, being declined as a cast
+// target before a comparison over it can be built (ctaTypes.castTarget).
 func TestComparisonOperatorLegality(t *testing.T) {
 	known := compileTypes(t)
 	equality := []ctaComparator{ctaEqual, ctaNotEqual}
@@ -1251,6 +1251,8 @@ func TestComparisonOperatorLegality(t *testing.T) {
 		{"xs:base64Binary has eq and ne", "base64Binary", equality, ctaTypeSettled},
 		{"xs:base64Binary has no ordering row", "base64Binary", ordering, ctaTypeErrored},
 		{"xs:boolean has all six", "boolean", all, ctaTypeSettled},
+		{"xs:QName has eq and ne", "QName", equality, ctaTypeSettled},
+		{"xs:QName has no ordering row", "QName", ordering, ctaTypeErrored},
 		// The two duration subtypes carry the ordering rows their primitive
 		// lacks, and reach eq and ne through it by subtype substitution.
 		{"xs:dayTimeDuration has all six", "dayTimeDuration", all, ctaTypeSettled},

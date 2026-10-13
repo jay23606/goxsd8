@@ -145,9 +145,9 @@ func TestFacetAssertionsCastable(t *testing.T) {
 // Type Alternative's {test} declines it — §3.12.6's [15] ta-CastExpr has no
 // `castable` tail. In an assertion, a cast castsFrom or castTarget declines
 // for `cast as` declines for `castable as` too: xs:integer from an xs:decimal
-// @d (F&O §17.1.3.4's truncation), xs:QName (#888), xs:NOTATION
-// (err:XPST0080), and a target that names no type. So does a `castable` tail
-// over a cast, and one inside a value predicate.
+// @d (F&O §17.1.3.4's truncation), xs:QName from an untyped @a (§17.1's
+// err:XPTY0004), xs:NOTATION (err:XPST0080), and a target that names no type.
+// So does a `castable` tail over a cast, and one inside a value predicate.
 func TestCastableDeclines(t *testing.T) {
 	for _, expr := range []string{"@a castable as xs:date", "not(@a castable as xs:date)", "(@a castable as xs:date)"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); ok {

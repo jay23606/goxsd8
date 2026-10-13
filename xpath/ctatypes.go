@@ -172,16 +172,9 @@ func (t ctaTypes) ancestor(st *xsd.SimpleType, name xsd.QName) (*xsd.SimpleType,
 // rejection. Under-charging is a rejection this engine can take later;
 // over-charging is a false reject now. (#894)
 //
-// GAP(xpath): a target whose {primitive type definition} is xs:QName is
-// declined too, though §3.10.2 excludes only xs:NOTATION and xs:anyAtomicType
-// by name. Casting to xs:QName is context-dependent — the lexical's prefix
-// resolves against the static context's namespaces (xpath-functions.md §5.3),
-// which is the [value.Context] this engine has no value for (PRINCIPLES 19) —
-// and F&O's casting table supports no dynamically-supplied operand for it at
-// all. BOTH spellings decline, because the target is what is classified here;
-// only the string-LITERAL one is a LOSS, an attribute operand having no
-// defined result to withhold in the first place. It takes [CompileCTATest]'s
-// own withhold direction, argued there, rather than deciding. (#888)
+// xs:QName is admitted: §3.10.2 excludes only xs:NOTATION and xs:anyAtomicType
+// by name. Its cast is context-dependent (PRINCIPLES 19), and which operands
+// it admits is castsFrom's to judge (qnameTarget).
 func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 	st, declared := t.simple(name)
 	if !declared {
@@ -198,14 +191,18 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 	// property is ·absent· for EXACTLY the targets that rule excludes: the
 	// list and union varieties, xs:anySimpleType's ·absent· {variety}, and
 	// xs:anyAtomicType, which the line above already excluded by name.
-	p, resolved := t.primitive(st)
-	if !resolved {
-		return nil, false
-	}
-	if p.Name() == ctaBuiltin("QName") {
+	if _, resolved := t.primitive(st); !resolved {
 		return nil, false
 	}
 	return st, true
+}
+
+// qnameTarget reports whether target's {primitive type definition} is
+// xs:QName, the one admitted cast target whose lexical mapping reads the
+// static context's namespaces (xpath-functions.md §5.3).
+func (t ctaTypes) qnameTarget(target *xsd.SimpleType) bool {
+	p, resolved := t.primitive(target)
+	return resolved && p.Name() == ctaBuiltin("QName")
 }
 
 // instanceItem is the static type of v's items (ctaStaticOf) as far as it
@@ -426,6 +423,16 @@ func (t ctaTypes) annotationDerives(v ctaValue, name xsd.QName) (derives, decide
 //     UTC-shifted, no trailing fractional zeros, and midnight as 00:00:00,
 //     never "24".
 //
+// To a target whose {primitive type definition} is xs:QName (qnameTarget),
+// §17.1's own rule replaces all three: "Casting is permitted from xs:string
+// literals to xs:QName ... If the argument to such a cast is computed
+// dynamically, [err:XPTY0004] is raised if the value is of any type other than
+// xs:QName ... (including the case where it is an xs:string)". So a literal is
+// admitted only as a StringLiteral (literalCastsTo's string-family rule, which
+// ctaParser.cast resolves against the static context), and every other
+// operand only where its static type is target or derived from it, the second
+// rule's identity cast.
+//
 // The cast spelling and `castable as` take a [16] ta-SimpleValue operand, and
 // so does the constructor spelling on a façade that calls no library function;
 // elsewhere a constructor's operand is any argument a library call takes
@@ -465,11 +472,26 @@ func (t ctaTypes) annotationDerives(v ctaValue, name xsd.QName) (derives, decide
 // only for scope: §17.5 and §17.1.2 define each over the canonical
 // representation ctaPromote renders, and admitting them is a widening of
 // localValueSource's set or of its target test, not a new renderer (#1042).
-// The direction is the withhold [CompileAssertionTest] reports: the assertion is
-// declined, never charged and never satisfied. (#1042)
+// A cast to xs:QName from any operand but a StringLiteral or one of type
+// xs:QName — an xs:untypedAtomic operand, a computed xs:string, any other
+// typed one — is §17.1's err:XPTY0004 and declines too, a withhold where the
+// error is defined; so does a cast from an xs:QName operand to any other
+// target, and fn:string over one, which is that cast to xs:string here: §17.1.2
+// builds its string from the value's retained prefix, which no ·canonical
+// representation· renders (value.Mapping). The direction is the withhold
+// [CompileAssertionTest] reports: the assertion is declined, never charged and
+// never satisfied. (#1042)
 func (t ctaTypes) castsFrom(v ctaValue, target *xsd.SimpleType) bool {
 	if lit, isLiteral := v.(ctaLiteral); isLiteral {
 		return t.literalCastsTo(lit, target)
+	}
+	if t.qnameTarget(target) {
+		typed, isTyped := ctaStaticOf(v).(ctaTyped)
+		if !isTyped {
+			return false
+		}
+		at, err := t.ancestor(typed.st, target.Name())
+		return err == nil && at != nil
 	}
 	st, judged := t.castSource(v)
 	if !judged || t.stringSource(st) {
@@ -520,10 +542,11 @@ func (t ctaTypes) castsFrom(v ctaValue, target *xsd.SimpleType) bool {
 // xs:boolean; and a DoubleLiteral to any target but its own type or an
 // ancestor is castsFrom's GAP(xpath) case (floatingSource). To a target
 // §17.1's casting table marks N from xs:decimal or xs:integer — the
-// durations, the date/time and g* types, the binaries and xs:anyURI — the
-// cast is err:XPTY0004, a type error with no value defined, where the round
-// trip succeeds for `xs:anyURI(1.5)`, "1.5" being an xs:anyURI lexical, and it
-// declines too. A DecimalLiteral to a type derived from xs:integer declines
+// durations, the date/time and g* types, the binaries, xs:anyURI and xs:QName
+// — the cast is err:XPTY0004, a type error with no value defined, where the
+// round trip succeeds for `xs:anyURI(1.5)`, "1.5" being an xs:anyURI lexical,
+// and it declines too; so does an fn:true or fn:false to xs:QName, which §17.1
+// marks N from xs:boolean. A DecimalLiteral to a type derived from xs:integer declines
 // with the cast to xs:integer itself. The direction is castsFrom's: the
 // assertion is withheld, never charged and never satisfied. (#1042)
 func (t ctaTypes) literalCastsTo(lit ctaLiteral, target *xsd.SimpleType) bool {
@@ -675,14 +698,22 @@ func (t ctaTypes) stringArgument(v ctaValue) ctaStringArgument {
 //     is xs:untypedAtomic instead — which a caller that reads one untyped asks
 //     about before this, and never reaches here with.
 //
-// An xs:QName or xs:NOTATION primitive is declined as well: neither has a
-// ·canonical representation· (value.Mapping), so ctaPromote cannot convert one
-// into a comparison type that differs from its own and would raise where XPath
-// does not.
+// An xs:QName primitive is admitted although it has no ·canonical
+// representation· (value.Mapping) for ctaPromote to convert through, because
+// no conversion of such a value renders it: B.2 compares an xs:QName only with
+// another (op:QName-equal, eq and ne alone), which shared settles in xs:QName
+// itself and ctaPromote hands on unrendered (ctaRepresents); an
+// xs:untypedAtomic operand against it is cast TO xs:QName (untypedAgainst),
+// which raises the err:XPTY0004 xpath-functions.md §17.1 makes it, since no
+// cast but a StringLiteral's carries the static context its mapping reads
+// (ctaParser.cast); and castsFrom admits a cast from one only to its own type.
 //
-// GAP(xpath): each of those types declines the whole assertion, never charges
-// it and never satisfies it — the withhold [CompileAssertionTest] reports.
-// (#1042)
+// GAP(xpath): the list and union varieties decline the whole assertion, never
+// charge it and never satisfy it — the withhold [CompileAssertionTest]
+// reports — and so does an xs:NOTATION primitive, which is not admitted on
+// xs:QName's terms until a {test} needs it. An admitted xs:QName operand still
+// declines wherever it is cast to another type, fn:string included, under
+// castsFrom's marker. (#1042)
 func (t ctaTypes) typedAtomic(st *xsd.SimpleType) bool {
 	if st == nil {
 		return false
@@ -691,7 +722,7 @@ func (t ctaTypes) typedAtomic(st *xsd.SimpleType) bool {
 	if !resolved {
 		return false
 	}
-	return p.Name() != ctaBuiltin("QName") && p.Name() != ctaBuiltin("NOTATION")
+	return p.Name() != ctaBuiltin("NOTATION")
 }
 
 // valueVariable classifies the {simple type definition} st of a simple

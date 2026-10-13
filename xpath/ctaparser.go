@@ -113,16 +113,62 @@ var ctaInScopePrefixesFunction = xsd.QName{Space: ctaFunctionNS, Local: "in-scop
 // the parse walk reached, never one this map yielded.
 //
 // The record's {default namespace} is the default ELEMENT/TYPE namespace, so
-// it answers for exactly two productions here: [15] ta-CastExpr's target QName,
-// which xpath20.md §3.10.2 puts in it ("if the target type has no namespace
-// prefix, it is considered to be in the default element/type namespace"), and
-// the NameTest of a child-axis step (elementName). An absent {default
-// namespace} is the empty string, which is the no-namespace answer both cases
-// want then. An unprefixed attribute NameTest and an unprefixed function name
-// take their own answers, and neither is this one.
+// it answers for exactly three productions here: [15] ta-CastExpr's target
+// QName, which xpath20.md §3.10.2 puts in it ("if the target type has no
+// namespace prefix, it is considered to be in the default element/type
+// namespace"), the NameTest of a child-axis step (elementName), and the
+// unprefixed StringLiteral a cast to xs:QName converts (LookupNamespace). An
+// absent {default namespace} is the empty string, which is the no-namespace
+// answer every case wants then. An unprefixed attribute NameTest and an
+// unprefixed function name take their own answers, and neither is this one.
 type ctaNames struct {
 	prefixes         map[string]string
 	defaultNamespace string
+}
+
+// ctaXMLNamespace is the namespace the reserved prefix `xml` is bound to by
+// definition, with no declaration (Namespaces in XML §3).
+const ctaXMLNamespace = "http://www.w3.org/XML/1998/namespace"
+
+// LookupNamespace makes n the [value.Context] a cast of a StringLiteral to
+// xs:QName resolves the literal's prefix against: "the statically known
+// namespaces from the static context", and for an unprefixed literal "the
+// default element/type namespace from the static context" (xpath-functions.md
+// §5.3), which xpath-valid clause 2.2.2 and 2.2.3 fix as the {namespace
+// bindings} and the {default namespace}. `xml` is always bound; the empty
+// prefix answers the {default namespace}, or ("", true) — no namespace — where
+// there is none, so an unprefixed literal is never rejected as unbound; any
+// other prefix answers its binding, or ok false.
+//
+// Those are value.nsContext's answers, written a second time because that type
+// is unexported and its one exported constructor takes an
+// [xsd.ValueConstraint], not an [xsd.XPathExpression]; the two encode one
+// lookup over two records, and unifying them is an export of package value.
+func (n ctaNames) LookupNamespace(prefix string) (namespace string, ok bool) {
+	if prefix == "xml" {
+		return ctaXMLNamespace, true
+	}
+	if prefix == "" {
+		return n.defaultNamespace, true
+	}
+	namespace, ok = n.prefixes[prefix]
+	return namespace, ok
+}
+
+// resolvesLiteral reports whether LookupNamespace binds the prefix of lexical,
+// a StringLiteral a cast converts to xs:QName, after the whiteSpace collapse
+// xs:QName applies to it: an unprefixed one always resolves. An unbound
+// prefix is err:FONS0004, a STATIC error (xpath-functions.md §5.3), which
+// this engine withholds and does not charge (ctaParser.cast). Whether the rest
+// of lexical is a QName at all is left to the cast's own datatype validation,
+// which raises err:FORG0001 at evaluation.
+func (n ctaNames) resolvesLiteral(lexical string) bool {
+	prefix, _, prefixed := strings.Cut(strings.Trim(lexical, " \t\r\n"), ":")
+	if !prefixed {
+		return true
+	}
+	_, bound := n.LookupNamespace(prefix)
+	return bound
 }
 
 // ctaUnresolvedName is the ·expanded name· an UNBOUND prefix resolves to, so
@@ -3064,11 +3110,43 @@ func (p *ctaParser) singleType(v ctaValue) (ctaCast, bool) {
 		p.advance()
 		allowsEmpty = true
 	}
-	target, admitted := p.types.castTarget(p.typeName(text))
+	return p.cast(v, p.typeName(text), allowsEmpty)
+}
+
+// cast builds the cast of v to the datatype named name, both spellings' one
+// node (ctaCast), reporting false where castTarget does not admit the target,
+// castsFrom does not admit the cast, or the cast converts a StringLiteral to
+// xs:QName whose prefix the static context does not bind.
+//
+// A cast to xs:QName from a StringLiteral resolves the literal against the
+// expression's static context (xpath-functions.md §5.3), which the node
+// carries as its names; every other cast carries none. An unbound prefix there
+// is err:FONS0004, a static error ("A static error is raised [err:FONS0004] if
+// the prefix is not bound in the static context"), which this engine
+// WITHHOLDS rather than charges: [CTATestStaticError] proves err:XPST0081
+// alone, and an assertion has no static-error channel at all, so charging
+// cvc-assertion at the instance would blame the instance for a fault of the
+// schema.
+//
+// GAP(xpath): err:FONS0004 is folded into the compile-time withhold on every
+// façade, as ctaTypes.castTarget folds err:XPST0051, and xpath-valid clause 2
+// is not charged for it. The direction is the withhold [CompileAssertionTest]
+// reports. (#1042)
+func (p *ctaParser) cast(v ctaValue, name xsd.QName, allowsEmpty bool) (ctaCast, bool) {
+	target, admitted := p.types.castTarget(name)
 	if !admitted || !p.types.castsFrom(v, target) {
 		return ctaCast{}, false
 	}
-	return ctaCast{operand: v, target: target, allowsEmpty: allowsEmpty}, true
+	cast := ctaCast{operand: v, target: target, allowsEmpty: allowsEmpty}
+	lit, isLiteral := v.(ctaLiteral)
+	if !isLiteral || lit.st != p.types.str || !p.types.qnameTarget(target) {
+		return cast, true
+	}
+	if !p.names.resolvesLiteral(lit.text) {
+		return ctaCast{}, false
+	}
+	cast.names = p.names
+	return cast, true
 }
 
 // constructorFunction parses [18] ta-ConstructorFunction.
@@ -3108,11 +3186,11 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 		return nil, false
 	}
 	p.advance()
-	target, admitted := p.types.castTarget(name)
-	if !admitted || !p.types.castsFrom(arg, target) {
+	cast, ok := p.cast(arg, name, true)
+	if !ok {
 		return nil, false
 	}
-	return ctaCast{operand: arg, target: target, allowsEmpty: true}, true
+	return cast, true
 }
 
 // constructorOperand parses the operand of [18] ta-ConstructorFunction on

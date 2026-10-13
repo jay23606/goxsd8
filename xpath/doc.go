@@ -16,22 +16,24 @@
 //     which is what xpath-functions.md §17.1.1 makes a cast. [17] ta-AttrName's
 //     NameTest is xpath20.md's [36] whole, wildcards included, so `@*`, `@p:*` and
 //     `@*:n` select a sequence of E's attributes and a comparison over one is §3.5.2's
-//     existential. THREE shapes inside that grammar compile-time-DECLINE rather than
-//     evaluating: a cast whose target's primitive is xs:QName, whose lexical mapping
-//     needs a static context this engine has no value for (#888); a cast of an
-//     xs:float or xs:double operand, such as `1.5e0`, to a target other than its own
-//     type or an ancestor of it, or of an IntegerLiteral or DecimalLiteral to a target
-//     outside the xs:string family, xs:float, xs:double, xs:decimal and, for an
-//     IntegerLiteral, xs:integer's branch, such as `xs:integer(1.5)`, which F&O
-//     §17.1.2, §17.1.3 and §17.1.6 define over the value and not over its canonical
-//     lexical where §17.1's casting table marks the target Y or M, and §17.1 makes
-//     err:XPTY0004 where it marks N (#1042); and a comparison needing xpath20.md B.1
-//     rule 1.1's xs:float-to-xs:double promotion, which value exposes no widening for
-//     (#889). So does a cast whose TARGET is not a builtin datatype, which is the
-//     required subset's own boundary (§3.12.6 clause 4) rather than a construct of the
-//     grammar. CTATestStaticError reports the XPath STATIC errors of the same grammar
-//     over the same traversal, which is a different question with a different owner —
-//     see below.
+//     existential. A cast to xs:QName evaluates over a StringLiteral, whose prefix
+//     resolves against the static context (xpath-functions.md §5.3). THREE shapes
+//     inside that grammar compile-time-DECLINE rather than evaluating: a cast to
+//     xs:QName over any other operand but an xs:QName, which §17.1 makes
+//     err:XPTY0004, or over a StringLiteral whose prefix is unbound, err:FONS0004
+//     (#1042); a cast of an xs:float or xs:double operand, such as `1.5e0`, to a
+//     target other than its own type or an ancestor of it, or of an IntegerLiteral or
+//     DecimalLiteral to a target outside the xs:string family, xs:float, xs:double,
+//     xs:decimal and, for an IntegerLiteral, xs:integer's branch, such as
+//     `xs:integer(1.5)`, which F&O §17.1.2, §17.1.3 and §17.1.6 define over the value
+//     and not over its canonical lexical where §17.1's casting table marks the target
+//     Y or M, and §17.1 makes err:XPTY0004 where it marks N (#1042); and a comparison
+//     needing xpath20.md B.1 rule 1.1's xs:float-to-xs:double promotion, which value
+//     exposes no widening for (#889). So does a cast whose TARGET is not a builtin
+//     datatype, which is the required subset's own boundary (§3.12.6 clause 4) rather
+//     than a construct of the grammar. CTATestStaticError reports the XPath STATIC
+//     errors of the same grammar over the same traversal, which is a different
+//     question with a different owner — see below.
 //  2. Assertion essentials: axes, predicates, quantified expressions, typed comparisons, the F&O function core — M6.
 //     FIRST SLICES SHIPPED: CompileAssertionTest compiles an assertion {test} written in tier 1's grammar over the
 //     element's TYPED attributes (AttributeTypes; cvc-assertion clause 1, §3.13.4.1) and TYPED element children and
@@ -125,8 +127,8 @@
 //     declines, plus a wildcard NameTest but a `*` ending such a child path, a KindTest but that comment step — [59]
 //     PITest `processing-instruction()` among them, whose NCName or StringLiteral argument (err:XPTY0004, xpath20.md
 //     §3.2.1.2) is not parsed — and that comment step under fn:count, behind an axis spelled out or in a predicate,
-//     an attribute with no fixed atomic type that is not ·special· (a list, a union, an xs:QName or xs:NOTATION
-//     primitive), a child read for its value whose ·locally declared type· is ·absent·, ·special·, element-only or
+//     an attribute with no fixed atomic type that is not ·special· (a list, a union, an xs:NOTATION primitive), a
+//     child read for its value whose ·locally declared type· is ·absent·, ·special·, element-only or
 //     empty, or a simple type, or simple content over one, an attribute's would not be admitted as, a path of more
 //     than one step in any other position — but a path to an attribute as fn:sum's one argument, and a path of child
 //     steps as fn:data's under `instance of` whose last step's type is simple, or has simple content, and is not
@@ -242,7 +244,9 @@
 // are not, because proving one takes a parse that runs PAST the failed
 // target to the end of a ta-Test and no target stands in for one that
 // resolved to nothing; they stay folded into the compile-time withhold
-// under ctaTypes.castTarget's marker.
+// under ctaTypes.castTarget's marker. So does err:FONS0004, an unbound
+// prefix in the StringLiteral a cast to xs:QName converts, under
+// ctaParser.cast's.
 //
 // # Static context
 //
@@ -259,9 +263,11 @@
 //   - xpathDefaultNamespace supplies the default ELEMENT/TYPE namespace
 //     for unprefixed element steps (never attribute steps) in
 //     assertions and IDC selector/field paths (PRINCIPLES 15), and for
-//     an unprefixed cast TARGET (xpath20.md §3.10.2). The CTA subset
-//     declines every element step, so a cast target is the only thing it
-//     consults the default namespace for.
+//     an unprefixed cast TARGET (xpath20.md §3.10.2), and for the
+//     unprefixed StringLiteral a cast to xs:QName converts
+//     (xpath-functions.md §5.3). The CTA subset declines every element
+//     step, so those two are the only things it consults the default
+//     namespace for.
 //   - fn:matches / fn:replace / fn:tokenize bind to regex flavor FO,
 //     never the pattern-facet flavor.
 //

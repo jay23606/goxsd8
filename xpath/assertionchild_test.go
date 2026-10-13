@@ -265,7 +265,7 @@ func TestCompileAssertionTestDeclinesChildSteps(t *testing.T) {
 		{"sc = 'a'", "simple content over a ·special· type likewise"},
 		{"l = 'a'", "a list type atomizes to a sequence"},
 		{"u = 'a'", "a union's value takes its validating member's type"},
-		{"q = 'a'", "an xs:QName value has no canonical representation"},
+		{"q cast as xs:string = 'a'", "a cast from an xs:QName child to another type"},
 		{"eo = 'a'", "element-only content, whose atomization is a type error"},
 		{"empty = 'a'", "empty content"},
 		{"n cast as xs:string = '5'", "a cast from a typed non-string child"},

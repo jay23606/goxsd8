@@ -323,7 +323,8 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 		{"@p:x = 1", "an unbound prefix"},
 		{"@l = 'a'", "a list type atomizes to a sequence"},
 		{"@u = 1", "a union's value takes its validating member's type"},
-		{"@q = 'a'", "an xs:QName value has no canonical representation to convert through"},
+		{"@q cast as xs:string = 'a'", "a cast from an xs:QName attribute to another type: no canonical representation renders it"},
+		{"string(@q) = 'a'", "fn:string over an xs:QName attribute is that cast"},
 		{"@n = 'a'", "an xs:NOTATION value likewise"},
 		{"@x cast as xs:string = '5'", "a cast from a typed non-string attribute"},
 		{"xs:string(@x) = '5'", "the constructor spelling of the same cast"},
@@ -577,9 +578,9 @@ func TestAssertionValueOverSpecialContent(t *testing.T) {
 
 // `$value` DECLINES where its static type is not fixed at compile time, or is
 // one this engine does not read: a nil {content type}, a union, a list of a
-// union, an xs:QName or xs:NOTATION primitive — and any variable but `$value`,
-// which is not in scope (err:XPST0008), and a cast from a non-string `$value`,
-// on a typed attribute's terms.
+// union, an xs:NOTATION primitive — and any variable but `$value`, which is
+// not in scope (err:XPST0008), and a cast from a non-string `$value`, an
+// xs:QName one included, on a typed attribute's terms.
 func TestCompileAssertionTestDeclinesValue(t *testing.T) {
 	union := asUnion(t)
 	unionList := asList(t, "UnionList", union.Name())
@@ -592,7 +593,7 @@ func TestCompileAssertionTestDeclinesValue(t *testing.T) {
 		{"$value eq 1", nil, "no {content type} to type $value by"},
 		{"$value eq 1", xsd.SimpleContent{SimpleType: union}, "a union's value takes its active member's type"},
 		{"$value = 1", xsd.SimpleContent{SimpleType: unionList}, "a list of a union likewise"},
-		{"$value = 'a'", xsd.SimpleContent{SimpleType: asBuiltin(t, "QName")}, "an xs:QName value has no canonical representation"},
+		{"$value cast as xs:string = 'a'", xsd.SimpleContent{SimpleType: asBuiltin(t, "QName")}, "a cast from an xs:QName $value to another type"},
 		{"$value = 'a'", xsd.SimpleContent{SimpleType: asBuiltin(t, "NOTATION")}, "an xs:NOTATION value likewise"},
 		{"$other eq 1", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "no variable but $value is in scope"},
 		{"$a:value eq 1", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "$value has no namespace"},

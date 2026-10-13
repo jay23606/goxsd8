@@ -441,6 +441,14 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attribu
 // tree holds. It is a field of its own and not an arm of one sum with
 // rangeItem: a body binds one, and the scopes that could nest the two decline
 // (ctaChildRangeFacade, ctaRangeFacade), but nothing makes them exclusive.
+//
+// names is the [value.Context] every datatype validation reads (ctaValidate):
+// the names of the cast whose operand is being evaluated (ctaCastItem), which
+// is nil but on a StringLiteral's cast to xs:QName, and nil outside any cast.
+// So a lexical reaches a QName mapping with the static context only where
+// xpath-functions.md §5.3 permits the conversion, and every other one — an
+// xs:untypedAtomic operand cast to xs:QName by §3.5.2 clause 2.4, say — is
+// rejected, the err:XPTY0004 §17.1 makes it.
 type ctaEnv struct {
 	backend    value.Backend
 	types      xsd.TypeResolver
@@ -448,6 +456,7 @@ type ctaEnv struct {
 	candidate  []value.Value
 	rangeItem  value.Value
 	rangeChild ctaChildBinding
+	names      value.Context
 }
 
 // ctaChildBinding is one binding of a quantifier over a typed child step:
@@ -1552,10 +1561,17 @@ type ctaLiteral struct {
 // equivalence carries the `?` — "This example is equivalent to ("2000-01-01"
 // cast as xs:date?)" — so the constructor spelling always allows it, whatever
 // [18]'s own production says.
+//
+// names is the static context's in-scope namespaces, the expression's
+// ctaNames, on a cast of a StringLiteral to xs:QName, whose lexical mapping
+// resolves the literal's prefix against them (xpath-functions.md §5.3); it is
+// nil on every other cast (ctaParser.cast), and ctaCastItem evaluates the
+// operand under it.
 type ctaCast struct {
 	operand     ctaValue
 	target      *xsd.SimpleType
 	allowsEmpty bool
+	names       value.Context
 }
 
 // ctaCastable is xpath20.md [18] CastableExpr's `castable as SingleType` tail,
@@ -3945,8 +3961,13 @@ func ctaUntypedItems(lexicals []string, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // 3 admits "exactly one atomic value" and `?` widens that to AT MOST one, never
 // to more, so a cast over a wildcard NameTest matching several attributes is a
 // type error and not the first of them.
+//
+// The operand is evaluated, and converted into n.target, under n.names
+// (ctaEnv.names), and nothing else is.
 func ctaCastItem(n ctaCast, c *xsd.SimpleType, env ctaEnv) ctaItem {
-	inner, converted := ctaItemOf(n.operand, n.target, env).(ctaAtoms)
+	operandEnv := env
+	operandEnv.names = n.names
+	inner, converted := ctaItemOf(n.operand, n.target, operandEnv).(ctaAtoms)
 	if !converted {
 		return ctaRaised{}
 	}
@@ -4028,10 +4049,11 @@ func ctaConvert(lexical string, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
 //
 //   - no canonical mapping on from's chain, which is err:XPTY0004 — the
 //     "casting is not supported" arm of xpath-functions.md §17. That is
-//     unreachable for the target set [CompileCTATest] admits: the canonical
-//     mapping is absent only for xs:QName and xs:NOTATION (value.Mapping),
-//     and a cast whose target has either as its primitive is declined at
-//     compile time.
+//     unreachable for a tree this package compiled: the canonical mapping is
+//     absent only for xs:QName and xs:NOTATION (value.Mapping), an operand of
+//     either primitive is converted only into its own type or an ancestor
+//     (ctaTypes.typedAtomic, which declines xs:NOTATION outright), and a cast
+//     to xs:NOTATION is declined at compile time.
 //   - a canonical form beyond the backend's capacity (xmlschema11-2 §5.4,
 //     the strict backend's precisionDecimal zero of a huge ·scale·), a
 //     dynamic error raised as an implementation limit — indicated, never
@@ -4118,9 +4140,12 @@ func ctaCanonical(v value.Value, from *xsd.SimpleType, env ctaEnv) (string, bool
 // is that validation, so this package holds no lexical parser of its own
 // (STYLE T4).
 //
-// The [value.Context] is nil, and there is nothing for it to carry: only the
-// QName and NOTATION mappings are context-dependent (PRINCIPLES 19), and a
-// cast whose target has either as its primitive is declined at compile time.
+// The [value.Context] is env.names: only the QName and NOTATION mappings read
+// one (PRINCIPLES 19), a cast to xs:NOTATION is declined at compile time
+// (ctaTypes.castTarget), and the static context reaches a QName mapping only
+// under a StringLiteral's cast to xs:QName (ctaEnv.names). Elsewhere it is
+// nil, which carries no binding for a QName mapping to resolve a lexical
+// against.
 //
 // A failure is ctaRaised either way, and the branch is what says WHICH error
 // it is (STYLE E2). A [value.IsDatatypeVerdict] error is a verdict about the
@@ -4151,7 +4176,7 @@ func ctaCanonical(v value.Value, from *xsd.SimpleType, env ctaEnv) (string, bool
 // Alternative's casts target builtins alone (ctaTypes.castTarget), and no
 // builtin has an assertions facet.
 func ctaValidate(lexical string, st *xsd.SimpleType, env ctaEnv) ctaItem {
-	v, err := value.ValidateLexical(env.backend, env.types, st, lexical, nil, env.input.facets())
+	v, err := value.ValidateLexical(env.backend, env.types, st, lexical, env.names, env.input.facets())
 	if err == nil {
 		return ctaSingleton(v)
 	}

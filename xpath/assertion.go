@@ -1213,14 +1213,14 @@ type AssertionTest struct {
 //   - a QName for which attrs reports false;
 //   - an attribute whose type is not ·special· and does not atomize to one
 //     atomic value of a type known at compile time — a list or union {variety}
-//     — or whose {primitive type definition} is xs:QName or xs:NOTATION, which
-//     carry no ·canonical representation· to convert through. The variety is
-//     classified here, not trusted to attrs. An attribute whose type is
-//     ·special· is read as xs:untypedAtomic and is admitted;
+//     — or whose {primitive type definition} is xs:NOTATION
+//     (ctaTypes.typedAtomic). The variety is classified here, not trusted to
+//     attrs. An attribute whose type is ·special· is read as xs:untypedAtomic
+//     and is admitted;
 //   - a `$value` over an [xsd.SimpleContent] whose {simple type definition} the
 //     bullet above declines as an attribute's type, unless it is a list whose
 //     {item type definition} that bullet admits — so a union, a list of a
-//     union, and an xs:QName or xs:NOTATION primitive or item type decline. A
+//     union, and an xs:NOTATION primitive or item type decline. A
 //     ·special· one is read as xs:untypedAtomic and is admitted;
 //   - any variable but `$value` and, inside a quantifier's body, its range
 //     variable, which is not in the static context at all (err:XPST0008) — so
