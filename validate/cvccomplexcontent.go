@@ -121,9 +121,11 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // sawElement and sawText record which kinds of [[children]] arrived, which is
 // what cvc-elt clause 5's case split and clause 5.2.2.1 quantify over, and, for
 // a ·nilled· element, whether it has any [[children]] at all, which
-// [walk.assertionValue] reads. They are not derivable from initial, which is
-// gathered conditionally and holds nothing for the elements whose text no
-// clause reads.
+// [walk.assertionValue] reads. Under a nil matcher sawElement also says whether
+// [contentCheck.match] already recorded clause 1.4's decline at a child, or
+// [contentCheck.sequenceEnd] must record it at the element. They are not
+// derivable from initial, which is gathered conditionally and holds nothing for
+// the elements whose text no clause reads.
 type contentCheck struct {
 	e          Element
 	g          governance
@@ -497,7 +499,8 @@ func (c *contentCheck) match(w *walk, child Element) (xsd.Attribution, bool) {
 //
 //   - simple: clause 1.2's ·initial value· half, over the same gathered runs.
 //   - element-only and mixed: clause 1.4, for a sequence that ran out with a
-//     particle its {min occurs} left open.
+//     particle its {min occurs} left open, or, under a nil matcher, its
+//     decline for a sequence with no element information item.
 //
 // An empty {content type} settles nothing here. Clause 1.1 quantifies over the
 // [[children]] PRESENT, every one of which was already decided as it arrived.
@@ -752,11 +755,24 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 // to be ·valid· with respect to {particle}, so a sequence whose open-content
 // items were all admitted still fails where the particle they were interleaved
 // with is left short of its {min occurs}.
+//
+// Under a nil matcher clause 1.4 is undecided for the sequence as a whole, the
+// EMPTY sequence included: whether a {content type} accepts no element
+// information item at all is the matcher's to say, and a particle whose {min
+// occurs} is positive rejects it. Where an element [[child]] arrived,
+// [contentCheck.match] has already recorded that decline at the child; where
+// none did, it is recorded here at the element's own location, so the element
+// never reaches [Result] with clause 1.4 neither decided nor recorded.
 func (c *contentCheck) sequenceEnd(w *walk) {
+	clause := c.contentClause()
 	if c.matcher == nil {
+		if !c.sawElement {
+			c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcComplexContent, clause,
+				"the element %s has no element information item among its [[children]], and that empty sequence was not matched against the {content type} of its ·governing type definition·: xsd.Schema.ContentMatcher does not decide that {content type}'s shape, so whether the sequence is ·valid· with respect to it as cvc-complex-content clause %s requires is undecided",
+				c.e.Name(), clause)
+		}
 		return
 	}
-	clause := c.contentClause()
 	if c.matcher.Accepting() {
 		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcComplexContent, clause, "accepted")
 		return

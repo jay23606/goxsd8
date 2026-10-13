@@ -218,20 +218,20 @@
 // cvc-accept and reports the answer as an Attribution, and ATTRIBUTES
 // through Schema.AllowsAttributeWildcardName, there being no attribute-side
 // matcher to carry one. Nothing exported answers clause 1 alone about a
-// Wildcard: NamespaceConstraint.AllowsName and
-// NamespaceConstraint.AllowsNamespace sit beneath both as the {namespace
-// constraint} property's own accessors, naming the narrower rule
-// (cvc-wildcard-name, §3.10.4.2) they decide, and a caller admitting a name
-// reaches for one of the two above instead. Schema.ValidlySubstitutable is
-// the derivation half's one exported entry point, for the instance-side
-// reader of key-val-sub-type that cvc-elt clause 4 and
-// key-governing-type-elem clause 6 need (key-overrides), and that
-// cvc-complex-type clause 5 asks against the ·locally declared type·
+// Wildcard: NamespaceConstraint.AllowsName and NamespaceConstraint.AllowsNamespace
+// sit beneath both as the {namespace constraint} property's own accessors, naming
+// the narrower rule (cvc-wildcard-name, §3.10.4.2) they decide, and a caller
+// admitting a name reaches for one of the two above instead.
+// Schema.ValidlySubstitutable is the derivation half's one exported entry point, for
+// the instance-side reader of key-val-sub-type that cvc-elt clause 4 and
+// key-governing-type-elem clause 6 need (key-overrides), and that cvc-complex-type
+// clause 5 asks against the ·locally declared type·
 // Schema.LocallyDeclaredElementType answers (key-ldt-elem).
-// Schema.ElementDefaultValid is cos-valid-default's, for the one cvc-elt
-// clause 5.1.1 charges at assessment time over a type an xsi:type supplied
-// rather than over any declaration's. The rest is in-package machinery
-// finalize drives.
+// Schema.ContainedElementDeclarations is the set that definition's case 2 reads, for
+// validate/jsonsrc, which classifies a JSON member by local name against it.
+// Schema.ElementDefaultValid is cos-valid-default's, for the one cvc-elt clause
+// 5.1.1 charges at assessment time over a type an xsi:type supplied rather than over
+// any declaration's. The rest is in-package machinery finalize drives.
 //
 // One of the two drivers designed on that algebra ships: Matcher,
 // validation's pull driver. Schema.ContentMatcher returns one over a

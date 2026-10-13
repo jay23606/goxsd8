@@ -216,3 +216,26 @@ func TestUndecidedContentModelIsRecordedPerChild(t *testing.T) {
 		Unevaluated{rule: ruleCvcComplexContent, loc: loc(2, 1), msg: "cvc-complex-content clause 1"},
 		Unevaluated{rule: ruleCvcComplexContent, loc: loc(3, 1), msg: "cvc-complex-content clause 1"})
 }
+
+// The same {content type} over an element with no element [[child]] leaves
+// the EMPTY sequence unmatched, and that is recorded once, at the element's
+// own location: declinedContent's b has {min occurs} 1, so the sequence is not
+// ·valid·, and an empty Result there would read as a valid document.
+// White-space text, which clause 1.3 admits, changes nothing.
+func TestUndecidedContentModelIsRecordedForAnEmptySequence(t *testing.T) {
+	schema := cSchema(t, declinedContent(t))
+	for _, tc := range []struct {
+		name string
+		root Element
+	}{
+		{"no children", cRoot()},
+		{"white space only", cRoot("# ")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, undecided := assessRecorded(t, schema, tc.root)
+			wantSilence(t, got, "an unmatched empty sequence charges nothing")
+			wantDeclines(t, undecided,
+				Unevaluated{rule: ruleCvcComplexContent, loc: loc(1, 1), msg: "the element root has no element information item"})
+		})
+	}
+}

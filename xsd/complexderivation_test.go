@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -921,5 +922,91 @@ func TestLocallyDeclaredElementType(t *testing.T) {
 	got, ok := s.locallyDeclaredElementType(complexType(uq("T")), uq("e"), explicitOnly)
 	if !ok || got.Name() != uq("str") {
 		t.Fatalf("locallyDeclaredElementType(T, e, explicitOnly) = %v, %v, want str from B", got, ok)
+	}
+}
+
+// TestContainedElementDeclarations pins the set key-ldt-elem case 2 reads, in
+// the order the export promises: T's reference to h first, then the top-level
+// e it ·implicitly contains· through h's ·substitution group·. B contains its
+// local e and not the wildcard beside it, xs:anyType's wildcard-only content
+// contains nothing, and a simple-content type contains nothing.
+func TestContainedElementDeclarations(t *testing.T) {
+	s := ldtSchema(t)
+	complexType := func(s *Schema, name QName) ComplexType {
+		t.Helper()
+		td, ok := s.Type(name)
+		if !ok {
+			t.Fatalf("%s is not a type of the schema", name)
+		}
+		ct, ok := td.(ComplexType)
+		if !ok {
+			t.Fatalf("%s is not a ComplexType", name)
+		}
+		return ct
+	}
+	for _, tc := range []struct {
+		why    string
+		s      *Schema
+		within QName
+		want   []ScopeVariety // one per declaration, in order; names below
+		names  []QName
+	}{
+		{"explicit then implicit", s, uq("T"), []ScopeVariety{ScopeGlobal, ScopeGlobal}, []QName{uq("h"), uq("e")}},
+		{"a local declaration, the wildcard beside it left out", s, uq("B"), []ScopeVariety{ScopeLocal}, []QName{uq("e")}},
+		{"wildcard-only content", s, anyTypeName, nil, nil},
+		{"simple content", dSimpleContentSchema(t), uq("ext"), nil, nil},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			got := tc.s.ContainedElementDeclarations(complexType(tc.s, tc.within))
+			if tc.names == nil {
+				if got != nil {
+					t.Fatalf("ContainedElementDeclarations(%s) = %d declarations, want nil", tc.within, len(got))
+				}
+				return
+			}
+			if len(got) != len(tc.names) {
+				t.Fatalf("ContainedElementDeclarations(%s) = %d declarations, want %d", tc.within, len(got), len(tc.names))
+			}
+			for i, d := range got {
+				if d.Name() != tc.names[i] || d.ScopeVariety() != tc.want[i] {
+					t.Errorf("declaration %d = %s (%v), want %s (%v)", i, d.Name(), d.ScopeVariety(), tc.names[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+// TestContainedElementDeclarationsOnePerComponent pins the de-duplication: a
+// sequence referencing the top-level h twice contains ONE declaration, while
+// two local declarations sharing the name e are two components and both stay.
+func TestContainedElementDeclarationsOnePerComponent(t *testing.T) {
+	b := NewSchemaBuilder()
+	b.AddType(dAnyType(t))
+	str := dPrimitive(t, uq("str"))
+	b.AddType(str)
+	b.AddElement(uGlobal(t, uq("h"), uq("str")))
+	model := uGroup(t, CompositorSequence,
+		uOne(t, ElementDeclarationRef{Name: uq("h")}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("e"), uq("str"))}),
+		uOne(t, ElementDeclarationRef{Name: uq("h")}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("e"), uq("str"))}))
+	b.AddType(dType(t, uq("T"), anyTypeName, dElementContent(t, false, model), nil, nil))
+	s, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	td, _ := s.Type(uq("T"))
+	ct, ok := td.(ComplexType)
+	if !ok {
+		t.Fatalf("T is not a ComplexType")
+	}
+	got := s.ContainedElementDeclarations(ct)
+	var names []QName
+	for _, d := range got {
+		names = append(names, d.Name())
+	}
+	want := []QName{uq("h"), uq("e"), uq("e")}
+	if !slices.Equal(names, want) {
+		t.Fatalf("ContainedElementDeclarations(T) names = %v, want %v", names, want)
 	}
 }

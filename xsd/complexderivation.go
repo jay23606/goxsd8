@@ -641,6 +641,40 @@ func (s *Schema) LocallyDeclaredElementType(within ComplexType, name QName) (Typ
 	return s.locallyDeclaredElementType(within, name, withImplicit)
 }
 
+// ContainedElementDeclarations returns the element declarations within's
+// ·content model· ·contains· — directly, indirectly or ·implicitly·
+// (key-impl-cont), the set key-ldt-elem case 2 reads — in document order, the
+// implicitly contained substitution-group members after the explicit ones.
+// Each declaration COMPONENT appears once, however many paths reach it; two
+// distinct declarations sharing an expanded name both appear. It is nil for
+// an empty or simple {content type} and for a content model containing
+// wildcards alone. within must be a Complex Type Definition of s: the
+// <element ref>s and <group ref>s its content model holds resolve against s.
+//
+// A caller that keys on an expanded name may take the FIRST declaration of
+// that name as the representative of every other: cos-element-consistent
+// (§3.8.6.3) holds same-named declarations of one content model to one
+// {type definition} and to ·equivalent· {type table}s, clauses 1-4, which
+// checkSameTypeDefinition and checkTopLevelTypeTable (elementconsistent.go)
+// enforce on every Schema that finalized.
+//
+// It is EXPORTED for validate/jsonsrc, which classifies a JSON object's
+// member keys against the declarations an element's type contains and cannot
+// re-derive the set without a second content-model walk and a second copy of
+// substitution-group membership (STYLE T4/T5). It is contentModelDeclarations
+// under withImplicit and nothing more.
+func (s *Schema) ContainedElementDeclarations(within ComplexType) []ElementDeclaration {
+	contained := s.contentModelDeclarations(within, withImplicit)
+	if len(contained) == 0 {
+		return nil
+	}
+	out := make([]ElementDeclaration, 0, len(contained))
+	for _, e := range contained {
+		out = append(out, e.decl)
+	}
+	return out
+}
+
 // containment says which declarations a ·content model· is read as ·containing·
 // for key-ldt-elem case 2: those it contains directly or indirectly, or those
 // and the ones it contains ·implicitly· (key-impl-cont) too.

@@ -457,7 +457,7 @@ import (
 //     (cvc-complex-content), whose empty sequence is ·valid· only where the
 //     particle is emptiable (cvc-particle, "possibly empty"). The gate refuses
 //     a {content type} ContentMatcher declines and a child sequence it rejects
-//     or does not accept, a second check on the walk's charge. Clause 1
+//     or does not accept, a second check on the walk's record or charge. Clause 1
 //     applies only to an element that is not ·nilled·: a ·nilled· one's
 //     [[children]] are cvc-elt clause 3.2.3.1's, which the walk charges, and
 //     the gate reads them without its ContentMatcher, refusing an element

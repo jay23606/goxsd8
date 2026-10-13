@@ -3,11 +3,13 @@ package conformance
 import (
 	"fmt"
 	"os"
+	"slices"
 	"testing"
 )
 
-// TestConformance runs the W3C suite through the lane executors and enforces
-// the ratchet, per conformance/doc.go.
+// TestConformance runs the W3C suite, and the curated JSON corpus beside it
+// (curatedJSONCases), through the lane executors and enforces the ratchet, per
+// conformance/doc.go.
 //
 //   - Submodule absent: fail with a pointer to `git submodule update --init`
 //     (issue #309), unless a read-only run explicitly opted out with
@@ -38,9 +40,6 @@ import (
 //   - GOXSD_RATCHET_SUPERSEDED=<lane>:<id>,…: the same gate, naming the
 //     superseded passes each lane banks as `fail` (issue #1827).
 //   - GOXSD_CASE=<id>: narrow execution to one case across all lanes.
-//
-// At M1 no real executor is registered, so every case is a stub Fail and, with
-// empty committed lane files, every case is New — the read-only run passes.
 func TestConformance(t *testing.T) {
 	ratcheting := os.Getenv("GOXSD_RATCHET") == "1"
 	removals := assertedRemovals(t, ratcheting)
@@ -55,10 +54,14 @@ func TestConformance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parsing suite: %v", err)
 	}
-	t.Logf("discovered %d cases across %d lanes, %d withheld as inapplicable",
-		len(found.cases), len(defaultLanes()), len(found.withheld))
+	curated, err := curatedJSONCases(jsonCorpusIndex)
+	if err != nil {
+		t.Fatalf("reading the curated JSON corpus: %v", err)
+	}
+	t.Logf("discovered %d cases across %d lanes, %d withheld as inapplicable, and %d curated JSON cases",
+		len(found.cases), len(defaultLanes()), len(found.withheld), len(curated))
 
-	cases := found.cases
+	cases := append(slices.Clip(found.cases), curated...)
 	if only, ok := os.LookupEnv("GOXSD_CASE"); ok {
 		cases = narrowToCase(t, cases, only)
 	}

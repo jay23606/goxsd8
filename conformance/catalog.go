@@ -210,7 +210,7 @@ func catalogFromSet(set testSet, setDir, suiteDir string) ([]CatalogEntry, error
 // having no encoding for "nothing declared". Discovery refuses the same entry,
 // so refusing it here is also what keeps the two ID sets equal. A withheld one
 // is described, discovery recording its ID without reading its declaration.
-func catalogEntry(setName, kind string, t validityTest, g testGroup, setDir, suiteDir string, levelsOK bool) (CatalogEntry, error) {
+func catalogEntry(setName string, kind caseKind, t validityTest, g testGroup, setDir, suiteDir string, levelsOK bool) (CatalogEntry, error) {
 	id := caseID(setName, g.Name, kind, t.Name)
 	withheld := !levelsOK || !versionApplicable(t.Version)
 	want, declared := resolveExpected(t.Expected)
@@ -242,22 +242,25 @@ func catalogEntry(setName, kind string, t validityTest, g testGroup, setDir, sui
 // is right to end a run over a catalog entry it cannot test; a reader asked
 // which entries name a path must still describe the entry that names none,
 // and such an entry matches no path, so nothing is admitted by it.
-func catalogDocs(kind string, t validityTest, setDir, suiteDir string) ([]string, error) {
-	if kind == kindInstance {
+func catalogDocs(kind caseKind, t validityTest, setDir, suiteDir string) ([]string, error) {
+	switch kind {
+	case kindInstance, kindJSON:
 		return suiteRelative(suiteDir, []string{resolveDoc(setDir, t.InstanceDoc.Href)})
+	case kindSchema:
+		doc, extra, ok := resolveDocs(t.SchemaDocs, setDir)
+		if !ok {
+			return nil, nil
+		}
+		return suiteRelative(suiteDir, append([]string{doc}, extra...))
 	}
-	doc, extra, ok := resolveDocs(t.SchemaDocs, setDir)
-	if !ok {
-		return nil, nil
-	}
-	return suiteRelative(suiteDir, append([]string{doc}, extra...))
+	panic(fmt.Sprintf("conformance: caseKind %d names no document under test", kind))
 }
 
 // groupCatalogSchemaDocs is the schema documents an instance entry is assessed
 // against, suite-relative. groupSchemaDocs yields none for a schemaTest and
 // none for a group that declares no single schemaTest, and this reader carries
 // that refusal through unchanged.
-func groupCatalogSchemaDocs(kind string, g testGroup, setDir, suiteDir string) ([]string, error) {
+func groupCatalogSchemaDocs(kind caseKind, g testGroup, setDir, suiteDir string) ([]string, error) {
 	doc, extra := groupSchemaDocs(kind, g, setDir)
 	if doc == "" {
 		return nil, nil

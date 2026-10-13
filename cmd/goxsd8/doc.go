@@ -276,11 +276,13 @@
 // today: schema compilation and XML instance assessment are reachable through
 // parser, xsd, validate and validate/xmlsrc, which reads a DOCTYPE the way
 // validate does, and the README shows both routes for them. The capabilities
-// this page reserves have no library route either — validate/jsonsrc (M8),
-// codegen (M9) with codec (M10) and validate/bersrc (M11) each export nothing
-// yet, so for JSON instances, code generation and BER instances there is no
-// second route to document until those milestones land. Error output is
-// stable and line-oriented for scripting.
+// this page reserves have no library route either, save one: codegen (M9)
+// with codec (M10) and validate/bersrc (M11) each export nothing yet, so for
+// code generation and BER instances there is no second route to document
+// until those milestones land. validate/jsonsrc exports Validate for the
+// first slice of M8's JSON mapping, which -format json does not reach until
+// the mapping is whole. Error output is stable and line-oriented for
+// scripting.
 //
 // # Diagnostic lines
 //

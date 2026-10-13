@@ -878,9 +878,10 @@ func TestValidateFormatVocabulary(t *testing.T) {
 }
 
 // TestValidateJSONInstanceIsReservedNotSilent pins the same answer reached
-// through the extension rather than the flag: validate/jsonsrc carries a
-// doc.go and no Validate, so a .json instance earns the usage code and a
-// not-yet-implemented line — never a pass.
+// through the extension rather than the flag: the CLI does not route to
+// validate/jsonsrc, whose Validate maps M8's first slice alone, so a .json
+// instance earns the usage code and a not-yet-implemented line — never a
+// pass.
 func TestValidateJSONInstanceIsReservedNotSilent(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	args := []string{"validate", "-schema", orderSchema, "instance.json"}

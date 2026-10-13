@@ -93,12 +93,30 @@ func New(schema *xsd.Schema, backend value.Backend, opts ...Option) (*Validator,
 	return &Validator{schema: schema, backend: backend, log: cfg.log.WithGroup("validate")}, nil
 }
 
-// Schema returns the read-only view of the compiled schema an adapter needs
-// to resolve a root element declaration by expanded name, and nothing else
-// (STYLE T3). The walk reads the *xsd.Schema itself and not this narrowing, so
-// widening the accessor is the job of a CALLER that needs more, never of a rule
-// inside the package.
-func (v *Validator) Schema() xsd.ElementResolver { return v.schema }
+// SchemaView is the read-only view of the compiled schema a source adapter
+// reads to build the infoset it hands [Validator.Assess] (STYLE T3): a root
+// element declaration resolved by expanded name, the top-level declarations
+// to choose one from when the source names a root by local name alone, a
+// declaration's {type definition} resolved to its component, and the
+// declarations a complex type's content model contains, against which an
+// adapter whose source spells no namespace classifies a child by local name.
+//
+// Each method is the [xsd.Schema] method of the same name and answers on its
+// terms.
+type SchemaView interface {
+	xsd.ElementResolver
+	Elements() []xsd.ElementDeclaration
+	ResolvedType(ref xsd.TypeDefinitionOrRef) (xsd.TypeDefinition, bool)
+	ContainedElementDeclarations(within xsd.ComplexType) []xsd.ElementDeclaration
+}
+
+var _ SchemaView = (*xsd.Schema)(nil)
+
+// Schema returns the [SchemaView] of the compiled schema v assesses against.
+// The walk reads the *xsd.Schema itself and not this narrowing, so widening
+// the view is the job of a CALLER that needs more, never of a rule inside the
+// package.
+func (v *Validator) Schema() SchemaView { return v.schema }
 
 // Result is the outcome of one [Validator.Assess] call.
 type Result struct {
@@ -146,9 +164,10 @@ func (r *Result) Violations() []*xsderr.Error {
 //     ·locally declared type· (key-sva (§3.3.4.6) clause 1.2);
 //   - content (cvccomplexcontent.go): String Valid (§3.16.4) over an element's
 //     ·initial value· (cvc-type clause 3.1.3, cvc-complex-type clause 1.2), a
-//     fixed {value constraint} comparison (cvc-elt clause 5.2.2.2.2), and an
-//     element [[child]] left unmatched because xsd.Schema.ContentMatcher does
-//     not decide its parent's {content type} (cvc-complex-content);
+//     fixed {value constraint} comparison (cvc-elt clause 5.2.2.2.2), and,
+//     where xsd.Schema.ContentMatcher does not decide an element's {content
+//     type}, each element [[child]] left unmatched, or the element itself where
+//     it has none (cvc-complex-content);
 //   - attributes (cvcattribute.go): cvc-attribute clauses 3, 4 and 5, cvc-au,
 //     and a ·defaulted attribute·'s {lexical form} (cvc-complex-type clause 4);
 //   - the ID/IDREF table (cvcid.go): each item that could have been in the

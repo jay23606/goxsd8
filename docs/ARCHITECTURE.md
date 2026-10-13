@@ -80,7 +80,7 @@ Value implementations, parsing, validation, and generation live above them.
 ```
 
 **[1] These boxes are DESTINATIONS, not shipped layers.**
-`validate/jsonsrc`, `validate/bersrc`, `codegen`, `codec` and
+`validate/bersrc`, `codegen`, `codec` and
 `builtin/native` are `doc.go`-only today: `go doc` renders no exported
 identifier for any of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
@@ -90,8 +90,8 @@ statically-check entry points, and the assertion compile and evaluate ones,
 and imports `xsd`, `value`, `regex` and
 `xsderr` for real (its section says which tiers are shipped).
 
-**[2] The infoset seam, the assessment skeleton and the XML adapter ship;
-the other two adapters do not.** `validate` exports the infoset views and
+**[2] The infoset seam, the assessment skeleton, the XML adapter and the
+first slice of the JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views and
 `New`/`Validator`/`Result` and imports `xsd`, `xsderr`, `value`, `xpath` and
 `icpath` — no longer `regex` directly, whose NCName class left with the
 identity-constraint path lexer for `icpath`, though it stays in the closure
@@ -101,14 +101,18 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `Produce` (see its section);
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and imports
 `parser/xmltree`, `validate`, `xsd` and `xsderr` — and neither `loader` nor
-`parser`, which an imports test pins; `validate/jsonsrc` and
-`validate/bersrc` are destinations, on `[1]`'s terms.
+`parser`, which an imports test pins; `validate/jsonsrc` exports
+`Validate`/`Option`/`WithURI`, imports `validate`, `xsd`, `xsderr` and
+`encoding/json`, and reads the schema through `validate.SchemaView`, the
+view `Validator.Schema` returns, to name the root and classify members;
+`validate/bersrc` is a destination, on `[1]`'s terms.
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
 `internal/xmlenc`, `internal/xmlname`, `internal/xmlchar`,
 `internal/xmltok`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
 `parser`, `parser/xmltree`, `xpath`, `icpath`, `validate`,
-`validate/xmlsrc`, `conformance` and `cmd/goxsd8` carry code today.
+`validate/xmlsrc`, `validate/jsonsrc`, `conformance` and `cmd/goxsd8` carry
+code today.
 
 **The module has two tiers, and the dependency rules govern the first.**
 The **library** is what a consumer imports — the packages above plus
@@ -598,12 +602,14 @@ it charges nothing, under the `GAP(xpath)` marker on `validate`'s
 
 **Status: the engine ships the seam and charges the cvc- rules
 `validate/doc.go` names, at the ·validation root· and at every descendant the
-descent types; the XML adapter ships over it.**
+descent types; the XML adapter and the JSON adapter's first slice ship over
+it.**
 `validate` exports the infoset views (`Element`, `Attribute`, `Text`,
 `Children`, `Child`, with `ElementChild`/`TextChild` constructing the sum),
 the two optional document-level capabilities an adapter may implement
 (`UnparsedEntities`, `DeclarationsProcessed`, narrowed off the root),
-plus `New`/`Validator`/`Result`/`Option`/`WithLogger` and `Unevaluated`
+plus `New`/`Validator`/`Result`/`Option`/`WithLogger`, `SchemaView` (what
+`Validator.Schema` returns: the schema reads an adapter makes) and `Unevaluated`
 (`Rule`/`Loc`/`Msg`, read off `Result.Unevaluated`: one check the assessment
 reached and did not perform, deliberately not an `error`), and `Assess` walks a
 source once. **Read which rules it charges, which clauses of each, and which
@@ -616,8 +622,10 @@ current; do not restate it here beyond this list.** The value-space
 charges reach a `value.Backend` through `New`'s required second parameter,
 which must be the backend the schema was compiled with.
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and drives that walk
-over an XML instance decoded by `parser/xmltree`; `validate/jsonsrc` and
-`validate/bersrc` are `doc.go`-only (M8/M11). Everything below not covered
+over an XML instance decoded by `parser/xmltree`; `validate/jsonsrc`
+exports the same three and drives it over a JSON instance, on the arms its
+`doc.go` names as implemented (M8, first slice); `validate/bersrc` is
+`doc.go`-only (M11). Everything below not covered
 by that seam is the destination, stated in present tense because it is a
 design contract.
 
@@ -746,19 +754,11 @@ compiles, is documented, and has **zero** callers module-wide.
   `regex.FlavorFO` sat here on the same terms until `xpath` and `icpath`
   took it for their NCName prefix scanners (#979; `validate`'s scanner moved
   to `icpath`); the F&O functions it was built for still arrive at M6/M7.
-- **`validate.Validator.Schema()`** — exported for "the read-only view of
-  the compiled schema an adapter needs" (its godoc), but no
-  adapter uses it and, per `validate/doc.go`, none can: adapters build
-  infoset values and never resolve declarations. Its one call site is
-  inside `validate`, in `Validator.Assess`, which reads the narrowing and
-  so falsifies its own doc's second sentence ("The walk reads the
-  `*xsd.Schema` itself and not this narrowing"). Filed as **#848**:
-  unexport, or name the real consumer. Whichever way it goes, settle
-  `xsd.ElementResolver` with it: this method's return type is that
-  interface's only consumer module-wide, and its sibling
-  `xsd.AttributeResolver` — whose godoc still names "the instance validator
-  (a future consumer)" — already has none, `validate` having shipped and
-  resolved attributes by another route.
+- **`xsd.AttributeResolver`** — whose godoc still names "the instance
+  validator (a future consumer)" — has no consumer, `validate` having shipped
+  and resolved attributes by another route. `validate.Validator.Schema()`
+  left this list when `validate/jsonsrc` became its consumer through
+  `validate.SchemaView`, which embeds `xsd.ElementResolver` (#848 re-scope).
 - **`parser.Element` / `Node` / `Text` and the raw-tree accessors** — the
   bulk consumer is still `conformance`'s decidability model
   (`conformance/schema.go`'s `schemaShapeDecidable` and its predicates hold

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The curated json-lane corpus (conformance/doc.go, "The curated JSON
+     corpus"): one group per validate/jsonsrc arm, each with a valid and an
+     invalid case. Every instanceTest is a json case assessed against its
+     group's schemaTest documents; the schemaTest is not a case of its own.
+     An invalid case's documentation opens "expects <rule>", the rule the
+     engine charges it under, which TestJSONCorpusChargesItsNamedRules holds
+     it to. -->
+<testSet xmlns="http://www.w3.org/XML/2004/xml-schema-test-suite/"
+         xmlns:xlink="http://www.w3.org/1999/xlink"
+         name="goxsd8-json" contributor="goxsd8">
+  <testGroup name="scalar">
+    <annotation>
+      <documentation>A scalar-valued member is its element's simple content: {"size":10} is &lt;size&gt;10&lt;/size&gt;.</documentation>
+    </annotation>
+    <schemaTest name="scalar">
+      <schemaDocument xlink:href="order.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
+    <instanceTest name="scalar.v">
+      <instanceDocument xlink:href="scalar.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="scalar-integer.v">
+      <annotation>
+        <documentation>A number's lexical form is its source text: 12345678901234567890 is an xs:integer, which a float64 round trip would not keep.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="scalar-integer.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="scalar.i">
+      <annotation>
+        <documentation>expects cvc-type: "ten" is not an xs:integer (clause 3.1.3, String Valid; cvc-datatype-valid beneath it).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="scalar.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
+  <testGroup name="child">
+    <annotation>
+      <documentation>A member whose key is the local name of a child element declaration of the enclosing type is that child, in member order; an object value carries its children.</documentation>
+    </annotation>
+    <schemaTest name="child">
+      <schemaDocument xlink:href="order.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
+    <instanceTest name="child.v">
+      <annotation>
+        <documentation>memo is implicitly contained through note's substitution group.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="child.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="child.i">
+      <annotation>
+        <documentation>expects cvc-complex-content: item before size breaks the sequence (cvc-complex-type clause 1.4).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="child.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+    <instanceTest name="child-content.i">
+      <annotation>
+        <documentation>expects cvc-type: the grandchild sku "abc" fails the sku pattern (cvc-pattern-valid beneath it).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="child-content.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
+  <testGroup name="array">
+    <annotation>
+      <documentation>An array value is one child per item under the member's key, in item order.</documentation>
+    </annotation>
+    <schemaTest name="array">
+      <schemaDocument xlink:href="order.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
+    <instanceTest name="array.v">
+      <instanceDocument xlink:href="array.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="array.i">
+      <annotation>
+        <documentation>expects cvc-complex-content: a third item exceeds item's maxOccurs of 2 (cvc-complex-type clause 1.4).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="array.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+    <instanceTest name="array-empty.i">
+      <annotation>
+        <documentation>expects cvc-complex-content: an empty array is no item, below item's minOccurs of 1 (cvc-complex-type clause 1.4).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="array-empty.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
+</testSet>

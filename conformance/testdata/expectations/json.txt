@@ -1,0 +1,9 @@
+goxsd8-json/array/json/array-empty.i pass
+goxsd8-json/array/json/array.i pass
+goxsd8-json/array/json/array.v pass
+goxsd8-json/child/json/child-content.i pass
+goxsd8-json/child/json/child.i pass
+goxsd8-json/child/json/child.v pass
+goxsd8-json/scalar/json/scalar-integer.v pass
+goxsd8-json/scalar/json/scalar.i pass
+goxsd8-json/scalar/json/scalar.v pass

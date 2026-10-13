@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The schema every json-lane case is assessed against: one root, order,
+     whose sequence holds each shape the validate/jsonsrc arms map. size is a
+     scalar of xs:integer; item is element-only, repeats once or twice, and
+     holds a patterned sku; note is an optional reference to a head whose
+     substitution group memo joins. Local declarations are qualified, so a
+     JSON key's namespace comes from its declaration. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:goxsd8:json:order" xmlns="urn:goxsd8:json:order"
+           elementFormDefault="qualified">
+  <xs:element name="order">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="size" type="xs:integer"/>
+        <xs:element name="item" maxOccurs="2">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="sku" type="sku"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element ref="note" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:simpleType name="sku">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Z]{3}"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="note" type="xs:string"/>
+  <xs:element name="memo" type="xs:string" substitutionGroup="note"/>
+</xs:schema>

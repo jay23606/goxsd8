@@ -151,7 +151,7 @@ func (v *Validator) Assess(root Element) *Result {
 	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend), entities: entities,
 		declsUnread: told && !processed.AllDeclarationsProcessed(), now: time.Now().UTC()}
 	var g governance
-	d, found := v.Schema().Element(root.Name())
+	d, found := v.schema.Element(root.Name())
 	if found {
 		g = w.declaredGovernance(root, d, nil)
 	}

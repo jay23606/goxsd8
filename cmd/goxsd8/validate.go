@@ -232,9 +232,11 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 	if format != formatXML {
-		// A token the contract reserves and no milestone has built: validate/
-		// jsonsrc and validate/bersrc carry a doc.go apiece and no Validate, so
-		// the honest answer is the usage code and this diagnosis, never a
+		// A token the contract reserves and no milestone has built:
+		// validate/bersrc carries a doc.go and no Validate, and
+		// validate/jsonsrc's Validate maps the first slice of M8's JSON
+		// mapping alone, declining attributes, null and the reserved members,
+		// so the honest answer is the usage code and this diagnosis, never a
 		// silent pass.
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %s: -format %s is reserved by the contract and not yet implemented; only %s instances are assessed today", instance, format, formatXML))
 	}

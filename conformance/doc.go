@@ -35,6 +35,21 @@
 // pass — rather than bound to whichever declaration the suite author wrote
 // first (issues #446, #862).
 //
+// # The curated JSON corpus
+//
+// The json lane's cases are not the suite's: they live at
+// conformance/testdata/json/json.testSet, a testSet in the suite's own catalog
+// format beside the schema and JSON documents it names. Each instanceTest is
+// one json case, ID `goxsd8-json/<group>/json/<test>`, assessed through
+// validate/jsonsrc against its group's schemaTest documents; a schemaTest
+// there is not a case. An invalid case's documentation opens "expects
+// <rule>", the cvc-* rule the engine charges it under, and a unit test holds
+// it to that. Add a case by adding an instanceTest and its document.
+//
+// TestConformance reads the corpus beside the suite (jsoncases.go). Neither
+// parseSuite nor the Catalog reader sees it, and only the json lane's selector
+// claims its cases, so it moves no other lane's total.
+//
 // # Lanes and expectation files
 //
 // Expectations are committed at conformance/testdata/expectations/, one
