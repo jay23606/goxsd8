@@ -17,11 +17,12 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-13 (post-land #2516, on `main` at `e2a9438`)
+## Status — 2026-10-13 (post-land #2400, on `main` at `7df8069`)
 
 **No assertion decline is startable, so the north star is open until the next
-`/backlog` names one.** #2516 landed (the `xpath` comment and rename sweep, no
-behaviour change, ratchet unchanged). The assertion cluster is still
+`/backlog` names one.** #2400 landed (arm (b): `Tally`'s hooks say they serve
+`validate`, and `AssertionTest.Tally`'s doc is reflowed; docs only, ratchet
+unchanged). The assertion cluster is still
 `VC/vc002.v1` alone, which waits on #1880. The two largest `instance` clusters
 are ruled (`MS-Regex` 18, #1899) or wait on an owner (`VC` 16, #1880), so no
 `instance` cluster has a startable owner. **Lean: product,** as the eleventh
@@ -29,7 +30,7 @@ are ruled (`MS-Regex` 18, #1899) or wait on an owner (`VC` 16, #1880), so no
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `e2a9438`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `7df8069`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -42,7 +43,7 @@ lane score (#1120).
 | `schema` | 15296 | 102 | 15398 |
 | `xpath` | — | — | 0 |
 
-**Every lane is unchanged since the last stamp** (#2516 touched no expectations
+**Every lane is unchanged since the last stamp** (#2400 touched no expectations
 file). **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane
 with no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete.
 `schema` is M4 and `instance` is M5, and both are active. `xpath`, `json` and
@@ -52,9 +53,9 @@ with no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete.
 
 **Measured on `6f714c3`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
 conformance run (exit 0, PASS, 489 s), fed to `go tool lanepartition` with a
-whole-repository issue walk. **Not re-run on `e2a9438`:** #2516 changed comments,
-unexported names and one unreachable guard, its verdict recorded no evaluation
-change, and gate part 4 on this stamp's tree matches every banked line. Every
+whole-repository issue walk. **Not re-run on `7df8069`:** #2516 and #2400 changed
+comments, unexported names and one unreachable guard, neither verdict recorded an
+evaluation change, and #2400's gate part 4 matched every banked line. Every
 figure is a part of the banked fails and a bound from above.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
@@ -93,13 +94,13 @@ figure is a part of the banked fails and a bound from above.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`go tool wipsurvey` was fed a whole-repository walk at `e2a9438` (`rows 2595
-distinct 2595 min 1 max 2595 no gaps`).
+`go tool wipsurvey` was fed a whole-repository walk at `7df8069` (`rows 2597
+distinct 2597 min 1 max 2597 no gaps`).
 
-- **No `wip/issue-<N>` is LIVE.** `wip/issue-2516` is gone: #2516 landed.
+- **No `wip/issue-<N>` is LIVE.** `wip/issue-2400` is gone: #2400 landed.
 - **`wip/issue-2013`, `wip/issue-2081` and `wip/issue-2332` are unchanged:**
   `2013` and `2332` print RETIRED, both issues closed `not_planned` with their
-  contents accounted for; `2081` prints EXPIRED (261h), a parked grounding with
+  contents accounted for; `2081` prints EXPIRED (263h), a parked grounding with
   no code on an issue `blocked` on an owner ruling. A human may delete all three.
 - **Certified for deletion by the 2026-10-10 branch-namespace pass and still
   standing, because no container can delete a ref:** `chronicler-345`,
@@ -114,15 +115,15 @@ distinct 2595 min 1 max 2595 no gaps`).
 
 ### Marker census
 
-`go tool gapaudit`, fed the walk above at `e2a9438`, reports **155 markers
+`go tool gapaudit`, fed the walk above at `7df8069`, reports **155 markers
 across 10 areas** (xpath 63, xsd 32, validate 26, value 11, parser 8,
-conformance 7, xml 3, landcheck 2, regex 2, cmd 1), unchanged: #2516 moved no
+conformance 7, xml 3, landcheck 2, regex 2, cmd 1), unchanged: #2400 moved no
 marker. **Group 1 has 11 rows and zero dead ends,** the same 11. **Group 2 has
 25 rows.**
 
 ### Milestones and queue
 
-**Counted from the walk above: 337 open issues.** The milestone counts are
+**Counted from the walk above: 336 open issues.** The milestone counts are
 GitHub's own milestone listing.
 
 | milestone | open | closed | state |
@@ -138,18 +139,17 @@ GitHub's own milestone listing.
 M3's one open issue is #2566, a `value.Context` doc defect; it is follow-up, not
 milestone scope.
 
-The open issues are **321 `ready`, 14 `blocked`, 0 `needs-replan` and 2
-`epic`**, which sums to 337. Open `kind/process` is 17: #1880 and #1885 are
+The open issues are **320 `ready`, 14 `blocked`, 0 `needs-replan` and 2
+`epic`**, which sums to 336. Open `kind/process` is 17: #1880 and #1885 are
 `blocked` on the owner, and #2247, #2250, #2251, #2308, #2360, #2399, #2420,
 #2482, #2498, #2503, #2512, #2513, #2569, #2582 and #2590 are `ready`.
 
 - **`blocked` is 14, the same 14:** #16, #555, #1002, #1042, #1051, #1374,
   #1609, #1790, #1880, #1885, #2022, #2081, #2376 and #2533. No dependency or
   trigger has fired:
-  - No `blocked` body depends on #2516.
-  - #2533's trigger has not fired: #2516's one new refusal (`ctaChildPathOf` on
-    a nil last) is a compile-time constructor's, not a decline at evaluation
-    time, and `castTarget` admits no user-defined target.
+  - No `blocked` body depends on #2400.
+  - #2533's trigger has not fired: #2400 changed only comments, and
+    `castTarget` admits no user-defined target.
   - #1042 waits on `vc002.v1` (#1002, #1880) and on the slices its body lists as
     not yet filed.
   - #1609's arm 1 (`schema` Fail 0) has not fired: Fail is 102. No landing since
@@ -157,9 +157,9 @@ The open issues are **321 `ready`, 14 `blocked`, 0 `needs-replan` and 2
   - #2376 waits on #2370, and #1051 on #1183 and #1196. All three are open.
   - #1374 and #555 wait on written triggers, and #16 on M9.
   - No human ruling is recorded on #1880, #1885, #1790, #2022 or #2081.
-- **Measured refactors on `e2a9438`.** #2516 is out (57 → 10; the 10 are now
-  #2400's Acceptance). New: #2595 (1). #2516 touched `xpath/` alone, so the
-  figure reading `xpath` was re-run: #2239 (2), flat. The rest read files no
+- **Measured refactors on `7df8069`.** #2400 touched `xpath/assertion.go`
+  alone, so the figure reading `xpath` was re-run: #2239 (2), flat. #2595 (1)
+  reads `xpath/cta.go`, untouched. The rest read files no
   commit since `e2ee593` touched, so their figures stand: #2373 (16), #2374
   (22), #2372 (27), #1958 (2), #1757 (1), #2370 (35), #2359 (14), #2329 (1),
   #2101 (1 and 1), #363 (2), #2205 (2), #1865 (2), #1080 (8), #2237 (24 refusal
@@ -167,11 +167,12 @@ The open issues are **321 `ready`, 14 `blocked`, 0 `needs-replan` and 2
 
 ### Persona consultations: none owed
 
-#2516 changed no exported identifier (`go tool surface -base origin/main`:
-unchanged) and no README or `cmd/` text. **No libuser consultation is owed until
-#2400, #2312 or #2577 lands:** three rounds have returned the same asks, and the
-next round reads #2553's `xpath.ChildWithAttributes` and
-`AssertionTest.ReadsChildAttributes` with them. cliuser is not owed either.
+#2400 changed no exported identifier (`go tool surface -base origin/main`:
+unchanged) and no README or `cmd/` text, but it changed `go doc ./xpath`'s
+`Tally` text, which three libuser rounds asked for. **A libuser round is owed at
+the next `/backlog`:** it reads the new `Tally` sentence, #2553's
+`xpath.ChildWithAttributes` and `AssertionTest.ReadsChildAttributes`, and
+whether #2312 has landed. cliuser is not owed.
 
 ### Working band
 
@@ -184,21 +185,20 @@ wait.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2400 | **The libuser BLOCKING finding, at its third consultation.** A runnable `Tally` example or the sentence routing callers to `validate`. Either arm now also reflows `AssertionTest.Tally`'s method doc, the last 10 lines in `xpath/assertion.go` over 92 columns. |
-| 2 | #2312 | **The other half of that finding:** the package doc's opening paragraph and a supported/declined table in place of the growth-tiers prose. Whichever of rows 1 and 2 lands second keeps them consistent. |
-| 3 | #2577 | **libuser's near-blocking finding.** Doc sentences on `Backend.Mapping` and `xpath.Typed`, and a runnable `ValidateLexical` example on xs:integer. No surface change. |
+| 1 | #2312 | **The rest of the libuser BLOCKING finding.** #2400 put the routing sentence on `Tally`; this puts the package doc's opening paragraph and a supported/declined table in place of the growth-tiers prose, and keeps that sentence true. |
+| 2 | #2577 | **libuser's near-blocking finding.** Doc sentences on `Backend.Mapping` and `xpath.Typed`, and a runnable `ValidateLexical` example on xs:integer. No surface change. |
 
 **Tier B: startable beside a LIVE Tier A row.** No row touches the `xpath`
 assertion files.
 
 | # | issue | why here |
 |---|---|---|
-| 4 | #2555 | **A wrong verdict in `validate`'s assertion value reads:** a cvc-elt clause 4 violation escapes `walk.element`'s `recorded` check. Its grounding measures any lane move first. #2553 left it scoped to `childValue`. |
-| 5 | #2561 | **The same layer:** an attribute that failed a fixed-value check is read as its declared type. The oracle rules first. Take it after row 4, or absorb it. |
-| 6 | #2566 | **A `value.Context` doc defect, with libuser's nil finding folded in.** Doc only. `ctaNames.LookupNamespace` is a fourth implementer and already answers the empty prefix as this states. |
-| 7 | #2494 | **Carried from the last band.** An oracle rules whether a `standalone="yes"` No External Entity References charge after an unread PE reference is definite. |
-| 8 | #2574 | **#2404's follow-up:** a non-XSD-namespace `<schema>` root's message omits the namespace that makes it wrong. |
-| 9 | #2575 | **#2404's other follow-up:** `mustCiteOpenableLocations` never checks the non-schema-root line's in-sentence location. Test only. |
+| 3 | #2555 | **A wrong verdict in `validate`'s assertion value reads:** a cvc-elt clause 4 violation escapes `walk.element`'s `recorded` check. Its grounding measures any lane move first. #2553 left it scoped to `childValue`. |
+| 4 | #2561 | **The same layer:** an attribute that failed a fixed-value check is read as its declared type. The oracle rules first. Take it after row 3, or absorb it. |
+| 5 | #2566 | **A `value.Context` doc defect, with libuser's nil finding folded in.** Doc only. `ctaNames.LookupNamespace` is a fourth implementer and already answers the empty prefix as this states. |
+| 6 | #2494 | **Carried from the last band.** An oracle rules whether a `standalone="yes"` No External Entity References charge after an unread PE reference is definite. |
+| 7 | #2574 | **#2404's follow-up:** a non-XSD-namespace `<schema>` root's message omits the namespace that makes it wrong. |
+| 8 | #2575 | **#2404's other follow-up:** `mustCiteOpenableLocations` never checks the non-schema-root line's in-sentence location. Test only. |
 
 **Named below the band, on purpose.**
 - **M6, after Tier A:** #2455 rules E's string value under simple content and
@@ -208,7 +208,7 @@ assertion files.
   #2516's follow-up, figure 1). A session taking either absorbs the other.
 - **Same files as Tier A:** #2394 (the lexers' white space), #2370 (the
   `validate` E5 sweep, which touches `cvcassertion.go`), #2314 and #2313 (the
-  docs ruling rows 1 and 2 respect), and the CTA residue #889 and #894.
+  docs ruling row 1 respects), and the CTA residue #889 and #894.
 - **`parser/xmltree`'s reader, one at a time:** #2101, #2073 and #2402, after or
   beside #2494.
 - **STYLE E5 sweeps,** measured flat: #2372, #2373, #2374 and #2375. #2376 waits
@@ -226,11 +226,11 @@ assertion files.
 - **Conformance bookkeeping:** #1803, #1881 and #785. **Doc fixes:** #1343 and
   #1502. **`value`:** #721, #2045 and #462. **`internal/xmlenc`:** #361 and
   #363.
-- **Process.** None of these cost a round in consecutive sessions, and #2516
+- **Process.** None of these cost a round in consecutive sessions, and #2400
   recorded no friction:
   - #2590 (a grounding ruled an input accepted with no clause, #2548) has no
     second sighting.
-  - #2582 did not recur at #2587 or #2516.
+  - #2582 did not recur at #2587, #2516 or #2400.
   - #2503 cost one round once, at #2473, and gained a no-round sighting at
     #2553.
   - #2399 has a sighting at most landings of this window, all survey reads and
@@ -242,8 +242,8 @@ assertion files.
     #2247 have no new round lost.
 - **Tooling:** #2542 first: `lanepartition` still cannot print the rulings
   (`MS-Regex`, `MS-Attribute`, `MS-Particles`) this stamp re-derived by hand.
-  Then #2235 (the survey walk rebuilt from a script file again this pass, no
-  round lost), then the two `go tool surface` defects, #2203 and #2539, then
+  Then #2235 (the survey walk and a body PATCH run from script files again this
+  pass, no round lost), then the two `go tool surface` defects, #2203 and #2539, then
   #1897, #2541, #1935, #2070, #2066, #678, #1464, #1838 and #1794.
 - **Refactors:** measured flat are #2329, #1958, #1865, #1757, #363, #2101,
   #2205, #2237, #2239, #1080, #2359 and #2370; #2595 is new at 1. #989, #1735,
@@ -253,8 +253,8 @@ assertion files.
 
 1. **The next `/backlog`, now due:** no assertion decline is startable. It
    names the next north star from the clusters above, re-running the
-   `GOXSD_DECLINES=1` join, and says which marker or issue owns `schema`'s 4
-   `TypeAlternativeTests` cases.
+   `GOXSD_DECLINES=1` join, says which marker or issue owns `schema`'s 4
+   `TypeAlternativeTests` cases, and runs the owed libuser round.
 2. **The twelfth `/retro`,** overdue since Sunday 2026-10-11. It re-dials the
    band's lean, takes #2569 and #2582, reads #2399 against a window in which
    most landings recorded a sighting and none lost a round, and reads #2503's
