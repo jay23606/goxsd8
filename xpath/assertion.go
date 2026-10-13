@@ -496,6 +496,8 @@ type ContextElement interface {
 // Its consumer is validate's cvc-assertion site (validate/cvcassertion.go),
 // which reports each element it walks, and each element of a ·skipped· subtree
 // by name, to the Tally of every enclosing element's {assertions} that has one.
+// Its methods exist for package validate, and a caller outside the module is
+// not expected to drive them.
 type Tally struct {
 	// counters holds one counter per counted key, in the order
 	// [AssertionTest.Tally] made them (fits).
@@ -1658,29 +1660,35 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e Conte
 	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: in}) == ctaTrue
 }
 
-// Tally returns a fresh, empty [Tally] for one evaluation of t, holding one counter
-// for each distinct relative path an fn:count call in t counts over — a step,
-// a child step filtered by attribute existence, or a union, one counter serving `c[@a and @b]`
-// and `c[@b and @a]`, and `e | e` and `e` — and each distinct path — one element step, a child
-// path of two or more steps, its last step a QName or `*`, a child step filtered by its
-// children's existence, one counter serving `N[a and b]` and `N[b and a]`, or one filtered by
-// a `preceding::` step, `N[preceding::M[not(P)]]` — whose existence t asks (fn:exists,
-// fn:empty, an ·effective boolean value·), one counter serving a path both counted and asked —
-// and, for each quantified expression over a child step whose body is read off the Tally, the
-// children satisfying its body, `N[@A]` or the N followed by an M sibling, and, under `every`,
-// the children it binds, `N`, one counter serving `count(N)` and `every $v in N satisfies …` —
-// and one collector for each distinct path to an attribute whose values t reads, fn:sum's
-// argument `a/b/@p`, and for each distinct path of child steps whose elements' values t reads,
-// fn:data's argument `a/b` — or nil exactly where t neither counts nor reads a value below E — a
-// {test} with none of these, or one whose every fn:count argument is rooted and raises, is a
-// child step filtered by its value, which [ChildElements] answers, or is no path and counts
-// none, as `count($value)` counts the items of `$value`. t itself is not changed, so one
-// compiled test serves any number of evaluations, each with its own Tally.
+// Tally returns a fresh, empty [Tally] for one evaluation of t, holding one
+// counter for each distinct relative path an fn:count call in t counts over — a
+// step, a child step filtered by attribute existence, or a union, one counter
+// serving `c[@a and @b]` and `c[@b and @a]`, and `e | e` and `e` — and each
+// distinct path — one element step, a child path of two or more steps, its last
+// step a QName or `*`, a child step filtered by its children's existence, one
+// counter serving `N[a and b]` and `N[b and a]`, or one filtered by a
+// `preceding::` step, `N[preceding::M[not(P)]]` — whose existence t asks
+// (fn:exists, fn:empty, an ·effective boolean value·), one counter serving a
+// path both counted and asked — and, for each quantified expression over a
+// child step whose body is read off the Tally, the children satisfying its
+// body, `N[@A]` or the N followed by an M sibling, and, under `every`, the
+// children it binds, `N`, one counter serving `count(N)` and `every $v in N
+// satisfies …` — and one collector for each distinct path to an attribute whose
+// values t reads, fn:sum's argument `a/b/@p`, and for each distinct path of
+// child steps whose elements' values t reads, fn:data's argument `a/b` — or nil
+// exactly where t neither counts nor reads a value below E — a {test} with none
+// of these, or one whose every fn:count argument is rooted and raises, is a
+// child step filtered by its value, which [ChildElements] answers, or is no
+// path and counts none, as `count($value)` counts the items of `$value`. t
+// itself is not changed, so one compiled test serves any number of evaluations,
+// each with its own Tally.
 //
 // Its consumer is validate's walk (validate/cvcassertion.go), which reads the
 // nil as its gate: only an element one of whose {test}s has a Tally reports its
 // subtree to one, and which children a value step reads stays
-// [AssertionTest.ReadsChild]'s answer alone.
+// [AssertionTest.ReadsChild]'s answer alone. The Tally's methods exist for
+// package validate, and a caller outside the module is not expected to drive
+// them.
 func (t AssertionTest) Tally() *Tally {
 	keys := t.countedPaths()
 	if len(keys.counted) == 0 && len(keys.collected) == 0 {
