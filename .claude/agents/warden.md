@@ -46,7 +46,12 @@ A pre-flight settles **shape**: signatures, sums, which package owns what,
 which return channel carries which distinction. It does not settle a
 lane-affecting gate or a list of sites; where it names sites, it says
 whether each was read or inferred, since mason checks them against the tree
-before building on them (#863).
+before building on them (#863). A contract it approves types each field
+and parameter to the arms legal at that site, never to a wider sum that
+contains them, and states what each `ok` or boolean result answers at the
+input the spec makes a boundary; a ruling that a construct declines or
+keeps its behaviour is checked against the landed tests for that
+production (#2503).
 
 Your verdict is read by agents with no other context, and is often
 transcribed into an issue body. So make it internally consistent: if a
@@ -57,7 +62,15 @@ When you find that one part of a change must precede another, say so as an
 **ordering constraint**. Ordering is satisfied by commit order on a single
 branch; it is not by itself a reason to split the work into another issue
 (docs/WORKFLOW.md, "Scope"). Recommend a split only when the later part
-needs its own grounding or will not fit the session — and say which.
+needs its own grounding or will not fit the session — and say which. A
+commit order is not shape: say whether each commit was observed green or
+only predicted, and mason keeps every commit green before it keeps the
+order (#2360).
+
+A diff review runs the gate in your own worktree, judging the named
+commit there, and returns the verdict, never a notice that you are
+waiting on a run (docs/WORKFLOW.md **One writer per checkout**, #2251,
+#2250).
 
 ```
 API REVIEW: approve | revise

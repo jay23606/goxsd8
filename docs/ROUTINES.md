@@ -85,7 +85,12 @@ translate the local times above and mind DST drift. Keep develop slots
   every verdict, grounding and account you post** and compare its length
   with the file: a comment that went up as a
   one-line path, or never went up, is lost the moment the container is
-  (#1411, #1428).
+  (#1411, #1428). **A write that answers HTTP 5xx or nothing is retried
+  after a pause** — a `git push` blindly, since repeating it is safe, but
+  an issue, comment or PR creation only after reading back whether the
+  first attempt landed (the issue list, the thread, the PRs for that head
+  branch), or the retry leaves a duplicate the next session reads as two
+  (#2482).
 
   **The MCP channel's reads are lossy.** It deletes angle-bracketed tokens
   from the issue bodies it returns, escapes `'`, `"` and `&` to `&#39;`,
@@ -109,27 +114,33 @@ translate the local times above and mind DST drift. Keep develop slots
   trustworthy (#802); on a complete clone git refuses it, which is the
   answer, not a failure.
 - Cloud containers cannot delete or force-push remote refs — the git proxy
-  rejects both. The workflow never needs to: landing cleanup is GitHub's
-  auto-delete on merge, and abandoned branches are retired in place.
+  rejects both, and the REST refs endpoint answers 403. The workflow never
+  needs to: landing cleanup is GitHub's auto-delete on merge, and
+  abandoned branches are retired in place.
 - **No human is watching, and no process outlives the turn that started it.**
   Commands must never wait for input — abort and log instead. An agent turn
   does not carry a live child process across invocations, so a command still
   running when the turn ends is dead: run the gate, and every other
   multi-minute command, in the **foreground** and block on its real exit
   code in the same turn. The shell tool caps one foreground call at 10
-  minutes; a command that may outrun that runs as a tracked background
-  command whose exit the same turn waits for. A turn — a subagent's
-  included — that ends "waiting for" a run has produced nothing and costs
-  the whole dispatch (#1047, #1698).
+  minutes; gate part 4 and the ratchet run can outrun that, so run them as
+  a tracked background command whose tool `timeout` covers part 4's own
+  `-timeout 30m` — at least 1800000 ms — and wait on its exit in the same
+  turn (#2420). Return only your report: an interim "waiting on background
+  work" notice is not one (#1047, #1698, #2250). A container restart kills
+  any run in flight, and only committed work survives it.
 - **The permission layer refuses some command shapes, some writes and some
   reads; none is a wall.**
   - **Run one plain command per call.** The worktree-isolation guard
     refuses a command line it calls too complex to verify: `&&` or `;`
     chains, a pipe into or out of `gh` or `git`, a loop, a heredoc, a
     shell variable in a command. Run a gate part's chained commands one
-    per call, each spelled exactly as CLAUDE.md writes it — the anchored
-    `-skip '^TestConformance$'` runs as a plain command, so that is still
-    the gate (#1923). Use `go -C <dir>` and `git -C <dir>` rather than
+    per call, each spelled exactly as CLAUDE.md writes it (#1923). The
+    guard refuses even the plain anchored `-skip '^TestConformance$'` at
+    times, in every role: then run `-skip TestConformance`, which skips the
+    same tests while `TestConformance` is the only test whose name
+    contains it, and name the refusal and the spelling run in your account
+    (#2250). Use `go -C <dir>` and `git -C <dir>` rather than
     `cd <dir> &&`; write a body or payload to a scratch file and send it
     with `-F body=@FILE` or `--input FILE`; run a multi-step procedure,
     the Survey input walk among them, as a script file invoked as a bare

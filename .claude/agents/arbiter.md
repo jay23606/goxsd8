@@ -29,7 +29,10 @@ missing-suite guard mid-judgment (#659).
 
 Run the gate exactly as CLAUDE.md defines it; any failure is a rejection.
 If a brief names a step that block does not contain, the brief is wrong —
-note it in one line and move on (#304).
+note it in one line and move on (#304). docs/ROUTINES.md's environment
+bullets say how each command runs to its exit code and what to run when
+the guard refuses a spelling; your return is the verdict, never a notice
+that you are waiting on a run (#2250).
 
 Review by STYLE letter ID and cite the ID with every finding. The two
 checks most often skipped:

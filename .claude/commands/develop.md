@@ -28,14 +28,18 @@ delegate's agent file assigns it, the arbiter's ratchet run on accept
 above all (#1812); never asks a subagent to push, since its commits leave
 its worktree only through WORKFLOW's hand-off (#2133); and never names a
 `Co-Authored-By` model — each commit names the model that wrote it
-(#1996).
+(#1996). Re-read a brief before sending it: a placeholder where pasted
+text belongs sends nothing (#2513).
 
 **Lost rounds.** A delegated round — mason's, the arbiter's, any agent's —
 is lost when it ends without its report: the agent returned without one,
-or the session that delegated it is gone. Elapsed time is not a
-signature; a round still running is not lost however long it takes
-(#1426). Re-delegate a lost round from the thread as it stands, never
-re-grounding: a mason round from the `GROUNDING:` comment, naming the dead
+a placeholder counting as none, or the session that delegated it is gone.
+Elapsed time is not a signature; a round still running is not lost
+however long it takes (#1426), and an interim notice that the agent is
+waiting on its own background work is neither its report nor a loss:
+wait for the report (#2250). Re-delegate a lost round from the thread as
+it stands, never re-grounding: a mason round from the `GROUNDING:`
+comment, naming the dead
 worktree in the new prompt if it is still on disk with commits so the
 round resumes from them; a judge round from the tree it was judging.
 **Every re-delegation after a loss posts a `RESUME:` or `TAKEOVER:`
@@ -76,11 +80,13 @@ counts.
      Delegate a `/backlog` pass to **cartographer** and land it as
      `.claude/commands/backlog.md` does.
    - Otherwise claim the highest-priority `ready` issue — `docs/PLAN.md`'s
-     Working band orders them — that reads `open` (a closed issue can
-     still wear `ready`), whose dependencies are closed, with no live
-     branch, and whose `## Notes` names no same-file relation to an issue
-     with a LIVE branch (#1111). Claim with a commit only this session
-     could write, then push it:
+     Working band orders them — that reads `open`, whose dependencies are
+     closed, with no live branch, and whose `## Notes` names no same-file
+     relation to an issue with a LIVE branch (#1111). A closed issue can
+     still wear `ready`, and the band keeps landed rows until its next
+     stamp, so read each row's state from the issue list that fed
+     `wipsurvey`, never issue by issue (#2399). Claim with a commit only
+     this session could write, then push it:
 
      ```sh
      git switch -c wip/issue-<N> origin/main
@@ -103,8 +109,10 @@ counts.
    Before delegating the oracle, run `git submodule update --init
    testdata/xsdtests` in the checkout it reads (#1989).
 
-   Grounding is posted as ONE `GROUNDING:` comment — the only durable copy
-   — with each block headed by the agent that wrote it:
+   Delegate the grounding arbiter with worktree isolation: its probes are
+   writes (WORKFLOW **One writer per checkout**). Grounding is posted as
+   ONE `GROUNDING:` comment — the only durable copy — with each block
+   headed by the agent that wrote it:
    - the **oracle** answers the spec — the clauses and rule IDs in scope —
      and rules each `## Acceptance` bullet whose truth turns on spec text.
      An issue whose `## Spec` is n/a has no oracle block, and says so.
@@ -134,7 +142,11 @@ counts.
      shares its encoding (#1868);
    - for a fault-versus-limitation discriminator, each behaviour a
      conforming processor must supply that this one lacks, and the bucket
-     the discriminator puts a well-formed input exercising it in (#2075).
+     the discriminator puts a well-formed input exercising it in (#2075);
+   - a target case's decline: a `GOXSD_DECLINES=1` token names the exit
+     that declined, not the construct, so a case counts as held by the
+     issue's construct alone only once its whole `{test}` or document is
+     read for a second declining construct (#2582).
 
    **ACCEPTANCE** — rule every bullet as the filer wrote it, against the
    current tree. Two questions, and a bullet fails on either: **can this
@@ -212,7 +224,8 @@ counts.
    `wip/issue-<N>` under WORKFLOW's **One writer per checkout** hand-off
    clause — fast-forward or merge, never a replay. If the change added or
    altered public API in that same sense, warden reviews the diff too
-   (#1168). Post both verdicts on the issue.
+   (#1168), with worktree isolation, since it runs the gate. Post both
+   verdicts on the issue.
 
    Mason may absorb adjacent work under docs/WORKFLOW.md's scope rule.
    Absorbed items belong in the commit body, not in a new issue.
@@ -249,7 +262,10 @@ counts.
    landing unblocked, and dispose of every follow-up this session raised
    while it is still fresh. Tell it in the same prompt that its
    `post-land` log entry lands through its own PR — commit locally, open a
-   PR, squash-merge it — never a push straight to `main` (#1109).
+   PR, squash-merge it — never a push straight to `main` (#1109). Before
+   the session ends, read that PR's state back: an open one is yours to
+   land, merged forward with WORKFLOW's positional `docs/LOG` resolution,
+   because an entry left on a branch is read by no later session (#1897).
 
 Ending early at a checkpoint with a good `RESUME:` comment is a successful
 session. Budget: one landing.

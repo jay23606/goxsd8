@@ -19,7 +19,9 @@ rule the sentence means.
 entry — write the rule's headline beside its ID**: `STYLE D3 (one fact, one
 encoding)`, `PRINCIPLES 9 (phased construction beats cycle checks)`. A real
 but wrong ID then contradicts the words next to it at the moment it is
-written (#548).
+written (#548). Copy the headline from this file's bold text at that ID,
+opened for the purpose: a headline written from memory is the headline of
+whichever rule memory supplies (#2569).
 
 ## Control flow
 

@@ -9,6 +9,11 @@ long-horizon memory. You plan; you never write code; you never close an
 issue as done — only the develop loop does that. Closing issues as
 obsolete or duplicate is yours to do freely.
 
+Your worktree starts with the W3C suite empty: run `git submodule update
+--init testdata/xsdtests` before any census, survey or gate run in it.
+A grep over the empty directory answers "no match" and reads as a census
+(#659).
+
 ## Post-land pass (after every landing)
 
 Cheap and targeted, not a full backlog run. Three duties:
@@ -30,9 +35,16 @@ Cheap and targeted, not a full backlog run. Three duties:
    an earlier sighting before deciding which this is.
 3. **Leave the pass's own signal on `main`** — a dated `post-land` entry
    in `docs/LOG/<year>-<month>.md` naming what was unblocked and how each
-   follow-up was disposed of, including the zero case. Land that entry
-   through its own PR — commit locally, open a PR, and squash-merge it in
-   this same pass; never commit it directly to `main`. Without that entry
+   follow-up was disposed of, including the zero case, in the chronicler's
+   entry shape (`.claude/agents/chronicler.md` Duty 1): a heading whose
+   outcome is one clause, and a Friction bullet only for what the
+   documents did not predict — a documented refusal is a clause naming
+   its rule, not a paragraph. Land that entry through its own PR — commit
+   locally, open a PR, and squash-merge it in this same pass; never commit
+   it directly to `main`. A merge refused because a later landing grew
+   the `docs/LOG` tail is merged forward with WORKFLOW's positional
+   resolution and tried again: a pass that ends with its PR open has left
+   its entry where no session reads it (#1897). Without that entry
    a completed pass and a skipped one are indistinguishable from `git log`,
    and a session has already concluded — and committed — the wrong one
    (#400). If the pass restamps `docs/PLAN.md`, step 6's replacement rule
@@ -126,10 +138,13 @@ already done, and the commit body says so.
    by REPLACEMENT: paste `go tool lanestatus` verbatim for the lane
    table — never hand-count an expectations file — read the milestone and
    queue counts from GitHub, rewrite the section from those numbers, and
-   stamp it with today's date. Never append a dated paragraph beside the old
-   text and never correct a number in place — the whole section is
-   replaced or it is not touched, and nothing edits it between stamps: a
-   row whose issue closed waits for the next stamp, and a falsified
+   stamp it with today's date. Splice from the line opening `## Status` to
+   the next line opening `## `, matched at line start: `## Milestones` is
+   also a substring of `### Milestones and queue`. Never append a dated
+   paragraph beside the old text and never correct a number in place —
+   the whole section is replaced or it is not touched, and nothing edits
+   it between stamps: a row whose issue closed waits for the next stamp,
+   and a falsified
    premise is corrected in the issue's body (#1630). PLAN.md is status —
    the lane table, the queue counts, the band and the next action — while
    `docs/LOG` is history and GitHub is the queue, so the section carries

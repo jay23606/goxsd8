@@ -20,7 +20,9 @@ For API- or CLI-facing milestones, **you** — this session, not the
 cartographer — delegate to **libuser** and **cliuser** when the published
 surface changed since their last consultation, giving each only the README
 and `go doc` output, then hand their reports to the cartographer to fold
-into issue bodies. Their findings are banded like any product issue; a pass
+into issue bodies. A hand-back with no report in it — empty, or a
+placeholder — is a persona round not yet delivered: resume or re-run it
+(#2513). Their findings are banded like any product issue; a pass
 that consults while earlier findings stand unconsumed says why. A cartographer subagent cannot
 spawn them, and it has already read the source, so a persona it
 role-played itself would launder an insider's opinion as an outsider's

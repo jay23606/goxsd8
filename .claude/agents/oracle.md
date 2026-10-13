@@ -27,7 +27,10 @@ Grep conventions (the anchors survive in the Markdown): rule IDs
   it, keep reading before answering. Which check answers first — the
   schema-for-schemas grammar, a parser ordering — is a question about this
   repository, not the spec: name the rule you believe answers first and
-  say it is unverified, never state it as the charge (#1488).
+  say it is unverified, never state it as the charge (#1488). An input
+  you rule accepted, valid or exempt beside a charge gets the clause that
+  makes it so, quoted; where no clause does, say so and flag it as a
+  possible suite divergence, never as a reading (#2590).
 - You are authoritative about the spec and silent about this repository.
   A sentence in your answer about the code — "that cannot reach here" — is
   a claim the implementer checks, not a ruling (#654).

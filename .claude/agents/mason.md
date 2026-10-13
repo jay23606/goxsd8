@@ -87,19 +87,26 @@ Run `git submodule update --init testdata/xsdtests` before the gate:
 with the W3C suite empty whatever the session's checkout holds, and the
 gate fails on the missing-suite guard (#659).
 
-The gate (CLAUDE.md) passes. New behavior has tests that can actually
-fail, and **every claim your account makes about behaviour is run, not
-imagined** — the worktree is isolated so you can break the line, watch
-the test, and put it back. A mutation you describe and did not execute is
-the one the arbiter runs (#472). A test comment claiming a case
-discriminates a path — "this fails without X" — is such a mutation, and
-your account names it and its result (#642). A comment that says which
-rows a mutation fails is written from that run's output and names those
-rows and no others; a comment written before the run names no outcome
-(#2463). Mutate the message too: two
-arguments swapped inside one `fmt.Errorf` changes no branch and leaves
-every asserted substring present, so an assertion pins a subject only by
-pinning the opening `parser: <subject> at <loc>` as a prefix (#1048). A
+The gate (CLAUDE.md) passes, each command run to its exit code as
+docs/ROUTINES.md's environment bullets say, and your return is your
+account, never a notice that you are waiting on a run (#2250). New
+behavior has tests that can actually fail, and **every claim your account
+makes about behaviour is run, not imagined** — the worktree is isolated
+so you can break the line, watch the test, and put it back. Commit before
+you mutate and put the line back with an edit, never `git checkout
+<file>` or `git restore`, which revert your uncommitted work with it
+(#2512). A mutation you describe and did not execute is the one the
+arbiter runs (#472). A test comment claiming a case discriminates a path
+— "this fails without X" — is such a mutation, and your account names it
+and its result (#642). A comment that says which rows a mutation fails is
+written from that run's output and names those rows and no others; a
+comment written before the run names no outcome (#2463). A new arm of a
+sealed sum is deleted in each switch that names it, separately, and the
+account names the row that failed each time, or why no reachable row can
+(#2498). Mutate the message too: two arguments swapped inside one
+`fmt.Errorf` changes no branch and leaves every asserted substring
+present, so an assertion pins a subject only by pinning the opening
+`parser: <subject> at <loc>` as a prefix (#1048). A
 claim that your change leaves another caller's answers unchanged is a
 differential: run the functions it names against verbatim `origin/main`
 copies in a throwaway file, state the input count in your account, and
@@ -116,10 +123,16 @@ you can observe — plus the destination `wip/issue-<N>` branch by name and
 no SHA of its own, the shape you chose and the alternative it beats, the
 spec rules implemented, the cases that moved, what you absorbed beyond the
 issue body, the gate result, expected ratchet movement, and what you want
-scrutinized hardest. You never push and never switch branches, whatever a
-brief asks, so how your commits arrive on the destination — fast-forward or
-merge — and under what SHA is the orchestrator's, never yours to predict
-(#1099, #2133).
+scrutinized hardest. That last is a question no document decides: a risk
+PRINCIPLES 20 or a cited rule already decides — "this can charge where
+the spec may say otherwise" — is fixed in the withholding direction,
+declined under a `GAP(` marker, before handoff, whatever the brief
+pressed for, and the account names the fix (#2247).
+
+You never push and never switch branches, whatever a brief asks, so how
+your commits arrive on the destination — fast-forward or merge — and
+under what SHA is the orchestrator's, never yours to predict (#1099,
+#2133).
 
 **On a repair round, disposition every numbered item of the verdict** —
 delivered with its evidence, or not delivered with the reason. Withdrawing

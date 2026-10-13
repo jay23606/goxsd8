@@ -177,7 +177,10 @@ Invariants:
   that are not there while hiding ones that are.
   `git diff origin/main...HEAD` is the shape that works. Equally: judge
   the COMMITTED tree — if `git status --porcelain` is non-empty, what was
-  verified is not what will land.
+  verified is not what will land. A session that opens on an old checkout
+  moves to the fetched `origin/main` before it reads a rule or takes a
+  measurement: `CLAUDE.md` read and `lanestatus` run on a stale tree
+  answer for that tree.
 
 ## Checkpointing and hand-off
 
@@ -214,13 +217,16 @@ chooses (#350).
 
 - Only the orchestrating session's own git commands write into the
   `wip/issue-<N>` checkout.
-- **Any subagent spawned to write files gets worktree isolation** — the
-  harness's `isolation: "worktree"` option — whatever it writes: the
-  invariant is about the tree, not the file type, so the chronicler's LOG
-  entry is isolated exactly as a mason round is (#1392). A mason may also
-  break lines deliberately at any moment to check that a test notices. The
-  worktree's branch is local-only and never pushed; the two halves of a
-  `/retro` each get their own.
+- **Any subagent that writes files, runs a probe or runs the gate gets
+  worktree isolation** — the harness's `isolation: "worktree"` option —
+  whatever it writes: the invariant is about the tree, not the file type,
+  so the chronicler's LOG entry, a grounding arbiter's probe and a
+  warden's diff-review gate are isolated exactly as a mason round is
+  (#1392, #2251). A mason may also break lines deliberately at any moment
+  to check that a test notices. An isolated agent writes and moves HEAD in
+  its own worktree only: never `git checkout` or `git switch` in a
+  checkout a brief names. The worktree's branch is local-only and never
+  pushed; the two halves of a `/retro` each get their own.
 - The orchestrator never commits on a live subagent's behalf, for any
   reason — including a stop-hook "uncommitted changes" warning, which
   fires on an in-progress edit exactly as readily as a finished one
@@ -564,6 +570,11 @@ applied before filing and again before grounding something already filed:
   absolute banked figure; where one is needed it names
   `conformance/testdata/expectations/<lane>.txt` as the thing to read at
   work time (#646).
+- **A marker arm never asks this issue's landing to cite this issue.**
+  It says to remove the marker where the landing closes the gap, and
+  names a separate open tracker for any part left open; `Tracked by
+  #<this issue>` is a dead end the moment the issue closes (STYLE P3,
+  deliberate gaps are tracked; #2308).
 - **An `## Acceptance` bullet is ruled before anything is implemented
   against it** — `/develop` step 3, which owns the questions that ruling
   asks and the shape it is posted in. Writing the bullet correctly at
