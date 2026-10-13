@@ -316,7 +316,7 @@ func (ctaFacetFacade) contextNode() (ctaNodeArg, bool) {
 // modifications that leave the available documents alone, which reads as
 // clause 8's empty set and err:FODC0005; no grounding has ruled on it, so the
 // call is withheld rather than charged. `doc(())` never reaches here: it is
-// the empty sequence on every façade (ctaParser.docCall).
+// the empty sequence on every façade that calls the library (ctaParser.docCall).
 //
 // GAP(xpath): the call declines where it would raise. The direction is
 // [FacetAssertions]' withhold. (#1042)

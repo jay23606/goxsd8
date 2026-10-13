@@ -891,9 +891,9 @@ type ctaRangeItem struct{ st *xsd.SimpleType }
 // ctaBoundChild is the range variable `$v` of a quantifier over a typed child
 // step (ctaQuantifiedChildren) inside its body: one child of E, the evaluation's
 // ctaEnv.rangeChild, named name, whose typed value is of type st — the binding
-// step's ctaTypedChild.name and .st, copied at the one site building this node
-// (ctaAssertionFacade.childScope) — or the empty sequence for a ·nilled· one
-// (xpath-datamodel §6.2.4). Only ctaChildRangeFacade.variable compiles it.
+// step's ctaTypedChild.name and .st — or the empty sequence for a ·nilled· one
+// (xpath-datamodel §6.2.4). ctaAssertionFacade.childScope builds it, and
+// ctaChildRangeFacade.variable is the one site returning it.
 //
 // It is a ctaStep and no ctaRangeItem: `$v` is a NODE, so its ·effective
 // boolean value· is true whatever its value, a ·nilled· child's included
@@ -1838,7 +1838,7 @@ type ctaUnion struct{ operands []ctaTallied }
 func ctaUnionOf(operands []ctaCounted) (ctaCounted, bool) {
 	var distinct []ctaTallied
 	add := func(k ctaTallied) {
-		if !ctaHoldsPath(distinct, k) {
+		if !ctaHoldsKey(distinct, k) {
 			distinct = append(distinct, k)
 		}
 	}
@@ -1889,9 +1889,10 @@ type ctaChildPath struct {
 }
 
 // ctaChildPathOf is the ctaChildPath over parents and last, false where
-// parents is empty. parents is held, not copied: the parser builds it fresh.
+// parents is empty or last is nil. parents is held, not copied: the parser
+// builds it fresh.
 func ctaChildPathOf(parents []xsd.QName, last ctaElementTest) (ctaChildPath, bool) {
-	if len(parents) == 0 {
+	if len(parents) == 0 || last == nil {
 		return ctaChildPath{}, false
 	}
 	return ctaChildPath{parents: parents, last: last}, true
@@ -2478,7 +2479,7 @@ func (u ctaUnion) same(other ctaKey) bool {
 		return false
 	}
 	for _, k := range u.operands {
-		if !ctaHoldsPath(o.operands, k) {
+		if !ctaHoldsKey(o.operands, k) {
 			return false
 		}
 	}

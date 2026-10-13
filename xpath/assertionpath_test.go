@@ -176,6 +176,9 @@ func TestTalliedSelects(t *testing.T) {
 	if _, ok := ctaChildPathOf(nil, ctaExactName{name: a}); ok {
 		t.Error("ctaChildPathOf([], a) = true, want false: one step is ctaTypedChild's")
 	}
+	if _, ok := ctaChildPathOf([]xsd.QName{a}, nil); ok {
+		t.Error("ctaChildPathOf([a], nil) = true, want false: selectsElement would call a nil last")
+	}
 	aAny, _ := ctaChildPathOf([]xsd.QName{a}, ctaAnyName{})
 	child := ctaCountPath{axis: ctaCountChildren, name: b}
 	desc := ctaCountPath{axis: ctaCountDescendants, name: b}
