@@ -32,8 +32,9 @@ Value implementations, parsing, validation, and generation live above them.
                                     §4.3.3, App. F.1), which the same two readers must
                                     decode alike.
                                   - internal/xmlname, XML 1.0 5e [4] NameStartChar and
-                                    [4a] NameChar, which regex's \i/\c and
-                                    parser/xmltree's DOCTYPE name checks both read.
+                                    [4a] NameChar, which regex's \i/\c,
+                                    parser/xmltree's DOCTYPE name checks and
+                                    internal/xmltok's name checks read.
                                   - internal/xmlchar, XML 1.0 [2] Char, which
                                     parser/xmltree's character-reference and
                                     markup checks and internal/xmltok's text
@@ -133,8 +134,10 @@ one home in a stdlib-only `internal/<name>` leaf**; do not export it from
 either reader, and do not add an edge between them. `parser/xmltree` in particular never
 imports `regex` to reach one. The Name productions ([4] `NameStartChar`,
 [4a] `NameChar`) live in `internal/xmlname`, read by `regex`'s `\i`/`\c`
-sets and `parser/xmltree`'s DOCTYPE name checks; a further Name check
-(#1765, #2187) reads the same leaf. Whether that table is generated is
+sets, `parser/xmltree`'s DOCTYPE name checks and `internal/xmltok`'s name
+checks. [5] `Name` over those tables is still written twice, as `isName` in
+`parser/xmltree/doctype.go` and in `internal/xmltok/xmltok.go`, and #2600
+gives it its one home there. Whether that table is generated is
 #989's question, asked of `internal/xmlname`. [2] `Char` lives in
 `internal/xmlchar`, read by `parser/xmltree`'s character-reference check and
 markup check and `internal/xmltok`'s text check (#2187, #2265).
