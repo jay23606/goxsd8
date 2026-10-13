@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-13 (post-land of #2607, on `main` at `46bda66`)
+## Status — 2026-10-13 (post-land of #2608, on `main` at `22517a8`)
 
 **North star: grow the `json` lane, M8. Next is #2613, the attribute arm.**
 #2607 stood the lane up at 9 curated cases, all `pass`, so the twelfth
@@ -27,12 +27,13 @@ once. The next slices are filed, one arm each: #2613 (attribute members),
 CLI's `-format json` through jsonsrc once the mapping is whole. Each slice's
 yield is its own curated cases, so it is a measurement the slice creates,
 not a bound. **Lean: product, toward measurement.** Both measured lanes stand
-at what rulings leave. M7's first measured slice, #2608 (`schema` bound +3),
-runs beside the json slices because it touches a different package.
+at what rulings leave. M7's first slice, #2608, landed at `22517a8` with
+`schema` +3, as bounded. #894 now holds `CTATestStaticError`'s path alone, and
+it runs beside the json slices because it touches a different package.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `46bda66`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `22517a8`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -42,10 +43,10 @@ lane score (#1120).
 | `datatypes` | 1163 | 10 | 1173 |
 | `instance` | 26268 | 93 | 26361 |
 | `json` | 9 | 0 | 9 |
-| `schema` | 15296 | 102 | 15398 |
+| `schema` | 15299 | 99 | 15398 |
 | `xpath` | — | — | 0 |
 
-**`json` moved 0 → 9 at #2607 (`46bda66`). Every other lane is unchanged.**
+**`schema` moved 15296 → 15299 at #2608 (`22517a8`). Every other lane is unchanged.**
 **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with
 no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete.
 `schema` is M4 and `instance` is M5, and both are active. `json` is M8 and the
@@ -56,17 +57,18 @@ W3C suite. `xpath` waits on M7 and `ber` on M11.
 
 **Measured on `b79687d`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
 conformance run (exit 0, PASS, 570 s), fed to `go tool lanepartition`. It stands
-on `46bda66`. Since then the only change to the engine is #2607's
-`contentCheck.sequenceEnd` record. #2607's arbiter measured its lane effect:
-the four instance cases it reaches (`particlesZ035_a`, `Z036_b`, `Z036_c`)
-bank `fail` with the same token, with or without the record. No other lane's
-token or status changed. Every figure is a part of the banked fails and a
-bound from above. `json` has no fails to partition.
+on `22517a8`, less #2608's three banked flips. Those three were `schema`
+decided-`(accepted)` cases, so that column reads 87, not 90. The engine
+changes since `b79687d` are #2607's `contentCheck.sequenceEnd` record, which
+its arbiter measured as moving no case's token or status, and #2608's
+recognizer. #2608's arbiter measured the 52 banked-pass cases that name an
+`alternative/@test` as unmoved. Every figure is a part of the banked fails and
+a bound from above. `json` has no fails to partition.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
 | `instance` | 93 | 61 | 5 | 27 |
-| `schema` | 102 | 1 | 11 | 90 |
+| `schema` | 99 | 1 | 11 | 87 |
 | `datatypes` | 10 | 6 | — | 4 |
 
 - **`instance`'s assertion cluster is 1 decline:** `VC/vc002.v1` on #1002,
@@ -82,17 +84,17 @@ bound from above. `json` has no fails to partition.
   the `maxPartitionStates` ceiling ruled permanent by #1601. `MS-Schema`'s 4 and
   3 reconcile to #744 and #921 by test-set name, which makes them candidate
   owners, not verdicts.
-- **`schema` is 1 declined / 11 indeterminate / 90 decided.** `MS-Wildcards` 49
+- **`schema` is 1 declined / 11 indeterminate / 87 decided.** `MS-Wildcards` 49
   is a recorded divergence (#1809), the `Open` 5 are `blocked` on #1374, and
   `Simple`'s 5 reconcile to #513, #620, #634 and #1236 by test-set name.
-- **`TypeAlternativeTests`' 4 have owners.** All four are decided `(accepted)`
-  against `invalid`. `s3_12si04`, `si05` and `si06` carry `{test}`s that are
-  no XPath 2.0 at all (#2608). `s3_12ii06` casts to a schema-defined complex
-  type, which is err:XPST0051 (#894).
+- **`TypeAlternativeTests` has 1 left, and it has an owner.** `s3_12ii06` is
+  decided `(accepted)` against `invalid`. It casts to a schema-defined complex
+  type, which is err:XPST0051 (#894). #2608 banked `s3_12si04`, `si05` and
+  `si06`.
 - **The smaller `schema` `(accepted)` clusters that print no open issue** are
   `MS-AttributeGroup` 3, `MS-Additional`, `MS-Element` and `MS-Particles` at 2
-  each, and five singles. None is larger than the `TypeAlternativeTests` four,
-  and #2542's blind spot means a closed ruling may own any of them.
+  each, and five singles. #2542's blind spot means a closed ruling may own any
+  of them.
 - **Every false reject has a candidate owner.** `schema`'s 5 suite-valid decided
   cases are #462, #921 and #1002. `instance`'s 2 (`gMonth002_2061.v`,
   `gMonth004_2063.v`) reconcile to #594 and #1794 by name, with #921 the earlier
@@ -101,14 +103,15 @@ bound from above. `json` has no fails to partition.
 
 ### Branch namespace, `origin` (report-only; containers cannot delete a ref)
 
-`go tool wipsurvey` was fed a whole-repository walk at `46bda66` (`rows 2616
-distinct 2616 min 1 max 2616 no gaps`) on a full clone. No pull request is
-open.
+`go tool wipsurvey` was fed a whole-repository walk at `22517a8` (`rows 2619
+distinct 2619 min 1 max 2619 no gaps`). The worktree it ran in could not decide
+ahead/behind for the non-`wip` branches, so their classifications below carry
+over from the `46bda66` full-clone run. No pull request was open at the walk.
 
-- **No `wip/issue-<N>` is LIVE.** `wip/issue-2607` is gone with its merge.
+- **No `wip/issue-<N>` is LIVE.** `wip/issue-2608` is gone with its merge.
 - **`wip/issue-2013` and `wip/issue-2332` print RETIRED:** both issues are closed
   `not_planned` with their contents accounted for. **`wip/issue-2081` prints
-  EXPIRED (276h):** a parked grounding with no code, on an issue `blocked` on an
+  EXPIRED (278h):** a parked grounding with no code, on an issue `blocked` on an
   owner ruling. A human may delete all three.
 - **`meta/backlog-20261013-0808` and `meta/backlog-2026-10-01-b` print STRANDED
   PASS, and both are false positives.** Each pass landed through another
@@ -131,9 +134,10 @@ open.
 
 `go tool gapaudit`, fed the walk above, reports **155 markers across 10 areas**
 (xpath 63, xsd 32, validate 26, value 11, parser 8, conformance 7, xml 3,
-landcheck 2, regex 2, cmd 1). That is unchanged: #2607 added no `GAP(` marker.
-**Group 1 has 11 rows and zero dead ends. Group 2 has 26 rows.** The four
-issues this pass filed are `kind/feature`, so none of them joins Group 2.
+landcheck 2, regex 2, cmd 1). That is unchanged: #2608 added and removed no
+`GAP(` marker. **Group 1 has 11 rows and zero dead ends. Group 2 has 26
+rows.** #2608 left Group 2 when it closed, and #2619, filed at its post-land
+pass, joined it.
 
 ### Milestones and queue
 
@@ -148,7 +152,7 @@ GitHub's own milestone listing.
 | **M4 — Schema parsing** | **60** | **180** | active |
 | **M5 — Instance validation (XML)** | **8** | **136** | active |
 | **M6 — XPath required subset** | **5** | **44** | active |
-| M7 — XPath 2.0 growth | 1 | 0 | first slice filed (#2608) |
+| M7 — XPath 2.0 growth | 1 | 1 | #2608 landed; #2619 filed |
 | **M8 — JSON instance adapter** | **4** | **1** | north star; `json` 9 (#2607) |
 | M9–M12 | 0 | 0 | not started |
 
@@ -161,19 +165,22 @@ The open issues are **314 `ready`, 15 `blocked`, 0 `needs-replan` and 2
 
 - **`blocked` is 15:** the earlier 14 (#16, #555, #1002, #1042, #1051, #1374,
   #1609, #1790, #1880, #1885, #2022, #2081, #2376 and #2533) plus #2616, which
-  waits on #2613, #2614 and #2615. None of the 14 names #2607, and none of
+  waits on #2613, #2614 and #2615. None of the 15 names #2608, and none of
   their triggers fired:
-  - #2533's trigger has not fired: `castTarget` admits no user-defined target.
+  - #2533's trigger has not fired: `castTarget` admits no user-defined target,
+    and #2608's charge is static, not an evaluation-time decline.
   - #1042 waits on `vc002.v1` (#1002, #1880) and on the slices its body lists as
     not yet filed.
-  - #1609's arm 1 (`schema` Fail 0) has not fired: Fail is 102.
+  - #1609 has not fired. Arm 1 (`schema` Fail 0) reads 99, arm 2's Total is
+    15398, and #2608 left `xsd/contentrestricts.go` alone (arm 3).
   - #2376 waits on #2370, and #1051 on #1183 and #1196. All three are open.
   - #1374 and #555 wait on written triggers, and #16 on M9.
   - No human ruling is recorded on #1880, #1885, #1790, #2022 or #2081.
-- **Measured refactors, re-run on `46bda66`, are all flat:** #2239 (2),
-  #2595 (1 and 1), #2599 (186 methods), #2600 (2 copies), #2601 (0 outside
-  consumers), #2373 (16), #2374 (22), #2372 (27), #1958 (2), #1757 (1), #2370
-  (35), #2359 (14), #2329 (1), #2101 (1 and 1), #363 (2), #2205 (2), #1865 (2),
+- **Measured refactors are all flat.** The four in `xpath`, which #2608
+  touched, were re-run on `22517a8`: #2239 (2), #2595 (1 and 1), #2599 (186
+  methods) and #2601 (0 outside consumers). The rest were last run on
+  `46bda66`: #2600 (2 copies), #2373 (16), #2374 (22), #2372 (27), #1958
+  (2), #1757 (1), #2370 (35), #2359 (14), #2329 (1), #2101 (1 and 1), #363 (2), #2205 (2), #1865 (2),
   #1080 (8), #2237 (24 refusal tokens), #2375 (1) and #841 (0 of 2
   paragraphs). **#848 is re-scoped and now measured:** 2 stale "future
   consumer" lines, and 0 consumers of `AttributeResolver` outside `xsd`.
@@ -191,49 +198,52 @@ This is ordered for a `/develop` session: take the highest row you can start.
 **Run `wipsurvey` fed before starting.** Each row names one issue (#1636).
 
 **Tier A: lanes.** Row 1 and row 2 touch different packages and can run side
-by side. Rows 1, 4 and 5 share `validate/jsonsrc` and `conformance/jsoncases.go`,
-so while one is LIVE the others wait or are absorbed. Rows 2 and 3 share
-`CTATestStaticError`'s path, with the same rule.
+by side. Rows 1, 3 and 4 share `validate/jsonsrc` and `conformance/jsoncases.go`,
+so while one is LIVE the others wait or are absorbed. Row 2 holds
+`CTATestStaticError`'s path alone now that #2608 has landed.
 
 | # | issue | why here |
 |---|---|---|
 | 1 | #2613 | **The north star's next slice.** Attribute members: curated cases under `cvc-complex-type` clauses 2 and 4. `execJSONCase`'s gate sweep is re-earned for the rows that presenting attributes makes reachable. The grounding rules simple content plus attributes, which has no spelling yet. |
-| 2 | #2608 | **M7's first measured slice, `schema` bound +3.** A full XPath 2.0 syntax recognizer lets `CTATestStaticError` charge err:XPST0003. `s3_12si04`, `si05` and `si06` are decided `(accepted)` today. |
-| 3 | #894 | **`schema` bound +1, a hypothesis.** `s3_12ii06` casts to a schema-defined complex type, which is err:XPST0051 under `xpath-valid` 2.2.5. |
-| 4 | #2614 | **json: null → `xsi:nil`.** Curated `cvc-elt` clause 3 cases. Needs no attribute arm, so it is startable now, but it shares row 1's files. |
-| 5 | #2615 | **json: `$type` and `$xmlns`.** Children are classified under the instance-specified type. The grounding settles member order (`$type` first) against STYLE P4. |
+| 2 | #894 | **`schema` bound +1, a hypothesis.** `s3_12ii06` casts to a schema-defined complex type, which is err:XPST0051 under `xpath-valid` 2.2.5. |
+| 3 | #2614 | **json: null → `xsi:nil`.** Curated `cvc-elt` clause 3 cases. Needs no attribute arm, so it is startable now, but it shares row 1's files. |
+| 4 | #2615 | **json: `$type` and `$xmlns`.** Children are classified under the instance-specified type. The grounding settles member order (`$type` first) against STYLE P4. |
 
 **Tier B: wrong verdicts and the persona findings.** No row touches `jsonsrc`,
 `conformance` or `xpath/cta*.go`.
 
 | # | issue | why here |
 |---|---|---|
-| 6 | #2555 | **A wrong verdict in `validate`'s assertion value reads:** a cvc-elt clause 4 violation escapes `walk.element`'s `recorded` check. Unmeasured, and banded because a wrong verdict is worse than a decline. |
-| 7 | #2561 | **The same layer:** an attribute that failed a fixed-value check is read as its declared type. The oracle rules first. Take it after row 6, or absorb it. |
-| 8 | #2577 | **libuser's near-blocking finding.** Doc sentences on `Backend.Mapping` and `xpath.Typed`, and a runnable `ValidateLexical` example on xs:integer. It edits `xpath/assertion.go`, so no other `xpath` assertion-file issue starts beside it. |
-| 9 | #2566 | **A persona finding, doc only.** `value.Context.LookupNamespace`'s empty-prefix `ok`, with libuser's nil finding folded in. |
-| 10 | #2315 | **A persona finding, doc only.** `xsd.TypeResolver`'s doc. It shares `xsd/schema.go`'s resolver block with #848, so the session absorbs #848 when it can. |
+| 5 | #2555 | **A wrong verdict in `validate`'s assertion value reads:** a cvc-elt clause 4 violation escapes `walk.element`'s `recorded` check. Unmeasured, and banded because a wrong verdict is worse than a decline. |
+| 6 | #2561 | **The same layer:** an attribute that failed a fixed-value check is read as its declared type. The oracle rules first. Take it after row 5, or absorb it. |
+| 7 | #2577 | **libuser's near-blocking finding.** Doc sentences on `Backend.Mapping` and `xpath.Typed`, and a runnable `ValidateLexical` example on xs:integer. It edits `xpath/assertion.go`, so no other `xpath` assertion-file issue starts beside it. |
+| 8 | #2566 | **A persona finding, doc only.** `value.Context.LookupNamespace`'s empty-prefix `ok`, with libuser's nil finding folded in. |
+| 9 | #2315 | **A persona finding, doc only.** `xsd.TypeResolver`'s doc. It shares `xsd/schema.go`'s resolver block with #848, so the session absorbs #848 when it can. |
 
 **Tier C: tooling, ahead of refactors, as the twelfth `/retro` asked.**
 
 | # | issue | why here |
 |---|---|---|
-| 11 | #2235 | **The survey walk.** Passes keep rebuilding it from a script file after the worktree guard refuses the inline loop. This pass did too. |
-| 12 | #2399 | **`wipsurvey` prints each band row's state.** Every pass reads each row's state from the fed walk by hand. |
-| 13 | #841 | **A refactor ruled three times and never landed.** Two verbatim comment paragraphs, `Ratchet: unchanged`. Startable now. |
+| 10 | #2235 | **The survey walk.** Passes keep rebuilding it from a script file after the worktree guard refuses the inline loop. This pass did too. |
+| 11 | #2399 | **`wipsurvey` prints each band row's state.** Every pass reads each row's state from the fed walk by hand. |
+| 12 | #841 | **A refactor ruled three times and never landed.** Two verbatim comment paragraphs, `Ratchet: unchanged`. Startable now. |
 
 **Named below the band, on purpose.**
-- **M8, after rows 1, 4 and 5:** #2616 (`-format json` in the CLI) is `blocked`
-  on all three. #1687 (jsonsrc's ENTITY note) is absorbable by row 5.
+- **M8, after rows 1, 3 and 4:** #2616 (`-format json` in the CLI) is `blocked`
+  on all three. #1687 (jsonsrc's ENTITY note) is absorbable by row 4.
 - **Lane-less, out of the band by the retro's bar:** #2494 (an oracle ruling on a
   `standalone="yes"` charge), #2574 and #2575 (#2404's two follow-ups), and
   `parser/xmltree`'s reader issues #2101, #2073, #2402 and #2600, one at a time.
-- **M6, after row 8:** #2455 rules E's string value under simple content and has
+- **M6, after row 7:** #2455 rules E's string value under simple content and has
   no measured bound. #2437 pins #2387's residue. #2553's, #2578's and #2587's
   ruled residues are on #1042 at lexical bound 0.
+- **M7, `Ratchet: unchanged`:** #2619 charges `as-props-correct` clause 2
+  through #2608's recognizer. Its bound is 2 suite-valid cases that cannot flip,
+  so it is correctness debt and not a lane slice. It needs a warden ruling on
+  its one new `xpath` export.
 - **`xpath/cta.go`:** #2416 (a pinning row) and #2595 (two doc corrections). A
-  session taking either absorbs the other. Both wait on rows 2 and 3.
-- **Same files as row 8:** #2394, #2370, #2314 and #2313, and the CTA residue
+  session taking either absorbs the other. Both wait on row 2.
+- **Same files as row 7:** #2394, #2370, #2314 and #2313, and the CTA residue
   #889.
 - **STYLE E5 sweeps,** measured flat: #2372, #2373, #2374 and #2375. #2376 waits
   on #2370.
@@ -251,17 +261,17 @@ so while one is LIVE the others wait or are absorbed. Rows 2 and 3 share
 - **Process:** #2610, one paragraph of `.claude/commands/backlog.md`. It is a
   first sighting that cost one `/backlog` landing, and it enters the band if a
   second pass is stranded. #1880 and #1885 wait on the owner.
-- **Tooling, after rows 11 and 12:** #2542, then #2203 and #2539, then #2605,
+- **Tooling, after rows 10 and 11:** #2542, then #2203 and #2539, then #2605,
   #1897, #2541, #1935, #2070, #2066, #678, #1464, #1838 and #1794.
-- **Refactors:** #2599 (186 methods) and #2601 wait on row 8. #848 is measured
-  flat and rides row 10. Also measured flat: #2329, #1958, #1865, #1757, #363,
+- **Refactors:** #2599 (186 methods) and #2601 wait on row 7. #848 is measured
+  flat and rides row 9. Also measured flat: #2329, #1958, #1865, #1757, #363,
   #2101, #2205, #2237, #2239, #1080, #2359, #2370 and #2595. #989, #1735,
   #1736, #1701, #845, #755, #1825, #2416, #2419 and #2437 are unmeasured.
 
 ### Next planning action
 
 1. **No restamp is owed until a landing moves `main`.** The post-land pass
-   after row 1 restamps the `json` row, and re-ranks rows 4 and 5 against
+   after row 1 restamps the `json` row, and re-ranks rows 3 and 4 against
    whatever #2613's grounding rules on simple content and on the warning
    channel. After #2577, #2566 and #2315 land, the next `/backlog` runs the
    deferred libuser round. cliuser's round follows #2616.
