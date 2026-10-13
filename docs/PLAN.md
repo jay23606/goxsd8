@@ -17,21 +17,21 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-13 (`/backlog`, on `main` at `ddf6c8f`)
+## Status — 2026-10-13 (`/backlog`, on `main` at `8d91fcf`)
 
 **North star: stand up the `json` lane (#2607, M8).** Both measured lanes stand
-at what rulings leave, so this stamp follows the twelfth `/retro` (`4cfc520`) and
-names a north star that creates measurement. M8 is chosen over M7 because its
-cases can be curated in-tree (`conformance/doc.go` plans `json.txt` as curated;
-no corpus exists yet), while no XPath suite is vendored and `www.w3.org` is egress-denied. **Lean:
-product, toward measurement.** M7 still gets its first measured slice, #2608: an
-XPath 2.0 syntax recognizer whose `schema` bound is +3, the
-`TypeAlternativeTests` cases the last stamp left unowned. Lane-less slices are
-banded only where a wrong verdict or an unconsumed persona finding pays for them.
+at what rulings leave, so this stamp keeps the twelfth `/retro`'s (`4cfc520`)
+call for a north star that creates measurement. M8 is chosen over M7 because its
+cases can be curated in-tree: `conformance/doc.go` plans `json.txt` as curated,
+and no corpus exists yet. No XPath suite is vendored and `www.w3.org` is
+egress-denied. **Lean: product, toward measurement.** M7 still gets its first
+measured slice, #2608: an XPath 2.0 syntax recognizer whose `schema` bound is
++3. Lane-less slices are banded only where a wrong verdict or an unconsumed
+persona finding pays for them.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `ddf6c8f`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `8d91fcf`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -53,11 +53,11 @@ are active. `json` is this stamp's north star (M8). `xpath` waits on M7 and
 
 ### What holds each active lane's failures
 
-**Measured on `b79687d`** (this pass's claim, `.go`-identical to `72b9c18`;
-suite `7bc3365`) by one read-only `GOXSD_DECLINES=1` conformance run (exit 0,
-PASS, 570 s), fed to `go tool lanepartition` with the walk below. Every figure is
-a part of the banked fails and a bound from above, and every one equals the last
-measurement's (on `6f714c3`).
+**Measured on `b79687d`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
+conformance run (exit 0, PASS, 570 s), fed to `go tool lanepartition`. It stands
+on `8d91fcf`: `git diff --stat 72b9c18 8d91fcf -- '*.go' conformance/testdata`
+is empty, so no code or expectation changed since. Every figure is a part of the
+banked fails and a bound from above.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
@@ -81,12 +81,11 @@ measurement's (on `6f714c3`).
 - **`schema` is 1 declined / 11 indeterminate / 90 decided.** `MS-Wildcards` 49
   is a recorded divergence (#1809), the `Open` 5 are `blocked` on #1374, and
   `Simple`'s 5 reconcile to #513, #620, #634 and #1236 by test-set name.
-- **`TypeAlternativeTests`' 4 now have owners.** All four are decided
-  `(accepted)` against `invalid`. `s3_12si04`, `s3_12si05` and `s3_12si06` carry
-  `{test}`s that are no XPath 2.0 at all (`AND` for `and`, `xs1::double` as a
-  cast target, `)(`), which the subset parser withholds as unsupported: #2608,
-  filed this pass. `s3_12ii06` casts to a schema-defined complex type, which is
-  err:XPST0051: #894, whose body this pass corrects.
+- **`TypeAlternativeTests`' 4 have owners.** All four are decided `(accepted)`
+  against `invalid`. `s3_12si04`, `s3_12si05` and `s3_12si06` carry `{test}`s
+  that are no XPath 2.0 at all (`AND` for `and`, `xs1::double` as a cast target,
+  `)(`), which the subset parser withholds as unsupported: #2608. `s3_12ii06`
+  casts to a schema-defined complex type, which is err:XPST0051: #894.
 - **The smaller `schema` `(accepted)` clusters that print no open issue** are
   `MS-AttributeGroup` 3, `MS-Additional`, `MS-Element` and `MS-Particles` at 2
   each, and five singles. None is larger than the `TypeAlternativeTests` four,
@@ -97,40 +96,49 @@ measurement's (on `6f714c3`).
   stamps' owner.
 - **`datatypes`' 10** are 6 declines and 4 decided cases.
 
-### Branch namespace, `origin` (report-only; a session never deletes a ref)
+### Branch namespace, `origin` (report-only; containers cannot delete a ref)
 
-`go tool wipsurvey` was fed a whole-repository walk at `ddf6c8f` (`rows 2606
-distinct 2606 min 1 max 2606 no gaps`). The clone is shallow, so the survey
-prints ahead/behind as undecided for the non-`wip` refs; every tip date below is
-`git for-each-ref`'s.
+`go tool wipsurvey` was fed a whole-repository walk at `8d91fcf` (`rows 2609
+distinct 2609 min 1 max 2609 no gaps`) after `git fetch --unshallow origin`, so
+every ahead/behind figure is decided. Tip dates are `git for-each-ref`'s. No
+pull request is open.
 
 - **No `wip/issue-<N>` is LIVE.**
 - **`wip/issue-2013` and `wip/issue-2332` print RETIRED:** both issues are closed
   `not_planned` with their contents accounted for. **`wip/issue-2081` prints
-  EXPIRED (266h):** a parked grounding with no code, on an issue `blocked` on an
+  EXPIRED (272h):** a parked grounding with no code, on an issue `blocked` on an
   owner ruling. A human may delete all three.
+- **`meta/backlog-20261013-0808` and `meta/backlog-2026-10-01-b` print STRANDED
+  PASS, and both are false positives.** Each pass landed through another branch:
+  0808's Status rewrite `71738b0` is on `main` as #2609, with its two
+  placeholders filled and one premise corrected, and `2026-10-01-b` is PR
+  #2011 (`a0adf07`). STRANDED PASS reads ancestry, so a squash landing never
+  clears it.
+  #2610 makes `/backlog`'s claim step tell the two cases apart. A human may
+  delete both.
 - **Certified for deletion by the 2026-10-10 branch-namespace pass and still
-  standing, because no container can delete a ref:** `chronicler-345`,
-  `meta/backlog-2026-10-01-b`, `meta/post-land-1816`, `meta/post-land-1908`,
-  `postland-2099` and `postland/issue-2284`.
+  standing:** `chronicler-345`, `meta/post-land-1816`, `meta/post-land-1908`,
+  `postland-2099` and `postland/issue-2284`. Each prints AHEAD OF MAIN.
 - **For human triage:** `parked/untriaged-20260930-110432`,
   `parked/untriaged-20260930-215455`, and the eight subagent branches the survey
-  skips because they do not match `wip/issue-<N>`: `wip/issue-1861-{mason,chronicler}`,
-  `wip/issue-1926-{mason,chronicler}`, `wip/issue-2008-{mason,chronicler}`,
-  `wip/issue-1988-mason-repair` and `wip/issue-1988-chron2`, all last pushed
-  2026-09-30 to 2026-10-02. Each of their issues is closed and landed.
-- `meta/backlog-20261013-0808` is this pass's claim.
+  skips because they do not match `wip/issue-<N>`:
+  `wip/issue-1861-{mason,chronicler}`, `wip/issue-1926-{mason,chronicler}`,
+  `wip/issue-2008-{mason,chronicler}`, `wip/issue-1988-mason-repair` and
+  `wip/issue-1988-chron2`, all last pushed 2026-09-30 to 2026-10-02. Each of
+  their issues is closed and landed.
+- `meta/backlog-20261013-1412` is this pass's claim.
 
 ### Marker census
 
 `go tool gapaudit`, fed the walk above, reports **155 markers across 10 areas**
 (xpath 63, xsd 32, validate 26, value 11, parser 8, conformance 7, xml 3,
 landcheck 2, regex 2, cmd 1), unchanged: no `.go` file changed since `72b9c18`.
-**Group 1 has 11 rows and zero dead ends; Group 2 has 25 rows,** both the same.
+**Group 1 has 11 rows and zero dead ends. Group 2 has 26 rows;** the new one is
+#2608, a `kind/gap` filed ahead of the marker its landing will cite.
 
 ### Milestones and queue
 
-**Counted from the walk above: 325 open issues.** The milestone counts are
+**Counted from the walk above: 327 open issues.** The milestone counts are
 GitHub's own milestone listing.
 
 | milestone | open | closed | state |
@@ -141,15 +149,16 @@ GitHub's own milestone listing.
 | **M4 — Schema parsing** | **60** | **180** | active |
 | **M5 — Instance validation (XML)** | **8** | **136** | active |
 | **M6 — XPath required subset** | **5** | **44** | active |
-| M7–M12 | 0 | 0 | not started |
+| M7 — XPath 2.0 growth | 1 | 0 | first slice filed (#2608) |
+| **M8 — JSON instance adapter** | **1** | **0** | north star (#2607) |
+| M9–M12 | 0 | 0 | not started |
 
 M3's one open issue is #2566, a `value.Context` doc defect; it is follow-up, not
-milestone scope. The walk predates #2607 (M8) and #2608 (M7), filed by this
-pass, the first issues either milestone carries.
+milestone scope.
 
-The open issues are **309 `ready`, 14 `blocked`, 0 `needs-replan` and 2
-`epic`**, which sums to 325. Open `kind/process` is 2, #1880 and #1885, both
-`blocked` on the owner.
+The open issues are **311 `ready`, 14 `blocked`, 0 `needs-replan` and 2
+`epic`**, which sums to 327. Open `kind/process` is 3: #1880 and #1885, both
+`blocked` on the owner, and #2610, `ready`, filed this pass.
 
 - **`blocked` is 14, the same 14:** #16, #555, #1002, #1042, #1051, #1374,
   #1609, #1790, #1880, #1885, #2022, #2081, #2376 and #2533. No dependency or
@@ -161,24 +170,21 @@ The open issues are **309 `ready`, 14 `blocked`, 0 `needs-replan` and 2
   - #2376 waits on #2370, and #1051 on #1183 and #1196. All three are open.
   - #1374 and #555 wait on written triggers, and #16 on M9.
   - No human ruling is recorded on #1880, #1885, #1790, #2022 or #2081.
-- **Measured refactors on `ddf6c8f`.** No `.go` file differs from `72b9c18`
-  (`git diff --stat 72b9c18` lists `docs/` only), so every recorded figure
-  stands: #2239 (2), #2595 (1 and 1), #2599 (186 methods), #2600 (2 copies),
-  #2601 (0 outside consumers), #2373 (16), #2374 (22), #2372 (27), #1958 (2),
-  #1757 (1), #2370 (35), #2359 (14), #2329 (1), #2101 (1 and 1), #363 (2),
-  #2205 (2), #1865 (2), #1080 (8), #2237 (24 refusal tokens), #2375 (1) and
-  #841 (0 of 2 paragraphs, re-run: `git grep -n '#841' -- xsd` prints 0 lines).
-  None grew.
+- **Measured refactors on `8d91fcf`.** No `.go` file differs from `72b9c18`, so
+  every recorded figure stands: #2239 (2), #2595 (1 and 1), #2599 (186 methods),
+  #2600 (2 copies), #2601 (0 outside consumers), #2373 (16), #2374 (22), #2372
+  (27), #1958 (2), #1757 (1), #2370 (35), #2359 (14), #2329 (1), #2101 (1 and
+  1), #363 (2), #2205 (2), #1865 (2), #1080 (8), #2237 (24 refusal tokens),
+  #2375 (1) and #841 (0 of 2 paragraphs). None grew.
 
 ### Persona consultations: skipped this pass, on purpose
 
-The last stamp called a libuser round owed. **This pass does not run one**,
-because six earlier persona findings stand unconsumed: #2577, #2566, #2315,
-#2402, #2314 and #2313. Three rounds running returned the same asks (the
-2026-10-12 `/backlog` entry), so another round before these land buys nothing.
-#2577, #2566 and #2315 are banded below so that the next round reads a changed
-surface. cliuser is not owed: no README or `cmd/` text changed since
-`72b9c18`.
+**No libuser or cliuser round runs this pass.** The six earlier persona
+findings, #2577, #2566, #2315, #2402, #2314 and #2313, are all still open and
+unconsumed. Three rounds running returned the same asks (the 2026-10-12
+`/backlog` entry), so another round before these land buys nothing. #2577,
+#2566 and #2315 are banded below so that the next round reads a changed surface.
+cliuser is not owed: no README or `cmd/` text changed since `72b9c18`.
 
 ### Working band
 
@@ -193,7 +199,7 @@ other waits or is absorbed.
 |---|---|---|
 | 1 | #2607 | **The north star.** `jsonsrc.Validate` over the planned mapping's core arms, a curated corpus (its catalog format is #2607's proposal), and a real `json` row in `defaultLanes`. It takes the `json` lane from 0 cases to the corpus size. The grounding's first question is the steward's: how a second catalog root stays off the `instance` lane. |
 | 2 | #2608 | **M7's first measured slice, `schema` bound +3.** A full XPath 2.0 syntax recognizer lets `CTATestStaticError` charge err:XPST0003. `s3_12si04`, `si05` and `si06` are decided `(accepted)` today. |
-| 3 | #894 | **`schema` bound +1, a hypothesis.** `s3_12ii06` casts to a schema-defined complex type, which is err:XPST0051 under `xpath-valid` 2.2.5. Its body's "no suite case" premise is corrected this pass. |
+| 3 | #894 | **`schema` bound +1, a hypothesis.** `s3_12ii06` casts to a schema-defined complex type, which is err:XPST0051 under `xpath-valid` 2.2.5. |
 
 **Tier B: wrong verdicts and the persona findings.** No row touches `jsonsrc`,
 `conformance` or `xpath/cta*.go`.
@@ -238,7 +244,9 @@ other waits or is absorbed.
 - **Conformance bookkeeping:** #1803, #1881 and #785. **Doc fixes:** #1343,
   #1502 and #1687 (the `jsonsrc` doc; row 1 absorbs it when it can). **`value`:**
   #721, #2045 and #462. **`internal/xmlenc`:** #361 and #363.
-- **Process:** none open but #1880 and #1885, both on the owner.
+- **Process:** #2610, one paragraph of `.claude/commands/backlog.md`, first
+  sighting, cost one `/backlog` landing; it enters the band if a second pass is
+  stranded. #1880 and #1885 wait on the owner.
 - **Tooling, after rows 9 and 10:** #2542, then #2203 and #2539, then #2605,
   #1897, #2541, #1935, #2070, #2066, #678, #1464, #1838 and #1794.
 - **Refactors:** #2599 (186 methods) and #2601 wait on row 6. Measured flat are
@@ -251,7 +259,7 @@ other waits or is absorbed.
 1. **A `/backlog` restamp after row 1 lands**, to re-rank against the `json`
    lane's first figure and to cut its next slice (`"$type"`, `"$xmlns"`, the
    element-wins warning). After #2577, #2566 and #2315 land, it runs the
-   deferred libuser round.
+   deferred libuser round. Until a landing moves `main`, no restamp is owed.
 2. **Owner decisions outstanding:**
    - #1880, which frees #1002's 16 `VC` `<versioned>` cases, the largest
      `instance` cluster any single ruling would free, and `vc002.v1`, the last
