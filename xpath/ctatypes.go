@@ -158,8 +158,8 @@ func (t ctaTypes) ancestor(st *xsd.SimpleType, name xsd.QName) (*xsd.SimpleType,
 //     in-scope schema types", and err:XPST0080 for the two named exclusions.
 //
 // GAP(xpath): the XPST0051/XPST0080 arm is folded into the compile-time
-// withhold and xpath-valid cl. 2 is NOT charged for it — the one static
-// condition [CTATestStaticError] proves is err:XPST0081, and proving this one
+// withhold and xpath-valid cl. 2 is NOT charged for it — the static conditions
+// [CTATestStaticError] proves are err:XPST0003 and err:XPST0081, and proving this one
 // takes a parse that runs PAST the failed target to the end of a [8] ta-Test,
 // which "unsupported dominates static" requires and which no target stands in
 // for: an unbound prefix carries on under ctaUnresolvedName because a QName has

@@ -25,8 +25,9 @@
 //     the table below declines: CompileCTATest compiles a {test} and
 //     CTATest.Evaluate decides it against an element's attributes.
 //     CTATestStaticError reports the XPath STATIC errors of the same grammar
-//     over the same traversal, which is a different question with a different
-//     owner — see below.
+//     over the same traversal, and err:XPST0003 for a {test} outside the full
+//     XPath 2.0 grammar, which is a different question with a different owner
+//     — see below.
 //  2. Assertion essentials: axes, predicates, quantified expressions, typed
 //     comparisons, the F&O function core — M6. FIRST SLICES SHIPPED: the
 //     assert and facet columns of the table below.
@@ -390,9 +391,15 @@
 // # One parser, one AST
 //
 // One lexer and one recursive-descent parser build one AST that serves
-// both static analysis (schema-time: syntax errors, type references)
+// both static analysis (schema-time: name resolution, type references)
 // and evaluation (instance-time). There is never a second, lenient
-// parser (STYLE T4).
+// parser (STYLE T4). Beside it stands one RECOGNIZER for the full
+// xpath20.md Appendix A grammar, which builds no tree and answers only
+// whether a text the parser declined is XPath 2.0 at all (err:XPST0003).
+// It accepts exactly A.1's language, a superset of what the parser
+// admits, and is no T4 lenient parser: it is consulted only on a
+// decline, and its acceptance compiles nothing. It shares the parser's
+// lexical scanners.
 //
 // # The fail-open contract (PRINCIPLES 20)
 //
@@ -432,14 +439,22 @@
 // off one errors.Unwrap and never off a scraped message.
 //
 // UNSUPPORTED DOMINATES STATIC. An {expression} outside the required
-// subset is declined and never charged, whatever its names resolve to,
-// because §3.12.6 clause 2's Note lets a processor decline it and never
-// lets one refuse the schema for it. Under-charging is a rejection this
-// engine can take later; over-charging is a false reject now.
+// subset but inside the full XPath 2.0 grammar is declined and never
+// charged, whatever its names resolve to, because §3.12.6 clause 2's Note
+// lets a processor decline it and never lets one refuse the schema for
+// it. Under-charging is a rejection this engine can take later;
+// over-charging is a false reject now.
 //
-// One static condition is proven today, err:XPST0081 for an unbound
-// prefix. The cast-target conditions — err:XPST0051 and err:XPST0080 —
-// are not, because proving one takes a parse that runs PAST the failed
+// Two static conditions are proven today: err:XPST0003 for a {test} no
+// derivation of the full grammar (xpath20.md A.1) covers, asked of the
+// recognizer only once the subset parser has declined and winning over
+// any unbound prefix that parse met; and err:XPST0081 for an unbound
+// prefix in a complete ta-Test. Only CTATestStaticError reports either:
+// CompileAssertionTest and FacetAssertions decline a text outside the
+// grammar like any other.
+//
+// The cast-target conditions — err:XPST0051 and err:XPST0080 — are not
+// proven, because proving one takes a parse that runs PAST the failed
 // target to the end of a ta-Test and no target stands in for one that
 // resolved to nothing; they stay folded into the compile-time withhold
 // under ctaTypes.castTarget's marker. So does err:FONS0004, an unbound

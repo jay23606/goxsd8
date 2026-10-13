@@ -115,11 +115,11 @@ func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
 // is decided at construction and independent of whether any instance is ever
 // ·assessed·; xpath.CTATestStaticError proves the static error and this charges
 // it, wrapping that verdict as the charge's cause so the XPath code it carries
-// (err:XPST0081) stays readable with xsderr.RuleOf — the engine mints XPath's
-// code, never this schema rule. An {expression} that engine merely cannot
-// EVALUATE is no fault at all and passes straight through, on the terms
-// xpath/cta.go argues (PRINCIPLES 20). The type knowledge it is asked against
-// is ctaStaticTypes, clause 2.2.5's set and not this schema's.
+// (err:XPST0003 or err:XPST0081) stays readable with xsderr.RuleOf — the engine
+// mints XPath's code, never this schema rule. An {expression} that engine
+// merely cannot EVALUATE is no fault at all and passes straight through, on the
+// terms xpath/cta.go argues (PRINCIPLES 20). The type knowledge it is asked
+// against is ctaStaticTypes, clause 2.2.5's set and not this schema's.
 func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType xsd.TypeDefinitionOrRef) (*xsd.TypeTable, error) {
 	alternatives := childElements(el, xsd.XMLSchemaNS, "alternative")
 	if len(alternatives) == 0 {
@@ -167,7 +167,7 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 			// The XPath code is xpath's verdict and ta-props-correct is this
 			// producer's, so the two travel as two layers: the delegated verdict is
 			// the wrapped cause, which errors.Unwrap reaches and xsderr.RuleOf then
-			// reads err:XPST0081 off, instead of a consumer scraping the message
+			// reads the XPath code off, instead of a consumer scraping the message
 			// for it (validate/doc.go's delegated-verdict norm). It renders into
 			// the message as well, for a reader holding only the string.
 			charge := xsderr.New(ruleTAPropsCorrect, alt.Loc(),

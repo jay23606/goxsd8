@@ -522,7 +522,8 @@ read it there. Two consumers take the exports in two phases. `parser` calls
 `CTATestStaticError` at schema construction, charging `ta-props-correct`
 clause 2 over `xpath-valid` clause 2 for a Type Alternative `{test}` with an
 XPath static error — wrapping the `*xsderr.Error` this package returns,
-which carries the XPath code (`err:XPST0081`) as its own rule. `validate`
+which carries the XPath code (`err:XPST0003` or `err:XPST0081`) as its own
+rule. `validate`
 takes the rest at ·assessment· time: it compiles and evaluates the same
 `{test}` against §3.12.6's `ta-Test` grammar; it compiles and evaluates an
 assertion `{test}` over the typed values of the element's attributes, of its
@@ -555,7 +556,11 @@ XSD-required subset:
    lane.
 
 One lexer, one parser, one AST — the evaluator walks the same tree the
-static analyzer sees. **Fail-open**: an unsupported construct can never
+static analyzer sees. The one other grammar is a tree-less recognizer for
+the full xpath20.md Appendix A grammar: it accepts exactly that language, a
+superset of the parser's, and is consulted only once the parser declines a
+`{test}`, to tell one outside XPath 2.0 (`err:XPST0003`) from legal XPath the
+subset merely declines. **Fail-open**: an unsupported construct can never
 cause a false rejection; every fallback site is a greppable
 `// GAP(xpath): …`. A CTA `{test}` outside the implemented subset is
 declined at COMPILE time, and its caller withholds the element's

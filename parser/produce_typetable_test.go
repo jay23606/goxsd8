@@ -590,6 +590,29 @@ func TestProduceTypeTableStaticErrorInTestIsCharged(t *testing.T) {
 	}
 }
 
+// A test= that is not an XPath 2.0 expression at all is err:XPST0003
+// (xpath20.md §2.2.3.1), a static error, so ta-props-correct clause 2 is charged
+// over it exactly as over an unbound prefix — not withheld as a {test} the
+// subset merely declines. The rows are the suite's s3_12si05 and s3_12si06
+// expressions; the cause carries err:XPST0003 as its own rule.
+func TestProduceTypeTableSyntaxErrorInTestIsCharged(t *testing.T) {
+	for _, test := range []string{
+		"@numberOfChildren &lt; 5 AND @numberOfChildren > 0",
+		"(@type cast as xs1::double)='double'",
+	} {
+		_, err := produce(t, wrap("", typeTableTypes+`
+		<xs:element name="e" type="B">
+		  <xs:alternative test="`+test+`" type="T"/>
+		  <xs:alternative type="V"/>
+		</xs:element>`))
+		assertRule(t, err, "ta-props-correct")
+		inner := errors.Unwrap(err)
+		if rule, ok := xsderr.RuleOf(inner); !ok || rule != "err:XPST0003" {
+			t.Errorf("test=%q: wrapped cause %v carries rule %q (found %t), want err:XPST0003", test, inner, rule, ok)
+		}
+	}
+}
+
 // A CAST TAIL no longer declines the expression carrying it, so a {test} whose
 // unbound prefix sits under one now parses to a complete [8] ta-Test and its
 // err:XPST0081 reaches the charge instead of dying with the parse. This is the

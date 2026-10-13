@@ -4,6 +4,7 @@ import (
 	"errors"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -300,17 +301,15 @@ func TestCompileAdmitsCasts(t *testing.T) {
 }
 
 // TestCTATestStaticErrorIsSilentForUnsupported pins UNSUPPORTED DOMINATES
-// STATIC. Every expression here declines, and none of them is a schema fault:
-// charging one would reject a schema §3.12.6 clause 2's Note says a processor
-// may decline but must not refuse.
+// STATIC. Every expression here is legal XPath 2.0 syntax (xpath20.md A.1),
+// and none of them is a schema fault the engine proves: the subset ones
+// compile, and charging one outside the subset would reject a schema
+// §3.12.6 clause 2's Note says a processor may decline but must not refuse.
 func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"@p:a = 'x' and count(@b) > 1", "a complete-looking prefix inside an expression a later constructor call declines"},
 		{"p:not(@kind = 'x')", "a constructor call whose argument is no SimpleValue — a prefixed name is never fn:not"},
-		{"@p:kind = 'x' extra", "trailing tokens are not part of a Test"},
-		{"@p:kind = ", "a Comparator with no right operand"},
 		{"count(//p:a) > 1", "full XPath 2.0, outside the subset"},
-		{"", "an empty {expression} is no Test production"},
 		{"self::message", "an axis step the grammar has no production for"},
 		{"@kind = 'book'", "a complete Test whose every name resolved"},
 		{"@a:kind = 'book'", "a complete Test whose prefix is bound"},
@@ -324,6 +323,60 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 		bindings := []string{"a", "http://example.com/a", "xs", xsd.XMLSchemaNS}
 		if err := CTATestStaticError(ctaExprRecord(tc.expr, "", bindings...), seededTypes); err != nil {
 			t.Errorf("CTATestStaticError(%q) = %v, want nil (%s)", tc.expr, err, tc.why)
+		}
+	}
+}
+
+// TestCTATestStaticErrorReportsSyntaxError pins err:XPST0003: a {test} no
+// derivation of xpath20.md A.1's grammar covers is a static error, so
+// xpath-valid clause 2 fails and ta-props-correct clause 2 is charged over it.
+// The first six rows are the suite's s3_12si04, s3_12si05 and s3_12si06
+// expressions; the precedence row carries an unbound prefix the subset parse
+// records before it dies, and reports err:XPST0003 over it.
+//
+// The assertion and facet façades share the traversal and must still DECLINE
+// each one, never charge it: only CTATestStaticError asks the grammar.
+func TestCTATestStaticErrorReportsSyntaxError(t *testing.T) {
+	str := asBuiltin(t, "string")
+	for _, tc := range []struct{ expr, msg string }{
+		{")(", `")(" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 0, which err:XPST0003 forbids`},
+		{">", `">" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 0, which err:XPST0003 forbids`},
+		{"((7>=6)", `"((7>=6)" is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
+		{"@6='hi'", `"@6='hi'" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 1, which err:XPST0003 forbids`},
+		{"@numberOfChildren < 5 AND @numberOfChildren > 0", `"@numberOfChildren < 5 AND @numberOfChildren > 0" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 22, which err:XPST0003 forbids`},
+		{"(@type cast as xs1::double)='double'", `"(@type cast as xs1::double)='double'" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 18, which err:XPST0003 forbids`},
+		{"@p:kind = 'x' extra", `"@p:kind = 'x' extra" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 14, which err:XPST0003 forbids`},
+		{"@p:kind = ", `"@p:kind = " is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
+		{"", `"" is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
+	} {
+		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
+		err := CTATestStaticError(record, seededTypes)
+		if err == nil {
+			t.Errorf("CTATestStaticError(%q) = nil, want err:XPST0003", tc.expr)
+			continue
+		}
+		var verdict *xsderr.Error
+		if !errors.As(err, &verdict) {
+			t.Errorf("CTATestStaticError(%q) = %v, which is not an *xsderr.Error", tc.expr, err)
+			continue
+		}
+		if verdict.Rule != ruleXPST0003 {
+			t.Errorf("CTATestStaticError(%q) reports rule %q, want %q", tc.expr, verdict.Rule, ruleXPST0003)
+		}
+		if verdict.Msg != tc.msg {
+			t.Errorf("CTATestStaticError(%q).Msg = %q, want %q", tc.expr, verdict.Msg, tc.msg)
+		}
+		if verdict.Loc != (xsderr.Loc{}) {
+			t.Errorf("CTATestStaticError(%q) reports location %v, want the zero Loc", tc.expr, verdict.Loc)
+		}
+		if _, ok := CompileCTATest(record, seededTypes); ok {
+			t.Errorf("CompileCTATest(%q) compiled, want declined", tc.expr)
+		}
+		if _, ok := CompileAssertionTest(record, seededTypes, xsd.EmptyContent{}, asUses(t, nil), asNoElems); ok {
+			t.Errorf("CompileAssertionTest(%q) compiled, want declined", tc.expr)
+		}
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, record, fcValue(t, str, "x")); got != value.AssertionDeclined {
+			t.Errorf("FacetAssertions.Evaluate(%q) = %d, want AssertionDeclined: a facet {test} outside the grammar is declined, never failed", tc.expr, got)
 		}
 	}
 }

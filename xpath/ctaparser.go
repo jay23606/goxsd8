@@ -3123,8 +3123,8 @@ func (p *ctaParser) singleType(v ctaValue) (ctaCast, bool) {
 // carries as its names; every other cast carries none. An unbound prefix there
 // is err:FONS0004, a static error ("A static error is raised [err:FONS0004] if
 // the prefix is not bound in the static context"), which this engine
-// WITHHOLDS rather than charges: [CTATestStaticError] proves err:XPST0081
-// alone, and an assertion has no static-error channel at all, so charging
+// WITHHOLDS rather than charges: [CTATestStaticError] proves err:XPST0003 and
+// err:XPST0081 alone, and an assertion has no static-error channel at all, so charging
 // cvc-assertion at the instance would blame the instance for a fault of the
 // schema.
 //
