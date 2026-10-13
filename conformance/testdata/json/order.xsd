@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The schema every json-lane case is assessed against: one root, order,
-     whose sequence holds each shape the validate/jsonsrc arms map. size is a
+<!-- The schema the scalar, child and array groups are assessed against:
+     one root, order, whose sequence holds each shape the validate/jsonsrc
+     scalar, child and array arms map. size is a
      scalar of xs:integer; item is element-only, repeats once or twice, and
      holds a patterned sku; note is an optional reference to a head whose
      substitution group memo joins. Local declarations are qualified, so a

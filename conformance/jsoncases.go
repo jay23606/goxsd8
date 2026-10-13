@@ -10,6 +10,7 @@ import (
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/validate/jsonsrc"
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xsd"
 )
 
 // This file is the json lane: the curated JSON corpus's discovery and the
@@ -61,6 +62,8 @@ func curatedJSONCases(index string) ([]caseSpec, error) {
 const (
 	refuseJSONUnresolved refusal = "json-unresolved" // execJSONCase: the instance will not open
 	refuseJSONDeclined   refusal = "json-declined"   // execJSONCase: jsonsrc.Validate returned an error
+	// execJSONCase: attributeGovernanceDiverges, on a "valid" reading
+	refuseJSONAttributeGovernance refusal = "json-attribute-governance"
 )
 
 // newJSONExec builds the json lane's executor over the strict backend, built
@@ -88,22 +91,35 @@ func newJSONExec() laneExecutor {
 //     epilog-directive): unrepresentable, jsonsrc building no DOCTYPE, prolog
 //     or epilog, and refusing an instance that will not open
 //     (refuseJSONUnresolved) or will not map (refuseJSONDeclined);
-//   - those an instance attribute reaches (nil-lexical, type-table-whitespace,
-//     the three xsi-type ones, simple-attribute, attribute-unadmitted,
-//     strict-attribute-unresolved, attribute-ldt): unrepresentable, jsonsrc
-//     presenting no attribute;
+//   - those an xsi: attribute reaches (nil-lexical and the three xsi-type
+//     ones): unrepresentable, jsonsrc presenting no xsi: attribute — it
+//     declines a null, a "$type" member and a key naming an attribute use in
+//     the xsi namespace;
+//   - type-table-whitespace: unrepresentable while jsonsrc declines a matched
+//     declaration carrying a {type table}. A wildcard's child that a top-level
+//     declaration governs in its place has none either: cos-element-
+//     consistent's wildcard condition gives the two equivalent {type table}s;
+//   - strict-attribute-unresolved and attribute-ldt: refused here on a "valid"
+//     reading, through attributeGovernanceDiverges, which says why no other
+//     element reaches them;
 //   - undeclared-root: unrepresentable, jsonsrc naming the root only by a
 //     top-level declaration;
 //   - recorded in Result.Unevaluated by the walk: type-table-undecided
 //     (key-cta-ta-select), type-unresolved (cvc-elt clause 1, charged
 //     instead for an ·absent· substitution group head), attribute-type
-//     (cvc-complex-type clause 4 for a ·defaulted attribute·, the one use whose
-//     absent attribute's type the walk reads), and content-matcher
-//     (cvc-complex-content, at each unmatched element [[child]] or, with none,
-//     at the element: validate's contentCheck.sequenceEnd);
+//     (cvc-complex-type clause 4 for a ·defaulted attribute·, the one use
+//     whose absent attribute's type the walk reads, and cvc-attribute clause
+//     3 for a present attribute, validate's walk.declaredAttribute, which no
+//     schema document reaches: §3.2.2.2 types a typeless declaration
+//     xs:anySimpleType, and src-resolve refuses a type= naming a complex
+//     type), and content-matcher (cvc-complex-content, at each unmatched element
+//     [[child]] or, with none, at the element: validate's
+//     contentCheck.sequenceEnd);
 //   - charged by the walk: error-type (cvc-type clause 3.1.3, no element being
 //     ·nilled· without an xsi:nil), element-child (cvc-type clause 3.1.2,
-//     cvc-complex-type clauses 1.1 and 1.2), content-incomplete and
+//     cvc-complex-type clauses 1.1 and 1.2), simple-attribute (cvc-type clause
+//     3.1.1), attribute-unadmitted (cvc-complex-type clause 2.2.1 or 2.2.2,
+//     validate's walk.unmatchedAttribute), content-incomplete and
 //     content-rejected (cvc-complex-content);
 //   - unreachable on a finalized Schema: attribute-use-unresolved,
 //     member-unresolved and any-type; and type-kind, content-type and
@@ -140,7 +156,64 @@ func execJSONCase(backend value.Backend, c caseSpec) (Status, refusal) {
 	if unevaluated := result.Unevaluated(); len(unevaluated) > 0 {
 		return Fail(), unevaluatedRefusal(unevaluated)
 	}
+	if attributeGovernanceDiverges(schema) {
+		return Fail(), refuseJSONAttributeGovernance
+	}
 	return decideAgreement(true, c.expect.wantsValid()), ""
+}
+
+// attributeGovernanceDiverges reports whether schema has a top-level element
+// declaration G whose {type definition} T is a Complex Type Definition with a
+// strict or lax {attribute wildcard} and lacks an attribute use some type on
+// its {base type definition} chain carries (subtreeGate.onChain, which answers
+// true for a base that does not resolve, as this does for a G whose type does
+// not). It is the condition, over the schema alone, without which neither
+// refuseStrictAttribute nor refuseAttributeLDT can arise in an infoset
+// jsonsrc builds:
+//
+//   - jsonsrc presents an attribute only under a use of the {type definition}
+//     of the declaration D its element's key matched, so the attribute
+//     matches no use (cvc-complex-type clause 2.2, where both refusals sit)
+//     only where some other type governs the element;
+//   - at the root and under an element particle D governs (cos-element-
+//     consistent gives same-named contained declarations one type), and under
+//     an {open content} the ·locally declared type· does, which is D's type;
+//   - which leaves a child ·attributed to· a strict or lax Wildcard, governed
+//     by the top-level G its name ·resolves· to, jsonsrc presenting no
+//     xsi:type. The walk charges cvc-complex-type clause 5 unless T is
+//     ·validly substitutable· for D's type, which carries the use T lacks,
+//     and a skip {attribute wildcard} or none admits nothing either refusal
+//     reads.
+//
+// The walk charges and records nothing for either shape (subtreeGate's
+// wildcardAttribute), so a "valid" reading is refused wherever the condition
+// holds, whether or not the document reaches it.
+func attributeGovernanceDiverges(schema *xsd.Schema) bool {
+	g := subtreeGate{schema: schema}
+	for _, d := range schema.Elements() {
+		td, ok := schema.ResolvedType(d.TypeDefinition())
+		if !ok {
+			return true
+		}
+		t, ok := td.(xsd.ComplexType)
+		if !ok {
+			continue
+		}
+		wild, ok := t.AttributeWildcard()
+		if !ok || wild.ProcessContents() == xsd.ProcessSkip {
+			continue
+		}
+		own := t.AttributeUses()
+		lacks := func(c xsd.ComplexType) bool {
+			return slices.ContainsFunc(c.AttributeUses(), func(u xsd.AttributeUse) bool {
+				return !slices.ContainsFunc(own, func(o xsd.AttributeUse) bool { return o.DeclarationName() == u.DeclarationName() })
+			})
+		}
+		if g.onChain(t, lacks) {
+			return true
+		}
+	}
+	return false
 }
 
 // assessJSON opens the JSON instance at doc and assesses it against v, or

@@ -10,6 +10,7 @@ import (
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/validate/xmlsrc"
+	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -230,7 +231,7 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 		says       string // the arm or shape it names
 	}{
 		{"member matching no child declaration", `{"r":{"x":"1"}}`,
-			"jsonsrc: instance.json:1:7: ", `member "x" names no child element declaration of the type of {urn:t}r; the attribute and wildcard member arms are not implemented`},
+			"jsonsrc: instance.json:1:7: ", `member "x" names no child element declaration and no attribute use of the type of {urn:t}r; the wildcard member arm is not implemented`},
 		{"member a wildcard would admit", `{"r":{"w":"1"}}`,
 			"jsonsrc: instance.json:1:7: ", `member "w" names no child element declaration`},
 		{"null", `{"r":{"s":null}}`,
@@ -248,7 +249,7 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 		{"nested array", `{"r":{"s":[["x"]]}}`,
 			"jsonsrc: instance.json:1:12: ", `an array is an item of the array of member "s"`},
 		{"member of a simple-typed element", `{"r":{"s":{"x":1}}}`,
-			"jsonsrc: instance.json:1:12: ", `member "x" names no child element declaration of the type of s;`},
+			"jsonsrc: instance.json:1:12: ", `member "x" names no child element declaration and no attribute use of the type of s;`},
 		{"decline after a mapped sibling", `{"r":{"s":"1","a":"1"}}`,
 			"jsonsrc: instance.json:1:15: ", `member "a" names child element declarations of two expanded names`},
 		{"second member after an assessed root", `{"r":{"c":{"s":"1"}},"x":null}`,
@@ -412,5 +413,183 @@ func TestNilArguments(t *testing.T) {
 	}
 	if _, err := Validate(v, nil); err == nil || !strings.HasPrefix(err.Error(), "jsonsrc: Validate: nil io.Reader") {
 		t.Errorf("nil reader: %v", err)
+	}
+}
+
+// attributeSchema declares one root, shipment, whose element-only type holds a
+// required unqualified id (xs:NCName), an optional priority (xs:integer), an
+// optional flag (xs:boolean), a reference to the qualified top-level attribute
+// code, and one child, dest. A key's namespace comes from the attribute use it
+// matches, so id and code are spelled alike in JSON and differently in XML.
+const attributeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:element name="shipment">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="dest" type="xs:string"/>
+      </xs:sequence>
+      <xs:attribute name="id" type="xs:NCName" use="required"/>
+      <xs:attribute name="priority" type="xs:integer"/>
+      <xs:attribute name="flag" type="xs:boolean"/>
+      <xs:attribute ref="t:code"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:attribute name="code" type="xs:string"/>
+</xs:schema>`
+
+var attr = []xsderr.Rule{"cvc-attribute"}
+
+// TestAttributeMember pins the attribute arm: a member whose key is the local
+// name of an attribute use of the enclosing type is that attribute, under the
+// use's expanded name, its value the scalar's lexical form. The empty string is
+// an attribute with an empty value, not an absent one: "id":"" fails xs:NCName
+// under cvc-attribute where an omitted id is cvc-complex-type clause 3's.
+func TestAttributeMember(t *testing.T) {
+	v := validatorOver(t, attributeSchema)
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"valid", `{"shipment":{"id":"s1","priority":2,"dest":"Oslo"}}`,
+			`<shipment xmlns="urn:t" id="s1" priority="2"><dest>Oslo</dest></shipment>`, none},
+		{"qualified use", `{"shipment":{"id":"s1","code":"c","dest":"Oslo"}}`,
+			`<shipment xmlns="urn:t" xmlns:t="urn:t" id="s1" t:code="c"><dest>Oslo</dest></shipment>`, none},
+		{"boolean", `{"shipment":{"id":"s1","flag":true,"dest":"Oslo"}}`,
+			`<shipment xmlns="urn:t" id="s1" flag="true"><dest>Oslo</dest></shipment>`, none},
+		{"required use absent", `{"shipment":{"priority":2,"dest":"Oslo"}}`,
+			`<shipment xmlns="urn:t" priority="2"><dest>Oslo</dest></shipment>`, complexType},
+		{"value not of its type", `{"shipment":{"id":"s1","priority":"high","dest":"Oslo"}}`,
+			`<shipment xmlns="urn:t" id="s1" priority="high"><dest>Oslo</dest></shipment>`, attr},
+		{"empty string is an empty value", `{"shipment":{"id":"","dest":"Oslo"}}`,
+			`<shipment xmlns="urn:t" id=""><dest>Oslo</dest></shipment>`, attr},
+		{"escaped tab is kept", `{"shipment":{"id":"a\tb","dest":"Oslo"}}`,
+			`<shipment xmlns="urn:t" id="a&#9;b"><dest>Oslo</dest></shipment>`, attr},
+		{"attributes alone", `{"shipment":{"id":"s1"}}`,
+			`<shipment xmlns="urn:t" id="s1"/>`, content},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestAttributesReadWhole pins what the engine reads off an element's
+// attributes: each under its use's expanded name, its value unnormalized — an
+// escaped tab, LF and CR kept as a character reference would be — at its key's
+// Loc, and the same before and after the element's children are read.
+func TestAttributesReadWhole(t *testing.T) {
+	v := validatorOver(t, attributeSchema)
+	w := newWalker(jsonURI, strings.NewReader("{\"shipment\":{\"id\":\"s1\",\n \"code\":\"a\\tb\\nc\\rd\",\"dest\":\"Oslo\"}}"), v.Schema())
+	root, err := w.root()
+	if err != nil {
+		t.Fatalf("root: %v", err)
+	}
+	type seen struct {
+		name  xsd.QName
+		value string
+		loc   string
+	}
+	read := func() []seen {
+		var out []seen
+		for _, a := range root.Attributes() {
+			out = append(out, seen{a.Name(), a.Value(), a.Loc().String()})
+		}
+		return out
+	}
+	want := []seen{
+		{xsd.QName{Local: "id"}, "s1", "instance.json:1:14"},
+		{xsd.QName{Space: "urn:t", Local: "code"}, "a\tb\nc\rd", "instance.json:2:2"},
+	}
+	if got := read(); !slices.Equal(got, want) {
+		t.Fatalf("Attributes() at entry = %v, want %v", got, want)
+	}
+	if err := w.end(root); err != nil {
+		t.Fatalf("end: %v", err)
+	}
+	if got := read(); !slices.Equal(got, want) {
+		t.Fatalf("Attributes() after the children = %v, want %v", got, want)
+	}
+}
+
+// attributeDeclinesSchema holds the keys the attribute arm declines: n,
+// declared both as a child and as an attribute; k, the local name of an
+// unqualified use and of a reference to the top-level {urn:t}k; w, which r's
+// {attribute wildcard} alone admits; price's currency, a use of a type with
+// simple content; and x's reference to xsi:type. a is a plain use.
+const attributeDeclinesSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="n" type="xs:string" minOccurs="0"/>
+        <xs:element name="price" minOccurs="0">
+          <xs:complexType>
+            <xs:simpleContent>
+              <xs:extension base="xs:decimal">
+                <xs:attribute name="currency" type="xs:string"/>
+              </xs:extension>
+            </xs:simpleContent>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="x" minOccurs="0">
+          <xs:complexType>
+            <xs:attribute ref="xsi:type"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="n" type="xs:string"/>
+      <xs:attribute name="k" type="xs:string"/>
+      <xs:attribute ref="t:k"/>
+      <xs:attribute name="a" type="xs:string"/>
+      <xs:anyAttribute processContents="lax"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:attribute name="k" type="xs:string"/>
+  <xs:attribute name="w" type="xs:string"/>
+</xs:schema>`
+
+// TestAttributeMemberDeclines pins every attribute-shaped member the arm does
+// not map: each is (nil, err), err opening with "jsonsrc: <uri>:<line>:<col>: "
+// at the construct it names.
+func TestAttributeMemberDeclines(t *testing.T) {
+	v := validatorOver(t, attributeDeclinesSchema)
+	for _, tc := range []struct {
+		name, json string
+		prefix     string
+		says       string
+	}{
+		{"attribute after a child", `{"r":{"price":1,"a":"x"}}`,
+			"jsonsrc: instance.json:1:17: ", `attribute member "a" follows a child member of {urn:t}r; attribute members lead the object`},
+		{"repeated attribute", `{"r":{"a":"x","a":"y"}}`,
+			"jsonsrc: instance.json:1:15: ", `attribute member "a" repeats in the object of {urn:t}r`},
+		{"null value", `{"r":{"a":null}}`,
+			"jsonsrc: instance.json:1:11: ", `attribute member "a" of {urn:t}r is not a string, number or boolean`},
+		{"object value", `{"r":{"a":{}}}`,
+			"jsonsrc: instance.json:1:11: ", `attribute member "a" of {urn:t}r is not a string, number or boolean`},
+		{"array value", `{"r":{"a":["x"]}}`,
+			"jsonsrc: instance.json:1:11: ", `attribute member "a" of {urn:t}r is not a string, number or boolean`},
+		{"both a child and an attribute", `{"r":{"n":"1"}}`,
+			"jsonsrc: instance.json:1:7: ", `member "n" names both the child element declaration {urn:t}n and the attribute use n of the type of {urn:t}r`},
+		{"uses of two expanded names", `{"r":{"k":"1"}}`,
+			"jsonsrc: instance.json:1:7: ", `member "k" names attribute uses of two expanded names in the type of {urn:t}r (k and {urn:t}k)`},
+		{"a key the attribute wildcard alone admits", `{"r":{"w":"1"}}`,
+			"jsonsrc: instance.json:1:7: ", `member "w" names no child element declaration and no attribute use of the type of {urn:t}r`},
+		{"a use of a simple-content type", `{"r":{"price":{"currency":"EUR"}}}`,
+			"jsonsrc: instance.json:1:16: ", `member "currency" names an attribute use of the type of {urn:t}price, whose {content type} is simple`},
+		{"a use in the xsi namespace", `{"r":{"x":{"type":"t:r"}}}`,
+			"jsonsrc: instance.json:1:12: ", `member "type" names the attribute use {http://www.w3.org/2001/XMLSchema-instance}type of the type of {urn:t}x; an xsi: attribute is presented only by`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
+			if err == nil {
+				t.Fatalf("Validate(%s) = %v violations, nil error; want the decline", tc.json, rules(res))
+			}
+			if res != nil {
+				t.Errorf("Validate(%s) returned a result beside its error", tc.json)
+			}
+			if !strings.HasPrefix(err.Error(), tc.prefix) || !strings.Contains(err.Error(), tc.says) {
+				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, tc.says)
+			}
+		})
 	}
 }

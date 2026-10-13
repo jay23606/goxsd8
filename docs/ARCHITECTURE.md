@@ -91,7 +91,7 @@ and imports `xsd`, `value`, `regex` and
 `xsderr` for real (its section says which tiers are shipped).
 
 **[2] The infoset seam, the assessment skeleton, the XML adapter and the
-first slice of the JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views and
+first two slices of the JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views and
 `New`/`Validator`/`Result` and imports `xsd`, `xsderr`, `value`, `xpath` and
 `icpath` — no longer `regex` directly, whose NCName class left with the
 identity-constraint path lexer for `icpath`, though it stays in the closure
@@ -607,7 +607,7 @@ it charges nothing, under the `GAP(xpath)` marker on `validate`'s
 
 **Status: the engine ships the seam and charges the cvc- rules
 `validate/doc.go` names, at the ·validation root· and at every descendant the
-descent types; the XML adapter and the JSON adapter's first slice ship over
+descent types; the XML adapter and the JSON adapter's first two slices ship over
 it.**
 `validate` exports the infoset views (`Element`, `Attribute`, `Text`,
 `Children`, `Child`, with `ElementChild`/`TextChild` constructing the sum),
@@ -629,7 +629,7 @@ which must be the backend the schema was compiled with.
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and drives that walk
 over an XML instance decoded by `parser/xmltree`; `validate/jsonsrc`
 exports the same three and drives it over a JSON instance, on the arms its
-`doc.go` names as implemented (M8, first slice); `validate/bersrc` is
+`doc.go` names as implemented (M8, first two slices); `validate/bersrc` is
 `doc.go`-only (M11). Everything below not covered
 by that seam is the destination, stated in present tense because it is a
 design contract.

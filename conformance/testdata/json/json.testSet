@@ -93,4 +93,31 @@
       <expected validity="invalid"/>
     </instanceTest>
   </testGroup>
+  <testGroup name="attribute">
+    <annotation>
+      <documentation>A member whose key is the local name of an attribute use of the enclosing type is that attribute, under the use's expanded name: {"shipment":{"id":"s1","dest":"Oslo"}} is &lt;shipment id="s1"&gt;&lt;dest&gt;Oslo&lt;/dest&gt;&lt;/shipment&gt;. Attribute members lead the object.</documentation>
+    </annotation>
+    <schemaTest name="attribute">
+      <schemaDocument xlink:href="attribute.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
+    <instanceTest name="attribute.v">
+      <instanceDocument xlink:href="attribute.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="attribute-missing.i">
+      <annotation>
+        <documentation>expects cvc-complex-type: priority is presented and the required id is not (clause 3).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="attribute-missing.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+    <instanceTest name="attribute-type.i">
+      <annotation>
+        <documentation>expects cvc-attribute: priority "high" is not an xs:integer (clause 3, String Valid).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="attribute-type.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
 </testSet>

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/xsd"
@@ -47,14 +48,17 @@ func WithURI(uri string) Option {
 // or followed by further content; and every input the mapping DECLINES —
 // a top level that is not an object with exactly one member naming a
 // top-level element declaration, and, anywhere in the document, a member the
-// implemented arms do not map (a key no child element declaration carries, a
-// key two expanded names carry, a "$"-prefixed reserved member, a null, a
-// nested array, a declaration with a {type table}). A decline names the arm it
-// is not, and is never a silent drop or a guessed mapping: a member that would
-// map to an attribute, to xsi:nil or to xsi:type is not part of the document
-// the assessment saw, so its result is discarded rather than returned. The
-// whole document is read either way, so a fault after the point the
-// assessment stopped at is still reported.
+// implemented arms do not map (a key no child element declaration and no
+// attribute use carries, a key two expanded names carry, a key both a child
+// declaration and an attribute use carry, an attribute member after a child
+// member or repeated, a "$"-prefixed reserved member, a null, a nested array,
+// a declaration with a {type table}; the package doc lists them all). A
+// decline names the arm it is not, and is never a silent drop or a guessed
+// mapping: a member that would map to a wildcard's element or attribute, to
+// xsi:nil or to xsi:type is not part of the document the assessment saw, so
+// its result is discarded rather than returned. The whole document is read
+// either way, so a fault after the point the assessment stopped at is still
+// reported.
 //
 // Every error is a plain one, prefixed "jsonsrc: " and, past the nil checks,
 // the location of the construct it names. None is an [xsderr.Error]: none is a
@@ -197,21 +201,87 @@ func (w *walker) rootDeclaration(key string, loc xsderr.Loc) (xsd.ElementDeclara
 		key, len(match), match[0].Name(), match[1].Name())
 }
 
-// child resolves a member's key to the child element declaration among
-// contained, the declarations the enclosing element's type contains, whose
-// local name it is. The first declaration of the name stands for every other
+// object is what an object-valued element's members are classified against,
+// read once per element from its declaration's {type definition}: the owner's
+// expanded name, the child element declarations the type contains, the type's
+// {attribute uses}, and whether its {content type} is simple. A simple type
+// contains none and has none.
+type object struct {
+	owner     xsd.QName
+	contained []xsd.ElementDeclaration
+	uses      []xsd.AttributeUse
+	// simpleContent is the type's {content type} being simple: the mapping
+	// spells no text beside attribute members, so it declines one there.
+	simpleContent bool
+}
+
+// member is one key's classification: an attribute use of the enclosing type
+// where use is non-nil, and otherwise the child element declaration decl.
+type member struct {
+	decl xsd.ElementDeclaration
+	use  *xsd.AttributeUse
+}
+
+// classify resolves a member's key, at loc, against o: to the child element
+// declaration among o.contained whose local name it is, or to the attribute
+// use among o.uses whose {attribute declaration}'s local name it is
+// (cvc-complex-type clause 2.1 then matches the attribute to that use by
+// expanded name). The first declaration of the name stands for every other
 // (xsd.Schema.ContainedElementDeclarations says why that is sound).
 //
-// A key no declaration carries DECLINES whatever a wildcard of the content
-// model would admit: the member could equally be an attribute, and a wildcard
-// match is the arm this slice does not take.
-func (w *walker) child(contained []xsd.ElementDeclaration, owner xsd.QName, key string, loc xsderr.Loc) (xsd.ElementDeclaration, error) {
+// It DECLINES a reserved key; a key two expanded names carry among the
+// declarations, or among the uses; a key both a declaration and a use carry,
+// which no spec rule decides between; a use in the xsi namespace, xsi:type
+// and xsi:nil being the reserved-member and null arms' to present; an
+// attribute use of a type with simple content, beside which the mapping spells
+// no text; and a key neither carries, whatever an {attribute wildcard} or an
+// element wildcard of the type would admit, a wildcard match being the arm this
+// slice does not take.
+//
+// GAP(jsonsrc): a key no child element declaration and no attribute use
+// carries declines, the wildcard member arm not being implemented. That covers
+// a key an element wildcard of the type admits (cvc-accept), and a key its
+// {attribute wildcard} admits, whose attribute cvc-complex-type clause 2.2
+// would match to that wildcard.
+//
+// GAP(jsonsrc): a key both a child element declaration and an attribute use
+// carry declines. RULED permanent by #2613: no spec rule decides between them,
+// and the mapping has no warning channel to report a choice through.
+//
+// The xsi-namespace, two-expanded-name and simple-content declines among the
+// uses are useNamed's, under its GAP(jsonsrc) markers.
+func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error) {
 	if isReserved(key) {
-		return xsd.ElementDeclaration{}, w.reserved(key, loc)
+		return member{}, w.reserved(key, loc)
 	}
+	decl, declared, err := w.childNamed(o, key, loc)
+	if err != nil {
+		return member{}, err
+	}
+	use, used, err := w.useNamed(o, key, loc)
+	if err != nil {
+		return member{}, err
+	}
+	if declared && used {
+		return member{}, w.declinef(loc, "member %q names both the child element declaration %s and the attribute use %s of the type of %s; the mapping does not choose between them",
+			key, decl.Name(), use.DeclarationName(), o.owner)
+	}
+	if used {
+		return member{use: &use}, nil
+	}
+	if !declared {
+		return member{}, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s; the wildcard member arm is not implemented",
+			key, o.owner)
+	}
+	return member{decl: decl}, w.typeTable(decl, loc)
+}
+
+// childNamed is the first of o.contained whose local name is key, declining
+// a key two expanded names carry.
+func (w *walker) childNamed(o *object, key string, loc xsderr.Loc) (xsd.ElementDeclaration, bool, error) {
 	var first xsd.ElementDeclaration
 	found := false
-	for _, d := range contained {
+	for _, d := range o.contained {
 		if d.Name().Local != key {
 			continue
 		}
@@ -220,20 +290,63 @@ func (w *walker) child(contained []xsd.ElementDeclaration, owner xsd.QName, key 
 			continue
 		}
 		if d.Name() != first.Name() {
-			return xsd.ElementDeclaration{}, w.declinef(loc, "member %q names child element declarations of two expanded names in the type of %s (%s and %s); a JSON key carries no namespace to choose between them",
-				key, owner, first.Name(), d.Name())
+			return xsd.ElementDeclaration{}, false, w.declinef(loc, "member %q names child element declarations of two expanded names in the type of %s (%s and %s); a JSON key carries no namespace to choose between them",
+				key, o.owner, first.Name(), d.Name())
+		}
+	}
+	return first, found, nil
+}
+
+// useNamed is the member of o.uses whose {attribute declaration}'s local name
+// is key. It declines a key uses of two expanded names carry, a use in the xsi
+// namespace, and a use of a type with simple content.
+//
+// GAP(jsonsrc): a key attribute uses of two expanded names carry declines:
+// cvc-complex-type clause 2.1 matches an attribute to a use by expanded name,
+// and a JSON key carries no namespace to choose between them.
+//
+// GAP(jsonsrc): an attribute use in the xsi namespace declines. xsi:nil and
+// xsi:type are presented only by the null and "$type" arms, owned by #2614 and
+// #2615.
+//
+// GAP(jsonsrc): an attribute use of a type whose {content type} is simple
+// declines. RULED permanent by #2613: the XML twin, simple content beside
+// attributes, is valid under cvc-complex-type clauses 1.2 and 2, and the
+// mapping spells no text beside attribute members.
+func (w *walker) useNamed(o *object, key string, loc xsderr.Loc) (xsd.AttributeUse, bool, error) {
+	var first xsd.AttributeUse
+	found := false
+	for _, u := range o.uses {
+		if u.DeclarationName().Local != key {
+			continue
+		}
+		if !found {
+			first, found = u, true
+			continue
+		}
+		if u.DeclarationName() != first.DeclarationName() {
+			return xsd.AttributeUse{}, false, w.declinef(loc, "member %q names attribute uses of two expanded names in the type of %s (%s and %s); a JSON key carries no namespace to choose between them",
+				key, o.owner, first.DeclarationName(), u.DeclarationName())
 		}
 	}
 	if !found {
-		return xsd.ElementDeclaration{}, w.declinef(loc, "member %q names no child element declaration of the type of %s; the attribute and wildcard member arms are not implemented",
-			key, owner)
+		return xsd.AttributeUse{}, false, nil
 	}
-	return first, w.typeTable(first, loc)
+	if first.DeclarationName().Space == xsd.XMLSchemaInstanceNS {
+		return xsd.AttributeUse{}, false, w.declinef(loc, "member %q names the attribute use %s of the type of %s; an xsi: attribute is presented only by the null => xsi:nil and \"$type\" arms, which are not implemented",
+			key, first.DeclarationName(), o.owner)
+	}
+	if o.simpleContent {
+		return xsd.AttributeUse{}, false, w.declinef(loc, "member %q names an attribute use of the type of %s, whose {content type} is simple; the mapping spells no text beside attribute members",
+			key, o.owner)
+	}
+	return first, true, nil
 }
 
 // typeTable declines a declaration carrying a {type table}: which type governs
-// its element turns on the element's attributes (§3.12.4), and this mapping
-// presents none, so the content it classifies by would be a guess.
+// its element turns on the element's attributes (§3.12.4), xsi: ones included,
+// and this mapping does not present those, so the content it classifies by
+// would be a guess.
 func (w *walker) typeTable(d xsd.ElementDeclaration, loc xsderr.Loc) error {
 	if _, ok := d.TypeTable(); ok {
 		return w.declinef(loc, "element %s carries a {type table}; conditional type assignment is not implemented", d.Name())
@@ -262,22 +375,39 @@ func (w *walker) element(decl xsd.ElementDeclaration, loc xsderr.Loc, key string
 			// where a value is due.
 			return nil, w.declinef(tokLoc, "an array is an item of the array of member %q; only an object or a scalar maps to one element", key)
 		}
-		contained, err := w.contained(decl, tokLoc)
+		o, err := w.object(decl, tokLoc)
 		if err != nil {
 			return nil, err
 		}
-		return &element{w: w, decl: decl, loc: loc, kids: &members{w: w, owner: decl.Name(), contained: contained}}, nil
+		attrs, head, err := w.attributes(o)
+		if err != nil {
+			return nil, err
+		}
+		return &element{w: w, decl: decl, loc: loc, attrs: attrs, kids: &members{w: w, object: o, head: &head}}, nil
+	}
+	lexical, ok := scalarLexical(tok)
+	if !ok {
+		panic(fmt.Sprintf("jsonsrc: Token yielded %T", tok))
+	}
+	return w.scalar(decl, loc, lexical, tokLoc), nil
+}
+
+// scalarLexical is the lexical form of a scalar token — a string's decoded
+// characters; a number's source text, never a float64 round trip; true or
+// false — and false for a token that is no scalar: null or a delimiter.
+func scalarLexical(tok json.Token) (string, bool) {
+	switch v := tok.(type) {
 	case string:
-		return w.scalar(decl, loc, v, tokLoc), nil
+		return v, true
 	case json.Number:
-		return w.scalar(decl, loc, string(v), tokLoc), nil
+		return string(v), true
 	case bool:
 		if v {
-			return w.scalar(decl, loc, "true", tokLoc), nil
+			return "true", true
 		}
-		return w.scalar(decl, loc, "false", tokLoc), nil
+		return "false", true
 	}
-	panic(fmt.Sprintf("jsonsrc: Token yielded %T", tok))
+	return "", false
 }
 
 // scalar builds a scalar-valued element: lexical is its simple content. An
@@ -290,22 +420,78 @@ func (w *walker) scalar(decl xsd.ElementDeclaration, loc xsderr.Loc, lexical str
 	return &element{w: w, decl: decl, loc: loc, kids: kids}
 }
 
-// contained is the child element declarations an object-valued element of
-// decl classifies its members against: those its {type definition}'s content
-// model contains. A simple type contains none, so every member of its object
-// declines and an empty object is an element with no children.
-func (w *walker) contained(decl xsd.ElementDeclaration, loc xsderr.Loc) ([]xsd.ElementDeclaration, error) {
+// object is what an object-valued element of decl classifies its members
+// against, from its {type definition}: a complex type's contained declarations
+// and {attribute uses}; a simple type has neither, so every member of its
+// object declines and an empty object is an element with no children.
+func (w *walker) object(decl xsd.ElementDeclaration, loc xsderr.Loc) (*object, error) {
 	td, ok := w.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
 		return nil, w.declinef(loc, "the {type definition} of %s does not resolve; its members cannot be classified", decl.Name())
 	}
 	switch t := td.(type) {
 	case xsd.ComplexType:
-		return w.schema.ContainedElementDeclarations(t), nil
+		_, simple := t.ContentType().(xsd.SimpleContent)
+		return &object{owner: decl.Name(), contained: w.schema.ContainedElementDeclarations(t), uses: t.AttributeUses(), simpleContent: simple}, nil
 	case *xsd.SimpleType:
-		return nil, nil
+		return &object{owner: decl.Name()}, nil
 	}
 	panic(fmt.Sprintf("jsonsrc: TypeDefinition arm %T", td))
+}
+
+// attributes reads the leading members of o's object that name attribute uses
+// (classify), each an attribute of the element, and returns them with the
+// token that ends the run — the first key naming a child, or the object's
+// close — for the element's members cursor to start from.
+//
+// The engine reads an element's [[attributes]] at its entry, before its
+// [[children]], and again after them, so they must be whole and unchanged
+// from the first read. Reading the leading run as the element is built makes
+// them so without holding any of the document (STYLE P4); an attribute member
+// after a child member therefore declines, under members.key's GAP(jsonsrc)
+// marker.
+//
+// Each attribute is named by its use's {attribute declaration}'s expanded name
+// and located at its key. Its [[normalized value]] is its scalar's lexical
+// form (scalarLexical) unchanged, and the empty string is an attribute whose
+// value is empty. XML 1.0 §3.3.3 maps a literal #x9, #xA or #xD to #x20 and
+// keeps one a character reference names; a JSON string holds none literally
+// (RFC 8259 §7 requires a control character to be escaped), and its escape is
+// read as the character reference would be. It declines a null, object or
+// array value, and a key repeated in the run: an element carries one attribute
+// of each expanded name (XML 1.0 §3.1, Unique Att Spec).
+func (w *walker) attributes(o *object) ([]validate.Attribute, peeked, error) {
+	var attrs []validate.Attribute
+	for {
+		tok, loc, err := w.token()
+		if err != nil {
+			return nil, peeked{}, unexpectedEOF(err, loc)
+		}
+		key, ok := tok.(string)
+		if !ok {
+			return attrs, peeked{tok: tok, loc: loc}, nil
+		}
+		m, err := w.classify(o, key, loc)
+		if err != nil {
+			return nil, peeked{}, err
+		}
+		if m.use == nil {
+			return attrs, peeked{tok: tok, loc: loc, member: m}, nil
+		}
+		name := m.use.DeclarationName()
+		if slices.ContainsFunc(attrs, func(a validate.Attribute) bool { return a.Name() == name }) {
+			return nil, peeked{}, w.declinef(loc, "attribute member %q repeats in the object of %s; an element carries one attribute of each expanded name", key, o.owner)
+		}
+		vtok, vloc, err := w.token()
+		if err != nil {
+			return nil, peeked{}, unexpectedEOF(err, vloc)
+		}
+		lexical, ok := scalarLexical(vtok)
+		if !ok {
+			return nil, peeked{}, w.declinef(vloc, "attribute member %q of %s is not a string, number or boolean; an attribute's value is a scalar", key, o.owner)
+		}
+		attrs = append(attrs, &attribute{name: name, value: lexical, loc: loc})
+	}
 }
 
 // end reads what follows the root's value once the assessment returns: the

@@ -15,10 +15,11 @@ import (
 // validate.UnparsedEntities says, and [all declarations processed] is true,
 // which is what its absence is taken to mean.
 var (
-	_ validate.Element  = (*element)(nil)
-	_ validate.Children = (*members)(nil)
-	_ validate.Children = (*scalarChildren)(nil)
-	_ validate.Text     = (*text)(nil)
+	_ validate.Element   = (*element)(nil)
+	_ validate.Children  = (*members)(nil)
+	_ validate.Children  = (*scalarChildren)(nil)
+	_ validate.Text      = (*text)(nil)
+	_ validate.Attribute = (*attribute)(nil)
 )
 
 // xmlNamespace is the namespace name the prefix "xml" is bound to in every
@@ -40,6 +41,9 @@ type element struct {
 	decl xsd.ElementDeclaration
 	// loc is where the member's key, or the array item, begins.
 	loc xsderr.Loc
+	// attrs is the element's [[attributes]], read whole as the element was
+	// built (walker.attributes): an object value's leading attribute members.
+	attrs []validate.Attribute
 	// kids is the element's [[children]]: a members cursor for an object
 	// value, a scalarChildren for a scalar one.
 	kids cursor
@@ -54,8 +58,9 @@ type element struct {
 // trap").
 func (e *element) Name() xsd.QName { return e.decl.Name() }
 
-// Attributes is empty: this slice maps no member to an attribute.
-func (e *element) Attributes() []validate.Attribute { return nil }
+// Attributes is the element's attribute members in member order, the same
+// slice at every call: a scalar value has none.
+func (e *element) Attributes() []validate.Attribute { return e.attrs }
 
 // Children reports the element's cursor. It panics once the walk has moved
 // past the element, for the reason xmlsrc's element.Children does: the
@@ -90,6 +95,18 @@ func (e *element) finish() {
 	e.finished = true
 }
 
+// attribute is an attribute member: the expanded name of the attribute use its
+// key matched, its scalar's lexical form, and its key's location.
+type attribute struct {
+	name  xsd.QName
+	value string
+	loc   xsderr.Loc
+}
+
+func (a *attribute) Name() xsd.QName { return a.name }
+func (a *attribute) Value() string   { return a.value }
+func (a *attribute) Loc() xsderr.Loc { return a.loc }
+
 // text is a scalar member's value as the run of character information items
 // its element holds.
 type text struct {
@@ -121,13 +138,17 @@ func (c *scalarChildren) Err() error { return nil }
 func (c *scalarChildren) drain() { c.done = true }
 
 // members is a cursor over an object-valued element's [[children]]: one
-// element per scalar- or object-valued member, and one per item of an
-// array-valued member, in member order.
+// element per scalar- or object-valued child member, and one per item of an
+// array-valued one, in member order, past the leading attribute members
+// walker.attributes read.
 type members struct {
-	w     *walker
-	owner xsd.QName
-	// contained is what the owner's type contains, read once per element.
-	contained []xsd.ElementDeclaration
+	w *walker
+	// object is what the owner's members are classified against, read once
+	// per element.
+	object *object
+	// head is the token walker.attributes ended the leading attribute run on,
+	// which the first read starts from, and nil once read.
+	head *peeked
 	// run is the array-valued member the stream stands inside, and nil
 	// outside one.
 	run *arrayRun
@@ -136,6 +157,14 @@ type members struct {
 	last *element
 	// done latches the owner's closing brace.
 	done bool
+}
+
+// peeked is a token read ahead of its cursor: a key with its classification,
+// or the object's close, and the token's location.
+type peeked struct {
+	tok    json.Token
+	loc    xsderr.Loc
+	member member
 }
 
 // arrayRun is one array-valued member: the declaration its key matched, and
@@ -184,29 +213,58 @@ func (m *members) next() (*element, error) {
 			}
 			return m.w.element(m.run.decl, loc, m.run.key, tok, loc)
 		}
-		tok, loc, err := m.w.token()
+		p, err := m.key()
 		if err != nil {
-			return nil, unexpectedEOF(err, loc)
+			return nil, err
 		}
-		key, ok := tok.(string)
+		key, ok := p.tok.(string)
 		if !ok {
 			// Token yields a key or the object's close here and nothing else.
 			return nil, nil
-		}
-		decl, err := m.w.child(m.contained, m.owner, key, loc)
-		if err != nil {
-			return nil, err
 		}
 		vtok, vloc, err := m.w.token()
 		if err != nil {
 			return nil, unexpectedEOF(err, vloc)
 		}
 		if vtok == json.Delim('[') {
-			m.run = &arrayRun{decl: decl, key: key}
+			m.run = &arrayRun{decl: p.member.decl, key: key}
 			continue
 		}
-		return m.w.element(decl, loc, key, vtok, vloc)
+		return m.w.element(p.member.decl, p.loc, key, vtok, vloc)
 	}
+}
+
+// key reads the owner's next key, classified as a child, or its close: first
+// the head the attribute run ended on, then from the stream. A key naming an
+// attribute use there DECLINES: it follows a child member, and the owner's
+// [[attributes]] were read whole before its first child (walker.attributes).
+//
+// GAP(jsonsrc): an attribute member after a child member declines, where its
+// XML twin, attribute order being insignificant, carries the attribute.
+// Presenting it would mean holding the owner's members until its close, and
+// the walk holds none of the document (STYLE P4).
+func (m *members) key() (peeked, error) {
+	if h := m.head; h != nil {
+		m.head = nil
+		return *h, nil
+	}
+	tok, loc, err := m.w.token()
+	if err != nil {
+		return peeked{}, unexpectedEOF(err, loc)
+	}
+	key, ok := tok.(string)
+	if !ok {
+		return peeked{tok: tok, loc: loc}, nil
+	}
+	mem, err := m.w.classify(m.object, key, loc)
+	if err != nil {
+		return peeked{}, err
+	}
+	if mem.use != nil {
+		return peeked{}, m.w.declinef(loc, "attribute member %q follows a child member of %s; attribute members lead the object, as an element's attributes are read before its children",
+			key, m.object.owner)
+	}
+	return peeked{tok: tok, loc: loc, member: mem}, nil
 }
 
 // Err reports the walk's one latched fault (STYLE D3).

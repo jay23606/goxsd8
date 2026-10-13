@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The attribute group's schema: one root, shipment, element-only, with a
+     required id (xs:NCName), an optional priority (xs:integer), and one
+     child, dest (xs:string). The attributes are unqualified, as local
+     attribute declarations are by default, and the child is qualified, so a
+     JSON key's namespace comes from the use or declaration it matches. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:goxsd8:json:attribute" xmlns="urn:goxsd8:json:attribute"
+           elementFormDefault="qualified">
+  <xs:element name="shipment">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="dest" type="xs:string"/>
+      </xs:sequence>
+      <xs:attribute name="id" type="xs:NCName" use="required"/>
+      <xs:attribute name="priority" type="xs:integer"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

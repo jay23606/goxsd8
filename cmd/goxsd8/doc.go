@@ -280,9 +280,9 @@
 // with codec (M10) and validate/bersrc (M11) each export nothing yet, so for
 // code generation and BER instances there is no second route to document
 // until those milestones land. validate/jsonsrc exports Validate for the
-// first slice of M8's JSON mapping, which -format json does not reach until
-// the mapping is whole. Error output is stable and line-oriented for
-// scripting.
+// slices of M8's JSON mapping shipped so far, which -format json does not
+// reach until the mapping is whole. Error output is stable and line-oriented
+// for scripting.
 //
 // # Diagnostic lines
 //
