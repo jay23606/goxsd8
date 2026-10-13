@@ -51,14 +51,14 @@ func WithURI(uri string) Option {
 // implemented arms do not map (a key no child element declaration and no
 // attribute use carries, a key two expanded names carry, a key both a child
 // declaration and an attribute use carry, an attribute member after a child
-// member or repeated, a "$"-prefixed reserved member, a null, a nested array,
-// a declaration with a {type table}; the package doc lists them all). A
-// decline names the arm it is not, and is never a silent drop or a guessed
-// mapping: a member that would map to a wildcard's element or attribute, to
-// xsi:nil or to xsi:type is not part of the document the assessment saw, so
-// its result is discarded rather than returned. The whole document is read
-// either way, so a fault after the point the assessment stopped at is still
-// reported.
+// member or repeated, an attribute member whose value is null, an object or an
+// array, a "$"-prefixed reserved member, a nested array, a declaration with a
+// {type table}; the package doc lists them all). A decline names the arm it is
+// not, and is never a silent drop or a guessed mapping: a member that would
+// map to a wildcard's element or attribute or to xsi:type is not part of the
+// document the assessment saw, so its result is discarded rather than
+// returned. The whole document is read either way, so a fault after the point
+// the assessment stopped at is still reported.
 //
 // Every error is a plain one, prefixed "jsonsrc: " and, past the nil checks,
 // the location of the construct it names. None is an [xsderr.Error]: none is a
@@ -231,8 +231,8 @@ type member struct {
 //
 // It DECLINES a reserved key; a key two expanded names carry among the
 // declarations, or among the uses; a key both a declaration and a use carry,
-// which no spec rule decides between; a use in the xsi namespace, xsi:type
-// and xsi:nil being the reserved-member and null arms' to present; an
+// which no spec rule decides between; a use in the xsi namespace, xsi:nil
+// being the null arm's to present and xsi:type the reserved-member arm's; an
 // attribute use of a type with simple content, beside which the mapping spells
 // no text; and a key neither carries, whatever an {attribute wildcard} or an
 // element wildcard of the type would admit, a wildcard match being the arm this
@@ -305,9 +305,16 @@ func (w *walker) childNamed(o *object, key string, loc xsderr.Loc) (xsd.ElementD
 // cvc-complex-type clause 2.1 matches an attribute to a use by expanded name,
 // and a JSON key carries no namespace to choose between them.
 //
-// GAP(jsonsrc): an attribute use in the xsi namespace declines. xsi:nil and
-// xsi:type are presented only by the null and "$type" arms, owned by #2614 and
-// #2615.
+// GAP(jsonsrc): a key naming an xsi:type attribute use declines: it is the
+// "$type" arm's to present, owned by #2615.
+//
+// GAP(jsonsrc): a key naming an xsi:schemaLocation or
+// xsi:noNamespaceSchemaLocation attribute use declines, owned by #2627, which
+// rules it a permanent decline or gives it a key spelling.
+//
+// GAP(jsonsrc): a key naming an xsi:nil attribute use declines. RULED
+// permanent by #2614: a null value is xsi:nil's one spelling (walker.nilled),
+// and a second would let one object present it twice.
 //
 // GAP(jsonsrc): an attribute use of a type whose {content type} is simple
 // declines. RULED permanent by #2613: the XML twin, simple content beside
@@ -333,7 +340,7 @@ func (w *walker) useNamed(o *object, key string, loc xsderr.Loc) (xsd.AttributeU
 		return xsd.AttributeUse{}, false, nil
 	}
 	if first.DeclarationName().Space == xsd.XMLSchemaInstanceNS {
-		return xsd.AttributeUse{}, false, w.declinef(loc, "member %q names the attribute use %s of the type of %s; an xsi: attribute is presented only by the null => xsi:nil and \"$type\" arms, which are not implemented",
+		return xsd.AttributeUse{}, false, w.declinef(loc, "member %q names the attribute use %s of the type of %s; an xsi: attribute is presented only by the null => xsi:nil arm and the \"$type\" arm, which is not implemented",
 			key, first.DeclarationName(), o.owner)
 	}
 	if o.simpleContent {
@@ -368,7 +375,7 @@ func (w *walker) reserved(key string, loc xsderr.Loc) error {
 func (w *walker) element(decl xsd.ElementDeclaration, loc xsderr.Loc, key string, tok json.Token, tokLoc xsderr.Loc) (*element, error) {
 	switch v := tok.(type) {
 	case nil:
-		return nil, w.declinef(tokLoc, "member %q is null; the null => xsi:nil arm is not implemented", key)
+		return w.nilled(decl, loc, tokLoc), nil
 	case json.Delim:
 		if v != json.Delim('{') {
 			// '[' alone reaches here: Token never yields a closing delimiter
@@ -418,6 +425,18 @@ func (w *walker) scalar(decl xsd.ElementDeclaration, loc xsderr.Loc, lexical str
 		kids.text = &text{data: lexical, loc: tokLoc}
 	}
 	return &element{w: w, decl: decl, loc: loc, kids: kids}
+}
+
+// nilled builds a null-valued element: one attribute, xsi:nil with the
+// lexical form true, located at the null token tokLoc, and no [[children]]
+// (package doc, "The mapping"). It reads no property of decl: whether the
+// element is ·nilled· (key-nilled) and whether cvc-elt clause 3.1 or 3.2.3.2
+// charges it are the engine's, as for the XML twin <e xsi:nil="true"/>. Where
+// it is ·nilled·, the xsi:nil keeps it from cvc-elt clause 5.1's {value
+// constraint}, which an empty element without one would take.
+func (w *walker) nilled(decl xsd.ElementDeclaration, loc, tokLoc xsderr.Loc) *element {
+	attrs := []validate.Attribute{&attribute{name: xsiNil, value: "true", loc: tokLoc}}
+	return &element{w: w, decl: decl, loc: loc, attrs: attrs, kids: &scalarChildren{}}
 }
 
 // object is what an object-valued element of decl classifies its members

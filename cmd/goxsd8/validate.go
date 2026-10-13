@@ -235,7 +235,7 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		// A token the contract reserves and no milestone has built:
 		// validate/bersrc carries a doc.go and no Validate, and
 		// validate/jsonsrc's Validate maps part of M8's JSON mapping alone,
-		// declining null, the reserved members and wildcard members,
+		// declining the reserved members and wildcard members,
 		// so the honest answer is the usage code and this diagnosis, never a
 		// silent pass.
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %s: -format %s is reserved by the contract and not yet implemented; only %s instances are assessed today", instance, format, formatXML))

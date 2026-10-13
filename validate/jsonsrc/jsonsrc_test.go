@@ -234,10 +234,6 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:7: ", `member "x" names no child element declaration and no attribute use of the type of {urn:t}r; the wildcard member arm is not implemented`},
 		{"member a wildcard would admit", `{"r":{"w":"1"}}`,
 			"jsonsrc: instance.json:1:7: ", `member "w" names no child element declaration`},
-		{"null", `{"r":{"s":null}}`,
-			"jsonsrc: instance.json:1:11: ", `member "s" is null; the null => xsi:nil arm is not implemented`},
-		{"null array item", `{"r":{"s":["x",null]}}`,
-			"jsonsrc: instance.json:1:16: ", `member "s" is null; the null => xsi:nil arm`},
 		{"reserved member", `{"r":{"$type":"t:x"}}`,
 			"jsonsrc: instance.json:1:7: ", `reserved member "$type"; the "$type" and "$xmlns" reserved-member arms are not implemented`},
 		{"reserved root member", `{"$xmlns":{}}`,
@@ -290,8 +286,6 @@ func TestRootNaming(t *testing.T) {
 			"jsonsrc: instance.json:1:2: ", `root member "size" names no top-level element declaration`},
 		{"root value an array", `{"order":[]}`,
 			"jsonsrc: instance.json:1:10: ", `the value of root member "order" is an array`},
-		{"root value null", `{"order":null}`,
-			"jsonsrc: instance.json:1:10: ", `member "order" is null; the null => xsi:nil arm is not implemented`},
 		{"second root member", `{"order":{"size":1,"item":{"sku":"ABC"}},"order":{}}`,
 			"jsonsrc: instance.json:1:42: ", `the top-level object has a second member "order"`},
 		{"trailing value", `{"order":{"size":1,"item":{"sku":"ABC"}}} {}`,
@@ -367,13 +361,13 @@ func TestLocations(t *testing.T) {
 // inside it is reported rather than read past.
 func TestDrainClassifies(t *testing.T) {
 	v := validatorOver(t, orderSchema)
-	w := newWalker(jsonURI, strings.NewReader(`{"order":{"size":1,"item":[{"sku":"ABC"},{"sku":null}]}}`), v.Schema())
+	w := newWalker(jsonURI, strings.NewReader(`{"order":{"size":1,"item":[{"sku":"ABC"},{"sku":[["x"]]}]}}`), v.Schema())
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)
 	}
 	err = w.end(root)
-	const want = `jsonsrc: instance.json:1:49: member "sku" is null`
+	const want = `jsonsrc: instance.json:1:50: an array is an item of the array of member "sku"`
 	if err == nil || !strings.HasPrefix(err.Error(), want) {
 		t.Fatalf("end = %v, want it to open %q", err, want)
 	}
@@ -591,5 +585,139 @@ func TestAttributeMemberDeclines(t *testing.T) {
 				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, tc.says)
 			}
 		})
+	}
+}
+
+// nilSchema declares one nillable root, order, whose sequence of optional
+// children holds every shape cvc-elt clause 3 tells apart: qty, a nillable
+// xs:integer; size, an xs:integer that is not nillable; unit, a nillable
+// xs:integer with a fixed {value constraint}; line, a repeating nillable
+// xs:integer; and box, a nillable complex type requiring one child w.
+const nilSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
+  <xs:element name="order" nillable="true">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="qty" type="xs:integer" nillable="true" minOccurs="0"/>
+        <xs:element name="size" type="xs:integer" minOccurs="0"/>
+        <xs:element name="unit" type="xs:integer" nillable="true" fixed="1" minOccurs="0"/>
+        <xs:element name="line" type="xs:integer" nillable="true" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="box" nillable="true" minOccurs="0">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="w" type="xs:integer"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// xsiDecl binds the xsi prefix in an XML twin.
+const xsiDecl = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
+
+var (
+	elt = []xsderr.Rule{"cvc-elt"}
+	// notNillable is cvc-elt clause 3.1, then cvc-type clause 3.1.3: an
+	// element whose declaration is not nillable is not ·nilled·, so its empty
+	// content is an xs:integer's to read.
+	notNillable = []xsderr.Rule{"cvc-elt", "cvc-type"}
+)
+
+// TestNullIsNilled pins the null arm: a null value is an element carrying
+// xsi:nil="true" and no [[children]] — at the root, as a member and as an
+// array item, {"qty":null} ≡ <qty xsi:nil="true"/> — and cvc-elt clause 3 is
+// the engine's: clause 3.1 charges a null where {nillable} is false, and clause
+// 3.2.3.2 one under a fixed {value constraint}, which an empty, un-nilled
+// element would take as its value instead (clause 5.1). An object value is
+// never nilled: box given {} is assessed as empty content, which
+// cvc-complex-type clause 1.4 charges.
+func TestNullIsNilled(t *testing.T) {
+	v := validatorOver(t, nilSchema)
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"nillable member", `{"order":{"qty":null}}`,
+			`<order xmlns="urn:t" ` + xsiDecl + `><qty xsi:nil="true"/></order>`, none},
+		{"root", `{"order":null}`,
+			`<order xmlns="urn:t" ` + xsiDecl + ` xsi:nil="true"/>`, none},
+		{"array item", `{"order":{"line":[1,null,3]}}`,
+			`<order xmlns="urn:t" ` + xsiDecl + `><line>1</line><line xsi:nil="true"/><line>3</line></order>`, none},
+		{"nillable complex member", `{"order":{"box":null}}`,
+			`<order xmlns="urn:t" ` + xsiDecl + `><box xsi:nil="true"/></order>`, none},
+		{"not nillable", `{"order":{"size":null}}`,
+			`<order xmlns="urn:t" ` + xsiDecl + `><size xsi:nil="true"/></order>`, notNillable},
+		{"not nillable array item", `{"order":{"size":[null]}}`,
+			`<order xmlns="urn:t" ` + xsiDecl + `><size xsi:nil="true"/></order>`, notNillable},
+		{"fixed", `{"order":{"unit":null}}`,
+			`<order xmlns="urn:t" ` + xsiDecl + `><unit xsi:nil="true"/></order>`, elt},
+		{"empty object is not nilled", `{"order":{"box":{}}}`,
+			`<order xmlns="urn:t"><box/></order>`, content},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestNilledAttribute pins what the engine reads off a null value's element:
+// one attribute, xsi:nil in the XSI namespace with the lexical form true,
+// located at the null token and not at the key, the same before and after the
+// walk ends; and no attribute at all on a scalar item's element or on an
+// element given {}.
+func TestNilledAttribute(t *testing.T) {
+	v := validatorOver(t, nilSchema)
+	type seen struct {
+		name  xsd.QName
+		value string
+		loc   string
+	}
+	read := func(e validate.Element) []seen {
+		var out []seen
+		for _, a := range e.Attributes() {
+			out = append(out, seen{a.Name(), a.Value(), a.Loc().String()})
+		}
+		return out
+	}
+	nilAt := func(loc string) []seen {
+		return []seen{{xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, "true", loc}}
+	}
+
+	w := newWalker(jsonURI, strings.NewReader("{\"order\":\n null}"), v.Schema())
+	root, err := w.root()
+	if err != nil {
+		t.Fatalf("root: %v", err)
+	}
+	if got, want := read(root), nilAt("instance.json:2:2"); !slices.Equal(got, want) {
+		t.Fatalf("root Attributes() = %v, want %v", got, want)
+	}
+	if err := w.end(root); err != nil {
+		t.Fatalf("end: %v", err)
+	}
+	if got, want := read(root), nilAt("instance.json:2:2"); !slices.Equal(got, want) {
+		t.Fatalf("root Attributes() after the walk = %v, want %v", got, want)
+	}
+
+	w = newWalker(jsonURI, strings.NewReader(`{"order":{"line":[1, null],"box":{}}}`), v.Schema())
+	root, err = w.root()
+	if err != nil {
+		t.Fatalf("root: %v", err)
+	}
+	kids := root.Children()
+	var got [][]seen
+	for {
+		c, ok := kids.Next()
+		if !ok {
+			break
+		}
+		e, _ := c.Element()
+		got = append(got, read(e))
+	}
+	if err := kids.Err(); err != nil {
+		t.Fatalf("children: %v", err)
+	}
+	want := [][]seen{nil, nilAt("instance.json:1:22"), nil}
+	if !slices.EqualFunc(got, want, slices.Equal) {
+		t.Fatalf("children's Attributes() = %v, want %v", got, want)
 	}
 }

@@ -120,4 +120,34 @@
       <expected validity="invalid"/>
     </instanceTest>
   </testGroup>
+  <testGroup name="nil">
+    <annotation>
+      <documentation>A null value is an element carrying xsi:nil="true" and no children: {"qty":null} is &lt;qty xsi:nil="true"/&gt;, an array's null item one such repeat. Whether it is nilled is the engine's cvc-elt clause 3.</documentation>
+    </annotation>
+    <schemaTest name="nil">
+      <schemaDocument xlink:href="nil.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
+    <instanceTest name="nil.v">
+      <annotation>
+        <documentation>qty and the second line item are nilled (cvc-elt clause 3.2.3), so their empty content is not read as an xs:integer (cvc-type clause 3.1.3).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="nil.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="nil-not-nillable.i">
+      <annotation>
+        <documentation>expects cvc-elt: size is not nillable and carries xsi:nil (clause 3.1).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="nil-not-nillable.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+    <instanceTest name="nil-fixed.i">
+      <annotation>
+        <documentation>expects cvc-elt: unit is nilled under a fixed value constraint (clause 3.2.3.2). Mapped as an empty element without xsi:nil it would take the fixed value and be valid (clause 5.1).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="nil-fixed.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
 </testSet>

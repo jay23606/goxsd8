@@ -26,6 +26,10 @@ var (
 // element's [in-scope namespaces] (Namespaces in XML §3).
 const xmlNamespace = "http://www.w3.org/XML/1998/namespace"
 
+// xsiNil is the expanded name of the xsi:nil attribute a null value presents
+// (walker.nilled).
+var xsiNil = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
+
 // cursor is an element's [[children]] as the walk drives them.
 type cursor interface {
 	validate.Children
@@ -42,10 +46,11 @@ type element struct {
 	// loc is where the member's key, or the array item, begins.
 	loc xsderr.Loc
 	// attrs is the element's [[attributes]], read whole as the element was
-	// built (walker.attributes): an object value's leading attribute members.
+	// built: an object value's leading attribute members (walker.attributes),
+	// or a null value's one xsi:nil (walker.nilled).
 	attrs []validate.Attribute
 	// kids is the element's [[children]]: a members cursor for an object
-	// value, a scalarChildren for a scalar one.
+	// value, a scalarChildren for a scalar or null one.
 	kids cursor
 	// finished latches that the parent's cursor moved past this element (or,
 	// for the root, that Validate did), so a late Children call cannot read
@@ -59,7 +64,8 @@ type element struct {
 func (e *element) Name() xsd.QName { return e.decl.Name() }
 
 // Attributes is the element's attribute members in member order, the same
-// slice at every call: a scalar value has none.
+// slice at every call: a scalar value has none, and a null value has its one
+// xsi:nil.
 func (e *element) Attributes() []validate.Attribute { return e.attrs }
 
 // Children reports the element's cursor. It panics once the walk has moved
@@ -95,8 +101,9 @@ func (e *element) finish() {
 	e.finished = true
 }
 
-// attribute is an attribute member: the expanded name of the attribute use its
-// key matched, its scalar's lexical form, and its key's location.
+// attribute is an attribute member — the expanded name of the attribute use its
+// key matched, its scalar's lexical form, and its key's location — or a null
+// value's xsi:nil, located at the null.
 type attribute struct {
 	name  xsd.QName
 	value string
@@ -118,7 +125,7 @@ func (t *text) Data() string    { return t.data }
 func (t *text) Loc() xsderr.Loc { return t.loc }
 
 // scalarChildren is a scalar-valued element's [[children]]: its one text run,
-// or none for the empty string.
+// or none for the empty string or a null.
 type scalarChildren struct {
 	text *text
 	done bool

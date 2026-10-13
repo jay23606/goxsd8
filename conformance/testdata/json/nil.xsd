@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The nil group's schema: one root, stock, whose sequence of optional
+     children holds each shape cvc-elt clause 3 tells apart for the
+     validate/jsonsrc null arm. qty is a nillable xs:integer; size is an
+     xs:integer that is not nillable; unit is a nillable xs:integer with a
+     fixed value constraint; line is a repeating nillable xs:integer. Local
+     declarations are qualified, so a JSON key's namespace comes from its
+     declaration. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:goxsd8:json:nil" xmlns="urn:goxsd8:json:nil"
+           elementFormDefault="qualified">
+  <xs:element name="stock">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="qty" type="xs:integer" nillable="true" minOccurs="0"/>
+        <xs:element name="size" type="xs:integer" minOccurs="0"/>
+        <xs:element name="unit" type="xs:integer" nillable="true" fixed="1" minOccurs="0"/>
+        <xs:element name="line" type="xs:integer" nillable="true" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
