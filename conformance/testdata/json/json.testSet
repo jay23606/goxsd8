@@ -65,6 +65,13 @@
       <instanceDocument xlink:href="child-content.i.json"/>
       <expected validity="invalid"/>
     </instanceTest>
+    <instanceTest name="child-stray.i">
+      <annotation>
+        <documentation>expects cvc-complex-content: extra, a key no declaration or use of order's wildcard-free type carries, is the child extra in order's own namespace, which the sequence does not accept (cvc-complex-type clause 1.4).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="child-stray.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
   </testGroup>
   <testGroup name="array">
     <annotation>

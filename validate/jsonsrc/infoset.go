@@ -44,7 +44,8 @@ type element struct {
 	w *walker
 	// name is the element's [namespace name] and [local name]: the matched
 	// declaration's expanded name, or the one a wildcard's single enumerated
-	// namespace gives the key (walker.wildcardMember).
+	// namespace, or the namespace of a parent whose type has no wildcard, gives
+	// the key (walker.wildcardMember).
 	name xsd.QName
 	// loc is where the member's key, or the array item, begins.
 	loc xsderr.Loc

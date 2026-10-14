@@ -107,12 +107,13 @@ func newJSONExec() laneExecutor {
 //     not ·nilled·;
 //   - type-table-whitespace: unrepresentable while jsonsrc declines a
 //     declaration carrying a {type table} that it classifies an element by,
-//     the top-level one a wildcard's child is named for included. A child
-//     jsonsrc matched to a contained declaration that a top-level declaration
-//     governs in its place has none either: cos-element-consistent's wildcard
-//     condition gives the two equivalent {type table}s. A wildcard's child
-//     with no declaration, ·laxly assessed· or governed by a ·locally
-//     declared type·, has no {type table} to select through;
+//     the top-level one a wildcard's child, or the child of a type with no
+//     wildcard, is named for included. A child jsonsrc matched to a contained
+//     declaration that a top-level declaration governs in its place has none
+//     either: cos-element-consistent's wildcard condition gives the two
+//     equivalent {type table}s. A child either names with no declaration,
+//     ·laxly assessed· or governed by a ·locally declared type·, has no {type
+//     table} to select through;
 //   - strict-attribute-unresolved and attribute-ldt: refused here on a "valid"
 //     reading, through attributeGovernanceDiverges, which says why no other
 //     element reaches them;
@@ -129,13 +130,14 @@ func newJSONExec() laneExecutor {
 //     type), and content-matcher (cvc-complex-content, at each unmatched element
 //     [[child]] or, with none, at the element: validate's
 //     contentCheck.sequenceEnd);
-//   - charged by the walk: element-child (cvc-type clause 3.1.2,
-//     cvc-complex-type clauses 1.1 and 1.2), simple-attribute (cvc-type clause
-//     3.1.1), attribute-unadmitted (cvc-complex-type clause 2.2.1 or 2.2.2,
-//     validate's walk.unmatchedAttribute, an attribute jsonsrc names under an
-//     {attribute wildcard} that rejects it by name included), content-incomplete
-//     and content-rejected (cvc-complex-content, a child jsonsrc names under
-//     element wildcards that reject it included);
+//   - charged by the walk: element-child (cvc-type clause 3.1.2, cvc-complex-type clauses
+//     1.1 and 1.2, a child jsonsrc names under a simple type or simple or empty content
+//     included), simple-attribute (cvc-type clause 3.1.1), attribute-unadmitted
+//     (cvc-complex-type clause 2.2.1 or 2.2.2, validate's walk.unmatchedAttribute, an
+//     attribute jsonsrc names under an {attribute wildcard} that rejects it by name
+//     included), content-incomplete and content-rejected (cvc-complex-content, a child
+//     jsonsrc names under element wildcards that reject it, or under a type with no
+//     wildcard, included);
 //   - unreachable on a finalized Schema: attribute-use-unresolved,
 //     member-unresolved and any-type; and type-kind, content-type and
 //     attribution, each the default of a sealed sum.
@@ -189,11 +191,11 @@ func execJSONCase(backend value.Backend, c caseSpec) (Status, refusal) {
 // ·nilled·, while a JSON null presents xsi:nil="true" (key-nilled needs
 // D.{nillable} too). The other routes to ·xs:error· stay closed: jsonsrc
 // declines a declaration carrying a {type table} and presents no xsi:type; a
-// wildcard's child governed by a top-level declaration is governed by one of
-// those visited here; and one governed by a ·locally declared type· or
-// ·laxly assessed· has no declaration, so it is never ·nilled· and the walk
-// charges clause 3.1.3. It refuses whether or not the document reaches D, as
-// attributeGovernanceDiverges does.
+// wildcard's child, or a wildcard-free type's, governed by a top-level
+// declaration is governed by one of those visited here; and one governed by
+// a ·locally declared type· or ·laxly assessed· has no declaration, so it is
+// never ·nilled· and the walk charges clause 3.1.3. It refuses whether or
+// not the document reaches D, as attributeGovernanceDiverges does.
 func nillableErrorType(schema *xsd.Schema) bool {
 	return anyDeclaration(schema, func(d xsd.ElementDeclaration) bool { return nilledError(schema, d) })
 }
@@ -204,7 +206,8 @@ func nillableErrorType(schema *xsd.Schema) bool {
 // It also answers true where the walk meets an ElementScopeParent arm it does
 // not know, refusing rather than leaving that arm's declarations unvisited.
 // Those are every declaration jsonsrc can classify an element by: the root's,
-// a contained one, and the top-level one a wildcard's child is named for.
+// a contained one, and the top-level one a wildcard's child, or a
+// wildcard-free type's, is named for.
 //
 // The types visited are every named one (Schema.Types) and every anonymous
 // one an ownership edge reaches from them, from a top-level declaration, or
@@ -352,8 +355,9 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     strict and the lacks conditions bind every D, local ones included;
 //   - D's type governs the root, a child under an element particle
 //     (cos-element-consistent gives same-named contained declarations one
-//     type), and a wildcard's child jsonsrc names for the top-level D its
-//     name ·resolves· to. Under an {open content}, a child jsonsrc matched to
+//     type), and a child jsonsrc names, under a wildcard or a type with none,
+//     for the top-level D its name ·resolves· to (key-governing-ed clauses 3
+//     and 4). Under an {open content}, a child jsonsrc matched to
 //     a contained D is governed by the ·locally declared type·, which is D's
 //     type, and a wildcard-named one by a base's contained declaration's type
 //     where that is non-·absent·: that declaration is visited here too, and

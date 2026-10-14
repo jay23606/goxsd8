@@ -40,31 +40,31 @@
 //     reference. The empty string is an attribute with an empty value.
 //     Attribute members lead the object, before its first child member: the
 //     engine reads an element's attributes whole at its entry.
-//   - A member whose key neither carries is named by a wildcard of the type
-//     where the model fixes its namespace, and only there. Element kind: every
-//     element wildcard of the type — each Wildcard {term} its content model
-//     contains ([xsd.Schema.ContainedWildcards]), whatever its {process
-//     contents}, and its {open content} wildcard — enumerates one and the same
-//     namespace N, and the key is the child (N,key): {"box":{"w":5}} ≡ <box
-//     xmlns="urn:w"><w>5</w></box> under <xs:any
-//     namespace="##targetNamespace"/>. It is under the top-level declaration of
-//     (N,key) where there is one, and otherwise has no declaration, and its
-//     object value then maps only empty, as {}. Attribute kind: the type has
-//     no element wildcard and its {attribute wildcard} enumerates the one
-//     namespace M, and the key is the attribute (M,key), as an attribute use's
-//     member is. The mapping does not test admission: a {disallowed names}
-//     entry, ##defined and ##definedSibling are the engine's to charge
-//     (cvc-wildcard), and so is a {process contents}, as for the XML twin. A
-//     name the wildcards reject is soundly invalid: every other namespace is
-//     outside every wildcard of that kind, and no declaration or use carries
-//     the key. A key a declaration or use carries is named by it and never
-//     by a wildcard: that is the mapping's own rule, as the NAMESPACE TRAP
-//     below says, and no spec text makes it in general; it is RULED permanent
-//     by #2634 because the spec is silent between the two names, and because
-//     a decline instead would refuse inputs it maps, the curated json cases
-//     wildcard-attribute.v and .i among them. The spec makes the same choice
-//     for one item matched both ways, which here is where the wildcard's one
-//     namespace is the declaration's or the use's own: the Note under
+//   - A member whose key neither carries, of a type with a wildcard, is named
+//     by a wildcard of the type where the model fixes its namespace, and only
+//     there. Element kind: every element wildcard of the type — each Wildcard
+//     {term} its content model contains ([xsd.Schema.ContainedWildcards]),
+//     whatever its {process contents}, and its {open content} wildcard —
+//     enumerates one and the same namespace N, and the key is the child
+//     (N,key): {"box":{"w":5}} ≡ <box xmlns="urn:w"><w>5</w></box> under
+//     <xs:any namespace="##targetNamespace"/>. It is under the top-level
+//     declaration of (N,key) where there is one, and otherwise has no
+//     declaration, and its object value then maps only empty, as {}. Attribute
+//     kind: the type has no element wildcard and its {attribute wildcard}
+//     enumerates the one namespace M, and the key is the attribute (M,key), as
+//     an attribute use's member is. The mapping does not test admission: a
+//     {disallowed names} entry, ##defined and ##definedSibling are the engine's
+//     to charge (cvc-wildcard), and so is a {process contents}, as for the XML
+//     twin. A name the wildcards reject is soundly invalid: every other
+//     namespace is outside every wildcard of that kind, and no declaration or
+//     use carries the key. A key a declaration or use carries is named by it
+//     and never by a wildcard: that is the mapping's own rule, as the NAMESPACE
+//     TRAP below says, and no spec text makes it in general; it is RULED
+//     permanent by #2634 because the spec is silent between the two names, and
+//     because a decline instead would refuse inputs it maps, the curated json
+//     cases wildcard-attribute.v and .i among them. The spec makes the same
+//     choice for one item matched both ways, which here is where the wildcard's
+//     one namespace is the declaration's or the use's own: the Note under
 //     cvc-accept matches an element information item "accepted by either a
 //     Wildcard or an Element Declaration" against the Element Declaration, and
 //     the Note after cvc-complex-type clause 4 gives an attribute use "whose
@@ -73,6 +73,16 @@
 //     declaration's or use's and the (N,key) a wildcard would give, nor across
 //     kinds, a declaration over an {attribute wildcard} or a use over an
 //     element wildcard.
+//   - A member whose key neither carries, of a type with no wildcard of either
+//     kind — a simple type included — is the child (O,key), O the enclosing
+//     element's own namespace name, under the top-level declaration of that
+//     name where there is one and otherwise with none, as a wildcard's child
+//     is: {"order":{"size":1,"extra":"x"}} ≡ <order
+//     xmlns="urn:t"><size>1</size><extra>x</extra></order>. Every XML twin of
+//     such a key, of whatever name and kind, is invalid (cvc-complex-content;
+//     cvc-complex-type clauses 1.1, 1.2 and 2.2.1; cvc-type clauses 3.1.1 and
+//     3.1.2) but the four xsi attributes cvc-complex-type clause 2 excepts, so
+//     the name decides no validity.
 //   - A scalar value is the element's simple content: {"size":10} ≡
 //     <size>10</size>. Its lexical form is the token's source text — a
 //     number's own digits, never a float64 round trip; a string's decoded
@@ -92,8 +102,8 @@
 //     would be, and an empty array is no child.
 //
 // The element's default (empty-prefix) namespace is its own namespace name —
-// its declaration's target namespace, or the N a wildcard gives it — and
-// "xml" is bound; no other prefix is.
+// its declaration's target namespace, the N a wildcard gives it, or the O its
+// parent has — and "xml" is bound; no other prefix is.
 //
 // Three shapes are not expressible, and the mapping does not reorder to reach
 // the first two. The ORDER TRAP: an array's items are contiguous repeats, so
@@ -101,7 +111,8 @@
 // duplicate keys, which map in member order like any other members. The
 // NAMESPACE TRAP: a key is a local name, while cvc-accept and cvc-complex-type
 // clause 2 match expanded names; the namespace comes from the matched
-// declaration or use, or from the one namespace a wildcard enumerates, so a
+// declaration or use, from the one namespace a wildcard enumerates, or, under
+// a type with no wildcard, from the enclosing element, so a
 // key two expanded names carry — among one content model's declarations, or
 // among one type's attribute uses — declines, and so does a wildcard-only key
 // whose wildcards admit more than one namespace. The NILLED ATTRIBUTES shape:
@@ -126,13 +137,18 @@
 // choice of a declaration or use over a wildcard, under "The mapping":
 //
 //   - a key no contained declaration and no attribute use carries, where the
-//     model does not fix its namespace: a wildcard of variety any or not
-//     (xs:anyType's included), several enumerated namespaces, no wildcard of
-//     the type at all, or a single namespace that is the xsi or the xml one;
-//     a key of a type with both an element wildcard and an {attribute
-//     wildcard}, whose kind the key does not say; and a member of an object
-//     under a wildcard's child that no top-level declaration governs. All but
-//     the no-wildcard and xsi- or xml-namespace classes are RULED permanent by
+//     type's wildcards do not fix its namespace: a wildcard of variety any or
+//     not (xs:anyType's included), or several enumerated namespaces; a key a
+//     wildcard's single namespace, of either kind, puts in the xsi or the xml
+//     namespace; a key of a type with both an element wildcard and an
+//     {attribute wildcard}, whose kind the key does not say; and a member of
+//     an object under a child no contained and no top-level declaration
+//     names. The xsi- and xml-namespace class is RULED permanent by #2635: an
+//     element in the xml namespace would bind the default namespace to it,
+//     which no XML twin has, and the attribute kind is ruled with it; the four
+//     xsi attributes cvc-complex-type clause 2 excepts must keep declining,
+//     xsi:nil and xsi:type having their own spellings, and the rest of the xsi
+//     namespace is not worth a half-arm. The others are RULED permanent by
 //     #2634: whichever (N,key) the mapping chose, its verdict depends on N
 //     through declaration lookup, attribution and an ancestor's
 //     identity-constraint paths and assertions. Conditions under which the
@@ -157,10 +173,10 @@
 //     content and a scalar value no attribute;
 //   - a "$"-prefixed reserved member;
 //   - an array item that is itself an array;
-//   - a matched declaration carrying a {type table}, a wildcard's child's
-//     top-level one included: which type governs its element turns on its
-//     attributes, the xsi: ones included, which this mapping does not all
-//     present;
+//   - a matched declaration carrying a {type table}, the top-level one of a
+//     child a wildcard or a wildcard-free type names included: which type
+//     governs its element turns on its attributes, the xsi: ones included,
+//     which this mapping does not all present;
 //   - a {type definition} that does not resolve, under an object value.
 //
 // # Locations

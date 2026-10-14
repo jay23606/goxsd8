@@ -5,6 +5,7 @@ goxsd8-json/attribute/json/attribute-missing.i pass
 goxsd8-json/attribute/json/attribute-type.i pass
 goxsd8-json/attribute/json/attribute.v pass
 goxsd8-json/child/json/child-content.i pass
+goxsd8-json/child/json/child-stray.i pass
 goxsd8-json/child/json/child.i pass
 goxsd8-json/child/json/child.v pass
 goxsd8-json/nil/json/nil-fixed.i pass

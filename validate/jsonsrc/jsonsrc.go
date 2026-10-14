@@ -49,10 +49,10 @@ func WithURI(uri string) Option {
 // a top level that is not an object with exactly one member naming a
 // top-level element declaration, and, anywhere in the document, a member the
 // implemented arms do not map (a key no child element declaration and no
-// attribute use carries whose namespace no wildcard of the type fixes, or
+// attribute use carries whose namespace the type's wildcards fix no one of, or
 // whose kind a type with both an element wildcard and an {attribute wildcard}
 // leaves open, or which a wildcard puts in the xsi or xml namespace; a member
-// of an object under a wildcard's child no top-level declaration governs; a
+// of an object under a child no contained and no top-level declaration names; a
 // key two expanded names carry, a key both a child declaration and an
 // attribute use carry, an attribute member after a child member or repeated,
 // an attribute member whose value is null, an object or an array, a
@@ -225,9 +225,9 @@ type object struct {
 	// simpleContent is the type's {content type} being simple: the mapping
 	// spells no text beside attribute members, so it declines one there.
 	simpleContent bool
-	// undeclared is the owner having no governing declaration: a wildcard's
-	// element whose expanded name no top-level declaration carries
-	// (bareElement), which has no type to classify a member against.
+	// undeclared is the owner having no declaration: a child wildcardMember
+	// names whose expanded name no top-level declaration carries (bareElement),
+	// which has no type to classify a member against.
 	undeclared bool
 }
 
@@ -253,14 +253,14 @@ type elementMember interface {
 }
 
 // declaredElement is a child under the element declaration decl: one the
-// enclosing type contains, the root's top-level one, or the top-level one a
-// wildcard-named child's expanded name resolves to.
+// enclosing type contains, the root's top-level one, or the top-level one the
+// expanded name of a child wildcardMember names resolves to.
 type declaredElement struct {
 	decl xsd.ElementDeclaration
 }
 
-// bareElement is a wildcard-named child whose expanded name no top-level
-// declaration carries: it has no governing declaration, so an object value
+// bareElement is a child wildcardMember names whose expanded name no
+// top-level declaration carries: it has no declaration, so an object value
 // under it maps only empty.
 type bareElement struct {
 	name xsd.QName
@@ -288,11 +288,12 @@ func (b bareElement) object(*walker, xsderr.Loc) (*object, error) {
 // use among o.uses whose {attribute declaration}'s local name it is
 // (cvc-complex-type clause 2.1 then matches the attribute to that use by
 // expanded name), and, where neither carries it, to the element or attribute
-// a wildcard of the type names (wildcardMember). A key a declaration or a use
-// carries never reaches a wildcard: the mapping's own rule, which the spec
-// shares only where the wildcard's one namespace is the declaration's or the
-// use's own, so that both name one item (the Note under cvc-accept; the Note
-// after cvc-complex-type clause 4; package doc, "The mapping"). The first
+// a wildcard of the type names, or to the child a type with no wildcard names
+// (wildcardMember). A key a declaration or a use carries never reaches a
+// wildcard: the mapping's own rule, which the spec shares only where the
+// wildcard's one namespace is the declaration's or the use's own, so that
+// both name one item (the Note under cvc-accept; the Note after
+// cvc-complex-type clause 4; package doc, "The mapping"). The first
 // declaration of the name stands for every other
 // (xsd.Schema.ContainedElementDeclarations says why that is sound).
 //
@@ -349,7 +350,15 @@ func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error)
 // child (N,key), under the top-level declaration of that name where there is
 // one (declaredElement, which typeTable vets) and as a bareElement where there
 // is none. Attribute kind: the {attribute wildcard} enumerates the one
-// namespace M, and the key is the attribute (M,key).
+// namespace M, and the key is the attribute (M,key). No wildcard of either
+// kind: the key is the child (O,key), O the owner's own namespace name, named
+// as an element wildcard's child is (namedChild); every XML twin of the key,
+// of whatever name and kind, is invalid — an element under cvc-complex-content,
+// cvc-complex-type clause 1.1 or 1.2, or cvc-type clause 3.1.2 under a simple
+// type, an attribute under cvc-complex-type clause 2.2.1 or cvc-type clause
+// 3.1.1 — but the four xsi attributes cvc-complex-type clause 2 excepts, so
+// the name decides no validity, and O keeps the child's default namespace its
+// parent's.
 //
 // It does not test admission: a {disallowed names} entry, ##defined and
 // ##definedSibling are the engine's to charge (cvc-wildcard clauses 1 to 3),
@@ -360,10 +369,10 @@ func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error)
 // clause 1.1.3, is the engine's too.
 //
 // It DECLINES a member of a bareElement's object; a key the type has
-// wildcards of both kinds for (xs:anyType has); a key no wildcard of either
-// kind admits; a wildcard of variety any or not, an enumeration of more than
-// one namespace, or element wildcards whose namespaces differ; N or M the xsi
-// or the xml namespace; and an attribute key of a type with simple content.
+// wildcards of both kinds for (xs:anyType has); a wildcard of variety any or
+// not, an enumeration of more than one namespace, or element wildcards whose
+// namespaces differ; N or M the xsi or the xml namespace; and a key a
+// simple-content type's {attribute wildcard} alone admits.
 //
 // GAP(jsonsrc): a wildcard-only key whose namespace or kind the model does
 // not fix declines: a wildcard of variety any or not, xs:anyType's included,
@@ -377,9 +386,13 @@ func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error)
 // assertions (cvc-assertion), which the mapping cannot fix without an
 // ancestor census.
 //
-// GAP(jsonsrc): a key of a type with no wildcard at all, so none of the key's
-// kind, declines, and so does a key a wildcard's single namespace, of either
-// kind, puts in the xml or the xsi namespace; #2635 owns all three.
+// GAP(jsonsrc): a key a wildcard's single namespace, of either kind, puts in
+// the xml or the xsi namespace declines. RULED permanent by #2635: an element
+// in the xml namespace would bind the default namespace to it, which no XML
+// twin has, and the attribute kind is ruled with it; the four xsi attributes
+// cvc-complex-type clause 2 excepts must keep declining, xsi:nil and xsi:type
+// having their own spellings, and the rest of the xsi namespace is not worth a
+// half-arm.
 //
 // GAP(jsonsrc): a key a simple-content type's {attribute wildcard} alone
 // admits declines, on the ground useNamed's simple-content marker states for
@@ -387,7 +400,7 @@ func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error)
 // beside attribute members.
 func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, error) {
 	if o.undeclared {
-		return nil, w.declinef(loc, "member %q of %s, a wildcard's element no top-level element declaration governs; only an empty object maps under it",
+		return nil, w.declinef(loc, "member %q of %s, an element no contained and no top-level element declaration names; only an empty object maps under it",
 			key, o.owner)
 	}
 	elemental := len(o.elementWildcards) > 0
@@ -401,16 +414,10 @@ func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, 
 			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its element wildcard set %s",
 				key, o.owner, why)
 		}
-		name := xsd.QName{Space: ns, Local: key}
-		d, ok := w.schema.Element(name)
-		if !ok {
-			return bareElement{name: name}, nil
-		}
-		return declaredElement{decl: d}, w.typeTable(d, loc)
+		return w.namedChild(xsd.QName{Space: ns, Local: key}, loc)
 	}
 	if o.attributeWildcard == nil {
-		return nil, w.declinef(loc, "member %q names no child element declaration, no attribute use and no wildcard of the type of %s",
-			key, o.owner)
+		return w.namedChild(xsd.QName{Space: o.owner.Space, Local: key}, loc)
 	}
 	if o.simpleContent {
 		return nil, w.declinef(loc, "member %q names only the {attribute wildcard} of the type of %s, whose {content type} is simple; the mapping spells no text beside attribute members",
@@ -422,6 +429,18 @@ func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, 
 			key, o.owner, why)
 	}
 	return attributeMember{name: xsd.QName{Space: ns, Local: key}}, nil
+}
+
+// namedChild is the child element name, which no declaration the enclosing
+// type contains carries: under the top-level declaration of that name where
+// there is one (declaredElement, which typeTable vets), and as a bareElement
+// where there is none.
+func (w *walker) namedChild(name xsd.QName, loc xsderr.Loc) (member, error) {
+	d, ok := w.schema.Element(name)
+	if !ok {
+		return bareElement{name: name}, nil
+	}
+	return declaredElement{decl: d}, w.typeTable(d, loc)
 }
 
 // fixedNamespace is the one namespace name every wildcard of wildcards
@@ -622,8 +641,9 @@ func (w *walker) nilled(name xsd.QName, loc, tokLoc xsderr.Loc) *element {
 // object is what an object-valued element of decl classifies its members
 // against, from its {type definition}: a complex type's contained
 // declarations, {attribute uses}, element wildcards and {attribute wildcard};
-// a simple type has none, so every member of its object declines and an
-// empty object is an element with no children.
+// a simple type has none, so every member of its object is a child no
+// wildcard names (wildcardMember) and an empty object is an element with no
+// children.
 func (w *walker) object(decl xsd.ElementDeclaration, loc xsderr.Loc) (*object, error) {
 	td, ok := w.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {

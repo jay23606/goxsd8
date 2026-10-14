@@ -244,8 +244,6 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:7: ", `element tt carries a {type table}; conditional type assignment is not implemented`},
 		{"nested array", `{"r":{"s":[["x"]]}}`,
 			"jsonsrc: instance.json:1:12: ", `an array is an item of the array of member "s"`},
-		{"member of a simple-typed element", `{"r":{"s":{"x":1}}}`,
-			"jsonsrc: instance.json:1:12: ", `member "x" names no child element declaration, no attribute use and no wildcard of the type of s`},
 		{"decline after a mapped sibling", `{"r":{"s":"1","a":"1"}}`,
 			"jsonsrc: instance.json:1:15: ", `member "a" names child element declarations of two expanded names`},
 		{"second member after an assessed root", `{"r":{"c":{"s":"1"}},"x":null}`,
@@ -737,7 +735,8 @@ func TestNilledAttribute(t *testing.T) {
 // of variety not; two and atttwo, an element and an {attribute wildcard}
 // enumerating two namespaces; any, of xs:anyType; both, with a
 // ##targetNamespace element wildcard and {attribute wildcard}; xsi and lang,
-// an {attribute wildcard} of the xsi or the xml namespace alone; price, simple
+// an {attribute wildcard} of the xsi or the xml namespace alone, and xsiel and
+// langel, an element wildcard of the one or the other; price, simple
 // content under an {attribute wildcard}; and tt, a top-level declaration with
 // a {type table} box's wildcard admits.
 const wildcardSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -869,6 +868,20 @@ const wildcardSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
       <xs:anyAttribute namespace="http://www.w3.org/XML/1998/namespace" processContents="lax"/>
     </xs:complexType>
   </xs:element>
+  <xs:element name="xsiel">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="http://www.w3.org/2001/XMLSchema-instance" processContents="lax" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="langel">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="http://www.w3.org/XML/1998/namespace" processContents="lax" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
   <xs:element name="price">
     <xs:complexType>
       <xs:simpleContent>
@@ -924,6 +937,160 @@ func TestWildcardMember(t *testing.T) {
 	}
 }
 
+// strayChildSchema declares, in urn:n, the root r, whose types carry no
+// wildcard of either kind: r's element-only content holds s, of xs:integer,
+// e, of empty content, m, of simple content, and u, an unqualified local of
+// element-only content; g, of xs:integer, t, holding y, and tt, carrying a
+// {type table}, are top-level declarations no type contains.
+const strayChildSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:n" xmlns="urn:n" elementFormDefault="qualified">
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="s" type="xs:integer" minOccurs="0"/>
+        <xs:element name="e" minOccurs="0">
+          <xs:complexType/>
+        </xs:element>
+        <xs:element name="m" minOccurs="0">
+          <xs:complexType>
+            <xs:simpleContent>
+              <xs:extension base="xs:decimal"/>
+            </xs:simpleContent>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="u" form="unqualified" minOccurs="0">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="s" form="unqualified" type="xs:integer" minOccurs="0"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="g" type="xs:integer"/>
+  <xs:element name="t">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="y" type="xs:integer"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="tt" type="xs:anyType">
+    <xs:alternative test="@k" type="xs:string"/>
+  </xs:element>
+</xs:schema>`
+
+// TestStrayChildMember pins the no-wildcard arm: a key no contained
+// declaration and no attribute use of a type with no wildcard of either kind
+// carries is the child element in the owner's own namespace, and the engine
+// charges it as it charges the XML twin — cvc-complex-content under
+// element-only content, cvc-type clause 3.1.2 under a simple type, and
+// cvc-complex-type clauses 1.1 and 1.2 under empty and simple content.
+func TestStrayChildMember(t *testing.T) {
+	v := validatorOver(t, strayChildSchema)
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"element-only content", `{"r":{"s":1,"x":"v"}}`,
+			`<r xmlns="urn:n"><s>1</s><x>v</x></r>`, content},
+		{"element-only content, a top-level declaration's name", `{"r":{"g":"five"}}`,
+			`<r xmlns="urn:n"><g>five</g></r>`, []xsderr.Rule{"cvc-complex-content", "cvc-type"}},
+		{"element-only content, a top-level declaration's object", `{"r":{"t":{"y":"five"}}}`,
+			`<r xmlns="urn:n"><t><y>five</y></t></r>`, []xsderr.Rule{"cvc-complex-content", "cvc-type"}},
+		{"null value", `{"r":{"x":null}}`,
+			`<r xmlns="urn:n" ` + xsiDecl + `><x xsi:nil="true"/></r>`, content},
+		{"empty object value", `{"r":{"x":{}}}`,
+			`<r xmlns="urn:n"><x/></r>`, content},
+		{"simple type", `{"r":{"s":{"x":1}}}`,
+			`<r xmlns="urn:n"><s><x>1</x></s></r>`, typ},
+		{"empty content", `{"r":{"e":{"x":1}}}`,
+			`<r xmlns="urn:n"><e><x>1</x></e></r>`, complexType},
+		{"simple content", `{"r":{"m":{"x":1}}}`,
+			`<r xmlns="urn:n"><m><x>1</x></m></r>`, complexType},
+		{"unqualified owner", `{"r":{"u":{"x":1}}}`,
+			`<r xmlns="urn:n"><u xmlns=""><x>1</x></u></r>`, content},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestStrayChildDeclines pins the no-wildcard arm's declines: a stray child no
+// top-level declaration carries the name of is a bareElement, whose object
+// value maps only empty, so a member of it declines, as a wildcard's
+// undeclared child's does (RULED permanent by #2634); and a top-level
+// declaration of the child's name carrying a {type table} declines, as under
+// a wildcard.
+func TestStrayChildDeclines(t *testing.T) {
+	v := validatorOver(t, strayChildSchema)
+	for _, tc := range []struct {
+		name, json string
+		prefix     string
+		says       string
+	}{
+		{"member of an undeclared stray child", `{"r":{"x":{"y":1}}}`,
+			"jsonsrc: instance.json:1:12: ", `member "y" of {urn:n}x, an element no contained and no top-level element declaration names; only an empty object maps under it`},
+		{"top-level declaration with a type table", `{"r":{"tt":"1"}}`,
+			"jsonsrc: instance.json:1:7: ", `element {urn:n}tt carries a {type table}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
+			if err == nil {
+				t.Fatalf("Validate(%s) = %v violations, nil error; want the decline", tc.json, rules(res))
+			}
+			if !strings.HasPrefix(err.Error(), tc.prefix) || !strings.Contains(err.Error(), tc.says) {
+				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, tc.says)
+			}
+		})
+	}
+}
+
+// TestStrayChildName pins the expanded name the no-wildcard arm gives a key:
+// the owner's own namespace name, urn:n under r and none under the
+// unqualified u, whatever namespace the schema's target is.
+func TestStrayChildName(t *testing.T) {
+	v := validatorOver(t, strayChildSchema)
+	w := newWalker(jsonURI, strings.NewReader(`{"r":{"x":1,"u":{"y":1}}}`), v.Schema())
+	root, err := w.root()
+	if err != nil {
+		t.Fatalf("root: %v", err)
+	}
+	var got []xsd.QName
+	kids := root.Children()
+	for {
+		c, ok := kids.Next()
+		if !ok {
+			break
+		}
+		e, ok := c.Element()
+		if !ok {
+			continue
+		}
+		got = append(got, e.Name())
+		grand := e.Children()
+		for {
+			g, ok := grand.Next()
+			if !ok {
+				break
+			}
+			if ge, ok := g.Element(); ok {
+				got = append(got, ge.Name())
+			}
+		}
+		if err := grand.Err(); err != nil {
+			t.Fatalf("grandchildren: %v", err)
+		}
+	}
+	if err := kids.Err(); err != nil {
+		t.Fatalf("children: %v", err)
+	}
+	want := []xsd.QName{{Space: "urn:n", Local: "x"}, {Local: "u"}, {Local: "y"}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("children's names = %v, want %v", got, want)
+	}
+}
+
 // TestDeclarationNamesKey pins the mapping's own rule that a key a contained
 // declaration or an attribute use carries is named by it and never by a
 // wildcard of the type (package doc, "The mapping"), RULED permanent by #2634.
@@ -954,7 +1121,9 @@ func TestDeclarationNamesKey(t *testing.T) {
 // at the key and naming what declines it. The two-namespace, variety-not,
 // both-kinds and undeclared-wildcard-child rows are wildcardMember's declines
 // RULED permanent by #2634, whose variety-any rows are
-// TestOutOfSliceInputDeclines' and TestAttributeMemberDeclines'.
+// TestOutOfSliceInputDeclines' and TestAttributeMemberDeclines'; the four
+// xsi- and xml-namespace rows, both kinds of each, are its declines RULED
+// permanent by #2635.
 func TestWildcardMemberDeclines(t *testing.T) {
 	v := validatorOver(t, wildcardSchema)
 	for _, tc := range []struct {
@@ -982,10 +1151,14 @@ func TestWildcardMemberDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:9: ", `and its {attribute wildcard} set enumerates the namespace http://www.w3.org/2001/XMLSchema-instance alone`},
 		{"the xml namespace", `{"lang":{"lang":"en"}}`,
 			"jsonsrc: instance.json:1:10: ", `and its {attribute wildcard} set enumerates the namespace http://www.w3.org/XML/1998/namespace alone`},
+		{"the xsi namespace, element kind", `{"xsiel":{"type":"w:box"}}`,
+			"jsonsrc: instance.json:1:11: ", `member "type" names no child element declaration and no attribute use of the type of {urn:w}xsiel, and its element wildcard set enumerates the namespace http://www.w3.org/2001/XMLSchema-instance alone`},
+		{"the xml namespace, element kind", `{"langel":{"lang":"en"}}`,
+			"jsonsrc: instance.json:1:12: ", `member "lang" names no child element declaration and no attribute use of the type of {urn:w}langel, and its element wildcard set enumerates the namespace http://www.w3.org/XML/1998/namespace alone`},
 		{"simple content", `{"price":{"p":5}}`,
 			"jsonsrc: instance.json:1:11: ", `member "p" names only the {attribute wildcard} of the type of {urn:w}price, whose {content type} is simple`},
 		{"member of an undeclared wildcard child", `{"box":{"u":{"w":5}}}`,
-			"jsonsrc: instance.json:1:14: ", `member "w" of {urn:w}u, a wildcard's element no top-level element declaration governs`},
+			"jsonsrc: instance.json:1:14: ", `member "w" of {urn:w}u, an element no contained and no top-level element declaration names; only an empty object maps under it`},
 		{"top-level declaration with a type table", `{"box":{"tt":"1"}}`,
 			"jsonsrc: instance.json:1:9: ", `element {urn:w}tt carries a {type table}`},
 		{"wildcard attribute after a child", `{"att":{"text":"t","p":5}}`,
