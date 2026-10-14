@@ -145,7 +145,14 @@ func (w *walker) declinef(loc xsderr.Loc, format string, args ...any) error {
 //
 // The root is named by the member's key, matched by local name against the
 // top-level element declarations; exactly one must carry it, and its expanded
-// name is the root's (package doc, "The validation root").
+// name is the root's (package doc, "The validation root"). The key's declines
+// are rootDeclaration's, under its GAP(jsonsrc) markers.
+//
+// It DECLINES an input holding no JSON value, a top-level value that is not an
+// object, a top-level object with no member, and a root member whose value is
+// an array. None has an XML twin, so none carries a marker: an XML document
+// has exactly one document element (XML 1.0 §2.1 [1]), and each of these
+// spells none or several.
 func (w *walker) root() (*element, error) {
 	tok, loc, err := w.token()
 	if errors.Is(err, io.EOF) {
@@ -184,7 +191,19 @@ func (w *walker) root() (*element, error) {
 }
 
 // rootDeclaration resolves the root member's key to the one top-level element
-// declaration whose local name it is.
+// declaration whose local name it is. It DECLINES a reserved key, under
+// reserved's GAP(jsonsrc) marker, a declaration carrying a {type table}, under
+// typeTable's, and a key that no top-level declaration, or that declarations of
+// two expanded names, carry.
+//
+// GAP(jsonsrc): a root key no top-level element declaration carries declines,
+// where the engine assesses its XML twin, an element with no declaration
+// (cvc-assess-elt), in whatever namespace the mapping gave it. Owned by #2623,
+// the NAMESPACE TRAP with no declaration carrying the key.
+//
+// GAP(jsonsrc): a root key top-level element declarations of two expanded names
+// carry declines: a JSON key carries no namespace to choose between them.
+// Owned by #2623, the NAMESPACE TRAP.
 func (w *walker) rootDeclaration(key string, loc xsderr.Loc) (xsd.ElementDeclaration, error) {
 	if isReserved(key) {
 		return xsd.ElementDeclaration{}, w.reserved(key, loc)
@@ -316,8 +335,10 @@ func (b bareElement) object(*walker, xsderr.Loc) (*object, error) {
 // cvc-complex-type clause 4 giving a declaration or use precedence only over a
 // wildcard of its own kind that admits the same expanded name.
 //
-// The xsi-namespace, two-expanded-name and simple-content declines among the
-// uses are useNamed's, under its GAP(jsonsrc) markers.
+// The reserved-key decline is reserved's, the two-expanded-name decline among
+// the declarations childNamed's, the {type table} decline typeTable's, and the
+// xsi-namespace, two-expanded-name and simple-content declines among the uses
+// useNamed's, each under its function's GAP(jsonsrc) markers.
 func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error) {
 	if isReserved(key) {
 		return nil, w.reserved(key, loc)
@@ -477,6 +498,11 @@ func fixedNamespace(wildcards []xsd.Wildcard) (uri, why string, ok bool) {
 
 // childNamed is the first of o.contained whose local name is key, declining
 // a key two expanded names carry.
+//
+// GAP(jsonsrc): a key child element declarations of two expanded names carry
+// declines: cvc-particle matches an element to a declaration by expanded name,
+// and a JSON key carries no namespace to choose between them. Owned by #2623,
+// the NAMESPACE TRAP.
 func (w *walker) childNamed(o *object, key string, loc xsderr.Loc) (xsd.ElementDeclaration, bool, error) {
 	var first xsd.ElementDeclaration
 	found := false
@@ -502,7 +528,8 @@ func (w *walker) childNamed(o *object, key string, loc xsderr.Loc) (xsd.ElementD
 //
 // GAP(jsonsrc): a key attribute uses of two expanded names carry declines:
 // cvc-complex-type clause 2.1 matches an attribute to a use by expanded name,
-// and a JSON key carries no namespace to choose between them.
+// and a JSON key carries no namespace to choose between them. Owned by #2623,
+// the NAMESPACE TRAP.
 //
 // GAP(jsonsrc): a key naming an xsi:type attribute use declines: it is the
 // "$type" arm's to present, owned by #2615.
@@ -555,6 +582,10 @@ func (w *walker) useNamed(o *object, key string, loc xsderr.Loc) (xsd.AttributeU
 // its element turns on the element's attributes (§3.12.4), xsi: ones included,
 // and this mapping does not present those, so the content it classifies by
 // would be a guess.
+//
+// GAP(jsonsrc): a declaration carrying a {type table} declines, where the
+// engine assesses its XML twin under the type the table selects (§3.12.4).
+// Owned by #2615, whose Notes own the lift once xsi:type is presented.
 func (w *walker) typeTable(d xsd.ElementDeclaration, loc xsderr.Loc) error {
 	if _, ok := d.TypeTable(); ok {
 		return w.declinef(loc, "element %s carries a {type table}; conditional type assignment is not implemented", d.Name())
@@ -566,6 +597,13 @@ func (w *walker) typeTable(d xsd.ElementDeclaration, loc xsderr.Loc) error {
 // "$xmlns" are planned, and every "$"-prefixed name is held for them.
 func isReserved(key string) bool { return len(key) > 0 && key[0] == '$' }
 
+// reserved declines the reserved member key at loc, for rootDeclaration and
+// classify alike.
+//
+// GAP(jsonsrc): a reserved member declines. The XML twin of "$type" is
+// xsi:type, and of "$xmlns" namespace declarations, both of which the engine
+// assesses; owned by #2615, which plans both arms. Any other "$" name has no
+// XML twin: "$" is not an XML NameStartChar (XML 1.0 §2.3 [4]).
 func (w *walker) reserved(key string, loc xsderr.Loc) error {
 	return w.declinef(loc, "reserved member %q; the \"$type\" and \"$xmlns\" reserved-member arms are not implemented", key)
 }
@@ -573,6 +611,10 @@ func (w *walker) reserved(key string, loc xsderr.Loc) error {
 // element builds the element a member (or an item of a member's array) maps
 // to, from its classification m, the location of its key or item, the key,
 // and the value's first token and its location.
+//
+// It DECLINES an array item that is itself an array. That has no XML twin, so
+// no marker tracks it: an item maps to exactly one element, and an array to
+// zero or more.
 func (w *walker) element(m elementMember, loc xsderr.Loc, key string, tok json.Token, tokLoc xsderr.Loc) (*element, error) {
 	switch v := tok.(type) {
 	case nil:
@@ -646,7 +688,17 @@ func (w *walker) nilled(name xsd.QName, loc, tokLoc xsderr.Loc) *element {
 // declarations, {attribute uses}, element wildcards and {attribute wildcard};
 // a simple type has none, so every member of its object is a child no
 // wildcard names (wildcardMember) and an empty object is an element with no
-// children.
+// children. It DECLINES a {type definition} that does not resolve.
+//
+// GAP(jsonsrc): an object value under a declaration whose {type definition}
+// does not resolve declines, where the engine assesses its XML twin. RULED
+// permanent by #2625: a finalized Schema reaches such a slot two ways
+// (validate's resolvedSelection) — a substitution-group head naming no
+// declaration, which the parser never builds, or a nil slot built without the
+// parser's defaulting, which validate itself declines under the ruling #2166
+// records — so no schema document reaches either; and under lax assessment
+// the members would classify against no type, the bareElement case, whose
+// verdicts depend on the namespace chosen, as #2634's grounding found.
 func (w *walker) object(decl xsd.ElementDeclaration, loc xsderr.Loc) (*object, error) {
 	td, ok := w.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
@@ -694,8 +746,9 @@ func (w *walker) object(decl xsd.ElementDeclaration, loc xsderr.Loc) (*object, e
 // keeps one a character reference names; a JSON string holds none literally
 // (RFC 8259 §7 requires a control character to be escaped), and its escape is
 // read as the character reference would be. It declines a null, object or
-// array value, and a key repeated in the run: an element carries one attribute
-// of each expanded name (XML 1.0 §3.1, Unique Att Spec).
+// array value, and a key repeated in the run. Neither has an XML twin, so no
+// marker tracks them: an attribute's value is a string, and an element carries
+// one attribute of each expanded name (XML 1.0 §3.1, Unique Att Spec).
 func (w *walker) attributes(o *object) ([]validate.Attribute, peeked, error) {
 	var attrs []validate.Attribute
 	for {
@@ -734,6 +787,11 @@ func (w *walker) attributes(o *object) ([]validate.Attribute, peeked, error) {
 // end reads what follows the root's value once the assessment returns: the
 // rest of the root's subtree the assessment did not read, classified as the
 // walk would have, then the top-level object's close and the end of the input.
+//
+// It DECLINES a second member of the top-level object and content after it.
+// Neither has an XML twin, so no marker tracks them: a second member would be
+// a second document element (XML 1.0 §2.1 [1]), and JSON text is one value
+// (RFC 8259 §2), so content after it is malformed.
 func (w *walker) end(root *element) error {
 	root.finish()
 	if w.err != nil {

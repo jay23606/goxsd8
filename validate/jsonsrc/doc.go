@@ -17,7 +17,8 @@
 // carry it, and that declaration's expanded name is the root's. Its value is
 // the root's, as any member's value is its element's. A top level of any other
 // shape, a key no top-level declaration or several carry, and an array root
-// value decline: there is no no-namespace root to fall back to. A null root
+// value decline: there is no no-namespace root to fall back to; the two key
+// declines are tracked as "Declines" below says. A null root
 // value maps as any member's null does, below.
 //
 // # The mapping
@@ -130,12 +131,19 @@
 //
 // An input the implemented arms do not map is an error from [Validate]
 // naming the arm it is not — never a silent drop and never a guessed mapping.
-// The GAP(jsonsrc) markers at classify, wildcardMember, useNamed and
-// members.key track the first, second, fourth and fifth entries, the
-// attribute member after a child member in the third, and the attribute-use
-// half of the NAMESPACE TRAP; one more at classify tracks the mapping's own
-// choice of a declaration or use over a wildcard, under "The mapping":
+// Each entry below whose XML twin the engine assesses is tracked by a
+// GAP(jsonsrc) marker at the function that declines it — rootDeclaration,
+// wildcardMember, classify, members.key, useNamed, reserved, typeTable and
+// object — and so are the NAMESPACE TRAP's declines among a type's child
+// declarations and among its attribute uses, at childNamed and useNamed; one
+// more at classify tracks the mapping's own choice of a declaration or use
+// over a wildcard, under "The mapping". A repeated attribute member, an
+// attribute member whose value is null, an object or an array, an array item
+// that is itself an array, and the top-level shapes and array root value that
+// "The validation root" declines have no XML twin, and no marker:
 //
+//   - a root key no top-level declaration carries, or that top-level
+//     declarations of two expanded names carry;
 //   - a key no contained declaration and no attribute use carries, where the
 //     type's wildcards do not fix its namespace: a wildcard of variety any or
 //     not (xs:anyType's included), or several enumerated namespaces; a key a
@@ -172,7 +180,9 @@
 //     use's or one its {attribute wildcard} alone admits: the mapping spells
 //     no text beside attribute members, so an object value carries no simple
 //     content and a scalar value no attribute;
-//   - a "$"-prefixed reserved member;
+//   - a "$"-prefixed reserved member: "$type" and "$xmlns" are the planned
+//     arms below, and no other "$" name has an XML twin, "$" being no XML
+//     NameStartChar;
 //   - an array item that is itself an array;
 //   - a matched declaration carrying a {type table}, the top-level one of a
 //     child a wildcard or a wildcard-free type names included: which type

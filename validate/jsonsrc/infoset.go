@@ -254,9 +254,14 @@ func (m *members) next() (*element, error) {
 // [[attributes]] were read whole before its first child (walker.attributes).
 //
 // GAP(jsonsrc): an attribute member after a child member declines, where its
-// XML twin, attribute order being insignificant, carries the attribute.
-// Presenting it would mean holding the owner's members until its close, and
-// the walk holds none of the document (STYLE P4).
+// XML twin, attribute order being insignificant, carries the attribute. RULED
+// permanent by #2625: presenting it would mean holding the owner's members
+// until its close, a whole subtree and at the root the whole document, where
+// the walk holds none of the document (STYLE P4); the one bounded lift, a
+// seekable pre-scan, needs an exported io.ReadSeeker entry point with no
+// consumer (STYLE T5) and re-reads each object once per enclosing object.
+// Attribute members leading the object is the notation's own ordering rule,
+// as the ORDER TRAP is (package doc).
 func (m *members) key() (peeked, error) {
 	if h := m.head; h != nil {
 		m.head = nil

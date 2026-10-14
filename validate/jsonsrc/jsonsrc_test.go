@@ -222,7 +222,9 @@ const declinesSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 
 // TestOutOfSliceInputDeclines pins every input the implemented arms do not
 // map: each is (nil, err), err opening with "jsonsrc: <uri>:<line>:<col>: "
-// at the construct it names and naming the arm it is not.
+// at the construct it names and naming the arm it is not. Each decline's
+// GAP(jsonsrc) marker, or its having no XML twin, is at the function that
+// declines it (package doc, "Declines").
 func TestOutOfSliceInputDeclines(t *testing.T) {
 	v := validatorOver(t, declinesSchema)
 	for _, tc := range []struct {
@@ -266,7 +268,9 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 
 // TestRootNaming pins how the validation root is named: by the one member of
 // a top-level object, matched by local name against the top-level element
-// declarations, exactly one of which must carry it.
+// declarations, exactly one of which must carry it. The key's declines are
+// rootDeclaration's, under its GAP(jsonsrc) markers; the top-level shapes it
+// declines have no XML twin (walker.root).
 func TestRootNaming(t *testing.T) {
 	v := validatorOver(t, orderSchema)
 	for _, tc := range []struct {
@@ -550,7 +554,8 @@ const attributeDeclinesSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XML
 
 // TestAttributeMemberDeclines pins every attribute-shaped member the arm does
 // not map: each is (nil, err), err opening with "jsonsrc: <uri>:<line>:<col>: "
-// at the construct it names.
+// at the construct it names. Each decline's GAP(jsonsrc) marker, or its having
+// no XML twin, is at the function that declines it (package doc, "Declines").
 func TestAttributeMemberDeclines(t *testing.T) {
 	v := validatorOver(t, attributeDeclinesSchema)
 	for _, tc := range []struct {
@@ -1032,7 +1037,7 @@ func TestStrayChildMember(t *testing.T) {
 // value maps only empty, so a member of it declines, as a wildcard's
 // undeclared child's does (RULED permanent by #2634); and a top-level
 // declaration of the child's name carrying a {type table} declines, as under
-// a wildcard.
+// a wildcard, under typeTable's GAP(jsonsrc) marker.
 func TestStrayChildDeclines(t *testing.T) {
 	v := validatorOver(t, strayChildSchema)
 	for _, tc := range []struct {
