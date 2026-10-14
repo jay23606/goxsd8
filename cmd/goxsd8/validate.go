@@ -18,6 +18,7 @@ import (
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/validate"
+	"github.com/kud360/goxsd8/validate/jsonsrc"
 	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -77,8 +78,9 @@ func formatVocabulary() string {
 // runValidate implements `goxsd8 validate`: it compiles the -schema arguments
 // into ONE schema set and assesses every positional argument against it,
 // writing each violation, and each check the assessment declined, to stdout as
-// the contract's "<loc>: [<rule>] <message>". args excludes the subcommand
-// name itself.
+// the contract's "<loc>: [<rule>] <message>", and a JSON instance jsonsrc
+// could not assess as jsonsrc's own error line (assessJSON). args excludes the
+// subcommand name itself.
 //
 // Every instance is assessed, in argument order: a violation in one never
 // stops the next, so a script gets the whole report from one run. The exit
@@ -215,8 +217,9 @@ type validation struct {
 	// forced is the -format value, empty when the flag was not given and the
 	// format is derived per instance from its extension.
 	forced sourceFormat
-	// hints reports whether xsi:schemaLocation hints augment the set, which
-	// -no-hints turns off.
+	// hints reports whether an XML instance's xsi:schemaLocation hints augment
+	// the set, which -no-hints turns off. A JSON instance carries none
+	// (assessJSON).
 	hints bool
 	// log is the debug logger -v installed, nil when it was not given.
 	log *slog.Logger
@@ -231,14 +234,11 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
-	if format != formatXML {
+	if format == formatBER {
 		// A token the contract reserves and no milestone has built:
-		// validate/bersrc carries a doc.go and no Validate, and
-		// validate/jsonsrc's Validate maps part of M8's JSON mapping alone,
-		// declining the reserved members and wildcard members,
-		// so the honest answer is the usage code and this diagnosis, never a
-		// silent pass.
-		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %s: -format %s is reserved by the contract and not yet implemented; only %s instances are assessed today", instance, format, formatXML))
+		// validate/bersrc carries a doc.go and no Validate, so the honest
+		// answer is the usage code and this diagnosis, never a silent pass.
+		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %s: -format %s is reserved by the contract and not yet implemented; only %s and %s instances are assessed today", instance, format, formatXML, formatJSON))
 	}
 	src, closeSrc, err := openInstance(instance)
 	if err != nil {
@@ -246,6 +246,9 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 	}
 	defer closeSrc()
 
+	if format == formatJSON {
+		return vn.assessJSON(instance, src, stdout, stderr)
+	}
 	v, src, code := vn.validatorFor(instance, src, stderr)
 	if code != exitOK {
 		return code
@@ -260,6 +263,31 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		// so it lands on stdout with them and counts as invalid — nothing in
 		// the document was shown valid.
 		return reportLines(stdout, stderr, instance, []string{violationLine(err)}, exitInvalid)
+	}
+	lines, code := assessmentLines(result)
+	return reportLines(stdout, stderr, instance, lines, code)
+}
+
+// assessJSON assesses the JSON instance in src through jsonsrc.Validate,
+// against the -schema set alone, and reports its exit code.
+//
+// It reads no schema location hints: validate/jsonsrc declines
+// xsi:schemaLocation and xsi:noNamespaceSchemaLocation members permanently
+// (#2627), so a JSON instance carries none, and -no-hints changes nothing for
+// it. instanceHints, an XML tokenizer, is never run over JSON bytes.
+//
+// jsonsrc's error channel is one untyped (nil, err): malformed JSON, content
+// after the top-level object, an I/O fault mid-read (which the decoder reports
+// as malformed JSON), and every input the mapping declines. jsonsrc's doc makes
+// none of them a validity verdict, and nothing tells a decline from malformed
+// input, so the line — already "jsonsrc: <loc>: <message>", with no [<rule>]
+// — lands on stdout with the report and is charged exitUndecided: charging
+// exitInvalid would charge every decline as invalid. Malformed XML is charged
+// exitInvalid instead, on one's reasoning for xmlsrc's fault.
+func (vn *validation) assessJSON(instance string, src io.Reader, stdout, stderr io.Writer) int {
+	result, err := jsonsrc.Validate(vn.base, src, jsonsrc.WithURI(instance))
+	if err != nil {
+		return reportLines(stdout, stderr, instance, []string{violationLine(err)}, exitUndecided)
 	}
 	lines, code := assessmentLines(result)
 	return reportLines(stdout, stderr, instance, lines, code)
@@ -466,19 +494,17 @@ func forcedFormat(token string) (sourceFormat, error) {
 // formatOf reports the source format of one instance argument: the -format
 // value where the flag was given, and otherwise the format its extension names.
 //
-// stdinArg has no extension, and without -format it is read as formatXML: xml
-// is the only format assessed today, json and ber being reserved, so no other
-// reading of standard input could be meant. That default lasts only while xml
-// stands alone — once a second format is assessed, stdinArg needs -format
-// again, as the contract states (#2403). Any other argument whose extension
-// names no source format is a usage error rather than a guess, so that no file
-// is ever read in a format nothing in the invocation asked for.
+// stdinArg has no extension, so without -format it is a usage error: xml and
+// json are both assessed, and either reading of standard input could be meant
+// (#2403). Any other argument whose extension names no source format is the
+// same usage error rather than a guess, so that no input is ever read in a
+// format nothing in the invocation asked for.
 func formatOf(instance string, forced sourceFormat) (sourceFormat, error) {
 	if forced != "" {
 		return forced, nil
 	}
 	if instance == stdinArg {
-		return formatXML, nil
+		return "", fmt.Errorf("%s: standard input has no extension to name a source format; pass -format %s", instance, formatVocabulary())
 	}
 	ext := filepath.Ext(instance)
 	for _, f := range sourceFormats {

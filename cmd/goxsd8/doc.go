@@ -43,17 +43,16 @@
 //	    named on stderr at its own position, with no rule ID and no
 //	    change of exit code: the skip is legal, so the summary above is
 //	    printed off a schema short of whatever that document declares.
-//	    -q does not silence it. The I/O fault above is not that skip:
-//	    it is charged 1, though the faulting run names the directive on
-//	    stderr too, before printing the fault.
+//	    -q does not silence it. Such a directive of a REJECTED schema
+//	    is named the same way, for the directives assembly reached
+//	    before it stopped, in a line saying the assembly was rejected
+//	    rather than compiled and saying nothing about whether the
+//	    unread document had a part in that. The I/O fault above is not
+//	    the legal skip: it is charged 1, though the faulting run names
+//	    the directive on stderr too, before printing the fault.
 //	    A bare <xs:import>, which names no document, is not reported.
-//	    A REJECTED schema is named the same
-//	    way, for the directives assembly reached before it stopped, in
-//	    a line saying the assembly was rejected rather than compiled
-//	    and saying nothing about whether the unread document had a part
-//	    in that.
 //
-//	goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...
+//	goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>...
 //	    Assess instances against the compiled set; every schema needs
 //	    its own -schema, and every positional argument is an instance.
 //	    The -schema documents compose into ONE set — several of them are
@@ -69,28 +68,39 @@
 //	    every instance of the invocation (there is no per-instance
 //	    spelling); an unrecognized token, and an instance whose
 //	    extension names none of the three, are usage errors listing the
-//	    values. Only xml is assessed today: json and ber are reserved,
-//	    and an instance in either exits 2 saying so. - has no
-//	    extension and is read as xml without -format, as in
-//	    goxsd8 validate -schema s.xsd - < i.xml; once a second format
-//	    is assessed, - will need -format. An instance argument naming
-//	    a directory exits 2 saying it is a directory.
+//	    values. xml and json are assessed today; ber is reserved, and
+//	    an instance in it exits 2 saying so. - has no extension and
+//	    needs -format, as in goxsd8 validate -format xml -schema
+//	    s.xsd - < i.xml; without one it exits 2 saying so. An instance
+//	    argument naming a directory exits 2 saying it is a directory.
 //	    xsi:schemaLocation hints on the document element of an XML
 //	    instance augment the schema set for that instance (resolved
 //	    relative to the instance; disable with -no-hints). A hint the
 //	    set will not compose with is the instance's own fault, not
 //	    the schema set's: it is reported on stderr naming that
 //	    instance, whose hints are then dropped, and it is assessed
-//	    against the -schema documents alone.
+//	    against the -schema documents alone. A JSON instance carries
+//	    no hints, so -no-hints changes nothing for it.
+//	    A JSON instance is mapped onto the infoset by validate/jsonsrc
+//	    and assessed against the -schema documents; its violations and
+//	    undecided checks print and exit as an XML instance's do, <loc>
+//	    being jsonsrc's line and byte column. An input jsonsrc's
+//	    mapping declines, malformed JSON, content after the top-level
+//	    object and an I/O fault reading the instance once it is open
+//	    all reach jsonsrc's one error channel, which tells none of
+//	    them from another: each prints jsonsrc: <loc>: <message> on
+//	    stdout, with no [<rule>], and exits 4, where malformed XML and
+//	    an I/O fault reading an XML instance exit 1.
 //	    An XML instance's DOCTYPE is read for the unparsed entities
 //	    an ENTITY value must name: the internal subset, including
 //	    its internal parameter entities. The external DTD subset is
 //	    never fetched, so a name declared only there is charged with
 //	    a cvc-simple-type cause saying the DTD was not fully read, not
 //	    that the name is undeclared.
-//	    Exit 0 when no instance was charged a violation and none left
-//	    a check undecided, 1 invalid, 2 usage or I/O on an argument or
-//	    on stdout, and 3 when the schema set does not compile.
+//	    Exit 0 when no instance was charged a violation, none left a
+//	    check undecided and none reached jsonsrc's error channel, 1
+//	    invalid, 2 usage or I/O on an argument or on stdout, and 3 when
+//	    the schema set does not compile.
 //	    An I/O fault reading a document a -schema argument REFERENCES,
 //	    through <xs:include>, <xs:import>, <xs:override> or
 //	    <xs:redefine>, is charged 3: the schema set does not compile,
@@ -103,10 +113,13 @@
 //	    assessment declined to decide: no violation charged, and a
 //	    check it reached not performed, so the instance stands
 //	    undecided against the rule that check answers to rather than
-//	    clean. The code is the worst outcome over the instances, by
-//	    severity and not by number: undecided is less severe than
-//	    invalid, so a run holding one of each exits 1, and 4 answers a
-//	    run where something was left undecided and nothing was worse.
+//	    clean; a JSON instance on jsonsrc's error channel is 4 too,
+//	    with no assessment standing. The code is the worst outcome over
+//	    the instances, by severity and not by number: undecided is less
+//	    severe than invalid, so a run holding one of each — a JSON
+//	    instance on the error channel beside an invalid one included —
+//	    exits 1, and 4 answers a run where something was left undecided
+//	    and nothing was worse.
 //	    Every instance is assessed — the run never stops at the first
 //	    invalid one — and each violation, and each check the assessment
 //	    declined, prints one line on stdout:
@@ -135,11 +148,12 @@
 // Implemented today: the help path, parse and validate. With no arguments,
 // or with -h, -help or --help in any argument position, goxsd8 prints this
 // usage to stdout and exits 0. goxsd8 parse compiles its arguments as above
-// and honours -q and -v; goxsd8 validate assesses XML instances as above and
-// honours -v, -q silencing nothing there because it writes no informational
-// output. GOXSD_DEBUG scopes -v for neither. Every other invocation exits 2,
-// reporting on stderr that gen is reserved but not yet implemented, that the
-// name is not one of the three, that a help request carries a value, that a
+// and honours -q and -v; goxsd8 validate assesses XML and JSON instances as
+// above and honours -v, -q silencing nothing there because it writes no
+// informational output. GOXSD_DEBUG scopes -v for neither. Every other
+// invocation exits 2, reporting on stderr that the subcommand
+// gen is reserved but not yet implemented, that the name is not one of the
+// three, that a help flag is spelled with a value, as -help=<value>, that a
 // flag stands before the subcommand it qualifies, or that the first argument
 // is a flag and no subcommand was given.
 //
@@ -217,17 +231,28 @@
 // aggregate by severity rather than by number, so a run whose instances mix
 // invalid with undecided exits 1: a gate acts on the verdict it has.
 //
+// A JSON instance on validate/jsonsrc's error channel exits 4 too, with no
+// Unevaluated record and no assessment standing. That channel is one untyped
+// error carrying malformed JSON, content after the top-level object, an I/O
+// fault reading the instance once it is open (which jsonsrc reports as
+// malformed JSON) and every input jsonsrc's mapping declines, and jsonsrc's
+// doc makes none of them a validity verdict. Nothing tells a decline from
+// malformed input, and charging 1 would charge every decline as invalid, so
+// all of them are undecided — unlike malformed XML, and an I/O fault reading
+// an XML instance, which exit 1. The line is jsonsrc's own, jsonsrc: <loc>:
+// <message>, with no [<rule>], on stdout with the report, and it aggregates
+// like any 4: beside an invalid instance the run exits 1.
+//
 // validate assesses its instances in argument order. An instance argument
-// spelled - is standard input, which has no extension to name a source format;
-// without -format it is read as xml, the one format assessed while json and ber
-// are reserved, and once a second format is assessed it will need -format
-// again. An instance argument naming a directory, by any name and under any
-// -format, is charged exit 2 as a directory before its extension is read.
-// -schema - is not supported: a schema document's location is the base URI its
-// own relative <xs:include>, <xs:import> and <xs:override> references resolve
-// against, and standard input has none. That spelling is refused, exit 2,
-// rather than opened, so a file which happens to be named - is never compiled
-// as the schema set behind it; ./- is what names that file.
+// spelled - is standard input, which has no extension to name a source format,
+// so it needs -format: xml and json are both assessed, and without the flag it
+// exits 2 saying so (#2403). An instance argument naming a directory, by any
+// name and under any -format, is charged exit 2 as a directory before its
+// extension is read. -schema - is not supported: a schema document's location
+// is the base URI its own relative <xs:include>, <xs:import> and <xs:override>
+// references resolve against, and standard input has none. That spelling is
+// refused, exit 2, rather than opened, so a file which happens to be named -
+// is never compiled as the schema set behind it; ./- is what names that file.
 //
 // validate follows an xsi:schemaLocation or xsi:noNamespaceSchemaLocation hint
 // carried by the DOCUMENT ELEMENT of an XML instance, and no other element's.
@@ -275,14 +300,15 @@
 // The CLI is a thin shell over the library for the capabilities it runs
 // today: schema compilation and XML instance assessment are reachable through
 // parser, xsd, validate and validate/xmlsrc, which reads a DOCTYPE the way
-// validate does, and the README shows both routes for them. The capabilities
-// this page reserves have no library route either, save one: codegen (M9)
-// with codec (M10) and validate/bersrc (M11) each export nothing yet, so for
-// code generation and BER instances there is no second route to document
-// until those milestones land. validate/jsonsrc exports Validate for the
-// slices of M8's JSON mapping shipped so far, which -format json does not
-// reach until the mapping is whole. Error output is stable and line-oriented
-// for scripting.
+// validate does, and the README shows both routes for them; JSON instance
+// assessment is validate/jsonsrc's Validate, which -format json calls. That
+// mapping is not whole: the inputs it still declines (its doc's Declines)
+// reach the exit-4 error channel above rather than a verdict. The capabilities
+// this page reserves have no library route either: codegen (M9) with codec
+// (M10) and validate/bersrc (M11) each export nothing yet, so for code
+// generation and BER instances there is no second route to document until
+// those milestones land. Error output is stable and line-oriented for
+// scripting.
 //
 // # Diagnostic lines
 //
@@ -291,7 +317,8 @@
 // <file>:<line>:<col>, ? when unknown, and <rule> is the spec validation rule
 // ID. validate renders its violations the way parse renders a schema error,
 // the no-rule-to-cite exception included, which on validate's path is the line
-// naming the source fault that stopped the walk. A decimal element holding
+// naming the source fault that stopped the walk, and a JSON instance's
+// jsonsrc: <loc>: <message> line. A decimal element holding
 // "12,50" prints:
 //
 //	order.xml:3:3: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): [cvc-datatype-valid] decimal: "12,50" is not in the lexical space (decimal-lexical-representation, §3.3.3.1)

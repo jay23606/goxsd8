@@ -68,17 +68,16 @@ Usage (contract; subcommands land with their milestones):
       named on stderr at its own position, with no rule ID and no
       change of exit code: the skip is legal, so the summary above is
       printed off a schema short of whatever that document declares.
-      -q does not silence it. The I/O fault above is not that skip:
-      it is charged 1, though the faulting run names the directive on
-      stderr too, before printing the fault.
+      -q does not silence it. Such a directive of a REJECTED schema
+      is named the same way, for the directives assembly reached
+      before it stopped, in a line saying the assembly was rejected
+      rather than compiled and saying nothing about whether the
+      unread document had a part in that. The I/O fault above is not
+      the legal skip: it is charged 1, though the faulting run names
+      the directive on stderr too, before printing the fault.
       A bare <xs:import>, which names no document, is not reported.
-      A REJECTED schema is named the same
-      way, for the directives assembly reached before it stopped, in
-      a line saying the assembly was rejected rather than compiled
-      and saying nothing about whether the unread document had a part
-      in that.
 
-  goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...
+  goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>...
       Assess instances against the compiled set; every schema needs
       its own -schema, and every positional argument is an instance.
       The -schema documents compose into ONE set — several of them are
@@ -94,28 +93,39 @@ Usage (contract; subcommands land with their milestones):
       every instance of the invocation (there is no per-instance
       spelling); an unrecognized token, and an instance whose
       extension names none of the three, are usage errors listing the
-      values. Only xml is assessed today: json and ber are reserved,
-      and an instance in either exits 2 saying so. - has no
-      extension and is read as xml without -format, as in
-      goxsd8 validate -schema s.xsd - < i.xml; once a second format
-      is assessed, - will need -format. An instance argument naming
-      a directory exits 2 saying it is a directory.
+      values. xml and json are assessed today; ber is reserved, and
+      an instance in it exits 2 saying so. - has no extension and
+      needs -format, as in goxsd8 validate -format xml -schema
+      s.xsd - < i.xml; without one it exits 2 saying so. An instance
+      argument naming a directory exits 2 saying it is a directory.
       xsi:schemaLocation hints on the document element of an XML
       instance augment the schema set for that instance (resolved
       relative to the instance; disable with -no-hints). A hint the
       set will not compose with is the instance's own fault, not
       the schema set's: it is reported on stderr naming that
       instance, whose hints are then dropped, and it is assessed
-      against the -schema documents alone.
+      against the -schema documents alone. A JSON instance carries
+      no hints, so -no-hints changes nothing for it.
+      A JSON instance is mapped onto the infoset by validate/jsonsrc
+      and assessed against the -schema documents; its violations and
+      undecided checks print and exit as an XML instance's do, <loc>
+      being jsonsrc's line and byte column. An input jsonsrc's
+      mapping declines, malformed JSON, content after the top-level
+      object and an I/O fault reading the instance once it is open
+      all reach jsonsrc's one error channel, which tells none of
+      them from another: each prints jsonsrc: <loc>: <message> on
+      stdout, with no [<rule>], and exits 4, where malformed XML and
+      an I/O fault reading an XML instance exit 1.
       An XML instance's DOCTYPE is read for the unparsed entities
       an ENTITY value must name: the internal subset, including
       its internal parameter entities. The external DTD subset is
       never fetched, so a name declared only there is charged with
       a cvc-simple-type cause saying the DTD was not fully read, not
       that the name is undeclared.
-      Exit 0 when no instance was charged a violation and none left
-      a check undecided, 1 invalid, 2 usage or I/O on an argument or
-      on stdout, and 3 when the schema set does not compile.
+      Exit 0 when no instance was charged a violation, none left a
+      check undecided and none reached jsonsrc's error channel, 1
+      invalid, 2 usage or I/O on an argument or on stdout, and 3 when
+      the schema set does not compile.
       An I/O fault reading a document a -schema argument REFERENCES,
       through <xs:include>, <xs:import>, <xs:override> or
       <xs:redefine>, is charged 3: the schema set does not compile,
@@ -128,10 +138,13 @@ Usage (contract; subcommands land with their milestones):
       assessment declined to decide: no violation charged, and a
       check it reached not performed, so the instance stands
       undecided against the rule that check answers to rather than
-      clean. The code is the worst outcome over the instances, by
-      severity and not by number: undecided is less severe than
-      invalid, so a run holding one of each exits 1, and 4 answers a
-      run where something was left undecided and nothing was worse.
+      clean; a JSON instance on jsonsrc's error channel is 4 too,
+      with no assessment standing. The code is the worst outcome over
+      the instances, by severity and not by number: undecided is less
+      severe than invalid, so a run holding one of each — a JSON
+      instance on the error channel beside an invalid one included —
+      exits 1, and 4 answers a run where something was left undecided
+      and nothing was worse.
       Every instance is assessed — the run never stops at the first
       invalid one — and each violation, and each check the assessment
       declined, prints one line on stdout:
@@ -160,11 +173,12 @@ silenced by it.
 Implemented today: the help path, parse and validate. With no arguments,
 or with -h, -help or --help in any argument position, goxsd8 prints this
 usage to stdout and exits 0. goxsd8 parse compiles its arguments as above
-and honours -q and -v; goxsd8 validate assesses XML instances as above and
-honours -v, -q silencing nothing there because it writes no informational
-output. GOXSD_DEBUG scopes -v for neither. Every other invocation exits 2,
-reporting on stderr that gen is reserved but not yet implemented, that the
-name is not one of the three, that a help request carries a value, that a
+and honours -q and -v; goxsd8 validate assesses XML and JSON instances as
+above and honours -v, -q silencing nothing there because it writes no
+informational output. GOXSD_DEBUG scopes -v for neither. Every other
+invocation exits 2, reporting on stderr that the subcommand
+gen is reserved but not yet implemented, that the name is not one of the
+three, that a help flag is spelled with a value, as -help=<value>, that a
 flag stands before the subcommand it qualifies, or that the first argument
 is a flag and no subcommand was given.
 `

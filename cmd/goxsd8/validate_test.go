@@ -32,6 +32,18 @@ const (
 	shortInvalidInstance = "testdata/unresolved-include-invalid.xml"
 )
 
+// The JSON fixtures: order-valid.xml's and order-invalid.xml's documents and
+// asserted.xml's as jsonsrc maps them, a document that ends inside its root's
+// object, and one whose root member names no top-level declaration of
+// order.xsd, which jsonsrc declines.
+const (
+	validJSON     = "testdata/order-valid.json"
+	invalidJSON   = "testdata/order-invalid.json"
+	assertedJSON  = "testdata/asserted.json"
+	malformedJSON = "testdata/malformed.json"
+	declinedJSON  = "testdata/declined.json"
+)
+
 // citedLocation matches a "<file>:<line>:<col>:" location anywhere in a line,
 // capturing the file.
 var citedLocation = regexp.MustCompile(`([^\s"]+):\d+:\d+:`)
@@ -845,8 +857,8 @@ func TestValidateHintsResolveAgainstTheInstance(t *testing.T) {
 // TestValidateFormatVocabulary pins the -format enum this issue narrowed: the
 // three tokens are matched case-sensitively, an unrecognized one is a usage
 // error LISTING the valid values, an instance whose extension names none of
-// them is the same error rather than a guess, and the two tokens whose
-// adapters are still doc.go stubs fail cleanly instead of passing silently.
+// them is the same error rather than a guess, and ber, whose adapter is still
+// a doc.go stub, fails cleanly instead of passing silently.
 func TestValidateFormatVocabulary(t *testing.T) {
 	cases := []struct {
 		name string
@@ -855,7 +867,6 @@ func TestValidateFormatVocabulary(t *testing.T) {
 	}{
 		{"unrecognized token", []string{"-format", "yaml"}, `-format "yaml" is not a source format; the values are xml, json, ber`},
 		{"wrong case", []string{"-format", "XML"}, `-format "XML" is not a source format`},
-		{"forced json is reserved", []string{"-format", "json"}, "-format json is reserved by the contract and not yet implemented"},
 		{"forced ber is reserved", []string{"-format", "ber"}, "-format ber is reserved by the contract and not yet implemented"},
 		{"extension is the default", []string{}, "the extension \".txt\" names no source format; pass -format xml, json, ber"},
 	}
@@ -877,22 +888,107 @@ func TestValidateFormatVocabulary(t *testing.T) {
 	}
 }
 
-// TestValidateJSONInstanceIsReservedNotSilent pins the same answer reached
-// through the extension rather than the flag: the CLI does not route to
-// validate/jsonsrc, whose Validate maps part of M8's mapping alone, so a .json
-// instance earns the usage code and a not-yet-implemented line — never a
-// pass.
-func TestValidateJSONInstanceIsReservedNotSilent(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	args := []string{"validate", "-schema", orderSchema, "instance.json"}
-	if code := run(args, &stdout, &stderr); code != exitUsage {
-		t.Fatalf("code = %d, want %d", code, exitUsage)
+// TestValidateJSONInstance pins a .json instance's route through
+// validate/jsonsrc: its verdicts print the "<loc>: [<rule>] <message>" line an
+// XML instance's do, at jsonsrc's line and byte column, and earn the same
+// codes, while jsonsrc's one error channel — malformed JSON and every decline
+// alike — prints its own "jsonsrc: <loc>: <message>" line, no [<rule>], and
+// exits 4: it is no validity verdict. Every row runs with and without
+// -no-hints and must answer the same, because a JSON instance carries no
+// hints.
+func TestValidateJSONInstance(t *testing.T) {
+	cases := []struct {
+		name      string
+		schema    string
+		instances []string
+		code      int
+		// lines are the report's whole lines, in order; a line ending in
+		// "] " is a prefix, the message after it being the engine's.
+		lines []string
+	}{
+		{"valid", orderSchema, []string{validJSON}, exitOK, nil},
+		{"invalid", orderSchema, []string{invalidJSON}, exitInvalid, []string{
+			invalidJSON + ":1:19: [cvc-attribute] ",
+			invalidJSON + ":1:11: [cvc-identity-constraint] ",
+		}},
+		{"unevaluated", assertedSchema, []string{assertedJSON}, exitUndecided, []string{
+			assertedJSON + ":1:2: [cvc-assertion] ",
+		}},
+		{"malformed", orderSchema, []string{malformedJSON}, exitUndecided, []string{
+			"jsonsrc: " + malformedJSON + ":2:1: malformed JSON: unexpected EOF",
+		}},
+		{"declined", orderSchema, []string{declinedJSON}, exitUndecided, []string{
+			"jsonsrc: " + declinedJSON + `:1:2: root member "nosuch" names no top-level element declaration`,
+		}},
+		// A decline is less severe than a violation, as an undecided check is.
+		{"declined beside invalid", orderSchema, []string{declinedJSON, invalidJSON}, exitInvalid, []string{
+			"jsonsrc: " + declinedJSON + `:1:2: root member "nosuch" names no top-level element declaration`,
+			invalidJSON + ":1:19: [cvc-attribute] ",
+			invalidJSON + ":1:11: [cvc-identity-constraint] ",
+		}},
 	}
-	if stdout.Len() != 0 {
-		t.Errorf("stdout = %q, want empty: nothing was assessed", stdout.String())
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var reports []string
+			for _, flags := range [][]string{nil, {"-no-hints"}} {
+				args := append(append([]string{"validate"}, flags...), "-schema", c.schema)
+				args = append(args, c.instances...)
+				var stdout, stderr bytes.Buffer
+				if code := run(args, &stdout, &stderr); code != c.code {
+					t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, c.code, stdout.String(), stderr.String())
+				}
+				if stderr.Len() != 0 {
+					t.Errorf("run(%q) stderr = %q, want empty: the report is on stdout", args, stderr.String())
+				}
+				got := strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n")
+				if len(c.lines) == 0 {
+					got = nil
+				}
+				if len(got) != len(c.lines) {
+					t.Fatalf("run(%q) stdout =\n%s\nwant %d lines", args, stdout.String(), len(c.lines))
+				}
+				for i, want := range c.lines {
+					if got[i] == want || (strings.HasSuffix(want, "] ") && strings.HasPrefix(got[i], want)) {
+						continue
+					}
+					t.Errorf("run(%q) line %d = %q, want %q", args, i+1, got[i], want)
+				}
+				mustCiteOpenableLocations(t, "stdout", stdout.String())
+				reports = append(reports, stdout.String())
+			}
+			if reports[0] != reports[1] {
+				t.Errorf("-no-hints changed a JSON instance's report:\n%s\nwant\n%s", reports[1], reports[0])
+			}
+		})
 	}
-	if !strings.Contains(stderr.String(), "not yet implemented") {
-		t.Errorf("stderr = %q, want a not-yet-implemented diagnosis", stderr.String())
+}
+
+// TestValidateJSONReadFaultIsUndecided pins what the contract promises for an
+// I/O fault reading a JSON instance after it is opened: jsonsrc's decoder
+// reports it as malformed JSON, its one error channel, so it exits 4, where
+// the same fault under an XML instance is an [xml-wf] verdict exiting 1.
+// /proc/self/mem opens, and its first read faults (EIO at offset 0).
+func TestValidateJSONReadFaultIsUndecided(t *testing.T) {
+	const faulting = "/proc/self/mem"
+	if _, err := os.ReadFile(faulting); err == nil || !strings.Contains(err.Error(), "input/output error") {
+		t.Skipf("reading %s gives %v here, not the EIO this test needs", faulting, err)
+	}
+	for _, c := range []struct {
+		format string
+		code   int
+		prefix string
+	}{
+		{"json", exitUndecided, "jsonsrc: " + faulting + ":1:1: malformed JSON: read " + faulting + ": input/output error"},
+		{"xml", exitInvalid, faulting + ":1:1: [xml-wf] read " + faulting + ": input/output error"},
+	} {
+		var stdout, stderr bytes.Buffer
+		args := []string{"validate", "-format", c.format, "-schema", orderSchema, faulting}
+		if code := run(args, &stdout, &stderr); code != c.code {
+			t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, c.code, stdout.String(), stderr.String())
+		}
+		if stdout.String() != c.prefix+"\n" {
+			t.Errorf("run(%q) stdout = %q, want %q", args, stdout.String(), c.prefix+"\n")
+		}
 	}
 }
 
@@ -945,9 +1041,9 @@ func TestValidateUsageErrors(t *testing.T) {
 		{"schema is a directory", []string{"validate", "-schema", dir, validInstance}, "is a directory"},
 		{"schema from stdin", []string{"validate", "-schema", "-", validInstance}, "standard input is not a schema location"},
 		{"missing instance", []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, "no such file or directory"},
-		// - defaults to xml only while json and ber are reserved: a forced
-		// reserved token still answers before standard input is read (#2403).
-		{"stdin forced json is reserved", []string{"validate", "-format", "json", "-schema", orderSchema, "-"}, "-: -format json is reserved by the contract"},
+		// - names no source format, and xml and json are both assessed, so
+		// standard input needs -format (#2403).
+		{"stdin without -format", []string{"validate", "-schema", orderSchema, "-"}, "goxsd8: validate: -: standard input has no extension to name a source format; pass -format xml, json, ber"},
 		// A directory instance is charged as a directory before formatOf reads
 		// its extension, whatever its name and whatever -format forced (#2403):
 		// "." and the extension-less directory answered with the extension

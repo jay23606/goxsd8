@@ -333,11 +333,11 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 	// parse's and validate's own outcomes, through the shipped executable
 	// rather than through run: the exit code, the stream each answer lands on,
 	// and the summary's bytes are what a script sees (#251's shape, #472's
-	// subject). The four stdin rows are the only place standard input is
+	// subject). The six stdin rows are the only place standard input is
 	// reachable at all — run takes its writers as arguments and its reader from
-	// the process — and they pin the hint scan's replay as well as the
-	// spelling: the scan consumes the document's prefix, so a broken replay
-	// would leave the assessment nothing to read.
+	// the process — and the two -format xml ones pin the hint scan's replay as
+	// well as the spelling: the scan consumes the document's prefix, so a
+	// broken replay would leave the assessment nothing to read.
 	for _, c := range []struct {
 		args        []string
 		stdin       string
@@ -367,12 +367,16 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 			stdin: readFixture(t, validInstance), code: 0},
 		{args: []string{"validate", "-format", "xml", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, invalidInstance), code: 1, stdoutMatch: "-:5:3: [cvc-attribute]"},
-		// - without -format is read as xml while json and ber are reserved
-		// (#2403); without the default both rows exit 2 asking for -format.
+		// - names no source format once xml and json are both assessed, so
+		// without -format it exits 2 asking for one, whatever it holds (#2403).
 		{args: []string{"validate", "-schema", orderSchema, "-"},
-			stdin: readFixture(t, validInstance), code: 0},
+			stdin: readFixture(t, validInstance), code: 2, stderrMatch: "-: standard input has no extension to name a source format"},
 		{args: []string{"validate", "-schema", orderSchema, "-"},
-			stdin: readFixture(t, invalidInstance), code: 1, stdoutMatch: "-:5:3: [cvc-attribute]"},
+			stdin: readFixture(t, invalidJSON), code: 2, stderrMatch: "-: standard input has no extension to name a source format"},
+		{args: []string{"validate", "-format", "json", "-schema", orderSchema, "-"},
+			stdin: readFixture(t, validJSON), code: 0},
+		{args: []string{"validate", "-format", "json", "-schema", orderSchema, "-"},
+			stdin: readFixture(t, invalidJSON), code: 1, stdoutMatch: "-:1:19: [cvc-attribute]"},
 	} {
 		stdout, stderr, code := runBinaryStdin(t, bin, c.args, c.stdin)
 		if code != c.code {
