@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The prefix group's schema, with prefix-other.xsd, which it imports: each
+     namespace declares a top-level doc, and this one's doc holds k, an
+     xs:integer, then references to the other namespace's k, and carries the
+     qualified attribute a, an xs:integer, beside a reference to the other
+     namespace's a, an xs:string. Unprefixed, each of doc, k and a is carried
+     by two expanded names, which only a prefixed key chooses between. empty
+     is a type of empty content an undeclared root's "$type" names. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:goxsd8:json:prefix" xmlns:p="urn:goxsd8:json:prefix"
+           xmlns:o="urn:goxsd8:json:prefix:other" elementFormDefault="qualified">
+  <xs:import namespace="urn:goxsd8:json:prefix:other" schemaLocation="prefix-other.xsd"/>
+  <xs:element name="doc">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="k" type="xs:integer" minOccurs="0"/>
+        <xs:element ref="o:k" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:attribute name="a" form="qualified" type="xs:integer"/>
+      <xs:attribute ref="o:a"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="empty"/>
+</xs:schema>

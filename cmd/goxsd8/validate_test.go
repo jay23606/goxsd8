@@ -918,11 +918,11 @@ func TestValidateJSONInstance(t *testing.T) {
 			"jsonsrc: " + malformedJSON + ":2:1: malformed JSON: unexpected EOF",
 		}},
 		{"declined", orderSchema, []string{declinedJSON}, exitUndecided, []string{
-			"jsonsrc: " + declinedJSON + `:1:2: root member "nosuch" names no top-level element declaration`,
+			"jsonsrc: " + declinedJSON + `:1:2: member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it`,
 		}},
 		// A decline is less severe than a violation, as an undecided check is.
 		{"declined beside invalid", orderSchema, []string{declinedJSON, invalidJSON}, exitInvalid, []string{
-			"jsonsrc: " + declinedJSON + `:1:2: root member "nosuch" names no top-level element declaration`,
+			"jsonsrc: " + declinedJSON + `:1:2: member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it`,
 			invalidJSON + ":1:19: [cvc-attribute] ",
 			invalidJSON + ":1:11: [cvc-identity-constraint] ",
 		}},

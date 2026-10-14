@@ -96,7 +96,7 @@ func newJSONExec() laneExecutor {
 //   - nil-lexical: unrepresentable, the one xsi:nil jsonsrc presents being a
 //     null's, with the lexical form true, which has an ·actual value·
 //     (jsonsrc's walker.nilled): a "$type" member presents xsi:type alone
-//     (walker.lead), and jsonsrc declines a key naming an attribute use in
+//     (walker.typeMember), and jsonsrc declines a key naming an attribute use in
 //     the xsi namespace (walker.useNamed), and one an {attribute wildcard}
 //     would name in it (walker.wildcardMember);
 //   - the three xsi-type ones, at the xsi:type a "$type" member presents:

@@ -164,23 +164,23 @@ func TestReservedMemberDeclines(t *testing.T) {
 		{"$type not a string", `{"item":{"$type":1}}`,
 			"jsonsrc: instance.json:1:18: ", `the "$type" member of {urn:t}item is not a string`},
 		{"$xmlns not an object", `{"item":{"$xmlns":"urn:t"}}`,
-			"jsonsrc: instance.json:1:19: ", `the "$xmlns" member of {urn:t}item is not an object`},
+			"jsonsrc: instance.json:1:19: ", `the "$xmlns" member of "item" is not an object`},
 		{"$xmlns an array", `{"item":{"$xmlns":[]}}`,
-			"jsonsrc: instance.json:1:19: ", `the "$xmlns" member of {urn:t}item is not an object`},
+			"jsonsrc: instance.json:1:19: ", `the "$xmlns" member of "item" is not an object`},
 		{"$xmlns binding not a string", `{"item":{"$xmlns":{"t":null}}}`,
-			"jsonsrc: instance.json:1:24: ", `the "$xmlns" member of {urn:t}item binds "t" to a value that is not a string`},
+			"jsonsrc: instance.json:1:24: ", `the "$xmlns" member of "item" binds "t" to a value that is not a string`},
 		{"$xmlns binding a prefix twice", `{"item":{"$xmlns":{"t":"urn:t","t":"urn:t"}}}`,
-			"jsonsrc: instance.json:1:32: ", `the "$xmlns" member of {urn:t}item binds "t" twice`},
+			"jsonsrc: instance.json:1:32: ", `the "$xmlns" member of "item" binds "t" twice`},
 		{"$xmlns binding the empty prefix twice", `{"item":{"$xmlns":{"":"urn:t","":"urn:t"}}}`,
 			"jsonsrc: instance.json:1:31: ", `binds "" twice`},
 		{"$xmlns binding a prefix no NCName starts", `{"item":{"$xmlns":{"1x":"urn:t"},"$type":"1x:derived","a":"x","b":"y"}}`,
-			"jsonsrc: instance.json:1:20: ", `the "$xmlns" member of {urn:t}item binds "1x", which is not an NCName`},
+			"jsonsrc: instance.json:1:20: ", `the "$xmlns" member of "item" binds "1x", which is not an NCName`},
 		{"$xmlns binding a prefix with a space", `{"item":{"$xmlns":{"a b":"urn:t"},"$type":"a b:derived","a":"x","b":"y"}}`,
 			"jsonsrc: instance.json:1:20: ", `binds "a b", which is not an NCName`},
 		{"$xmlns binding a prefix with a colon", `{"item":{"$xmlns":{"a:b":"urn:t"}}}`,
 			"jsonsrc: instance.json:1:20: ", `binds "a:b", which is not an NCName`},
 		{"$xmlns binding xml", `{"item":{"$xmlns":{"xml":"http://www.w3.org/XML/1998/namespace"}}}`,
-			"jsonsrc: instance.json:1:20: ", `the "$xmlns" member of {urn:t}item binds the reserved prefix "xml"`},
+			"jsonsrc: instance.json:1:20: ", `the "$xmlns" member of "item" binds the reserved prefix "xml"`},
 		{"$xmlns binding xmlns", `{"item":{"$xmlns":{"xmlns":"urn:t"}}}`,
 			"jsonsrc: instance.json:1:20: ", `binds the reserved prefix "xmlns"`},
 		{"$xmlns undeclaring a prefix", `{"item":{"$xmlns":{"t":""}}}`,
@@ -276,6 +276,8 @@ func TestOpenContentTypeDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:39: "},
 		{"declared on the base chain alone", `{"r":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other"}}}`,
 			"jsonsrc: instance.json:1:35: "},
+		{"prefixed keys", `{"t:p":{"$xmlns":{"t":"urn:t"},"t:x":[{},{"$type":"t:other","foo":"1"}]}}`,
+			"jsonsrc: instance.json:1:43: "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
@@ -302,6 +304,8 @@ func TestOpenContentTypeMaps(t *testing.T) {
 			`<q xmlns="urn:t" ` + xsiDecl + ` xmlns:t="urn:t"><x xsi:type="t:other" foo="1"/></q>`},
 		{"skip open content", `{"s":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other","foo":"1"}}}`,
 			`<s xmlns="urn:t" ` + xsiDecl + ` xmlns:t="urn:t"><x xsi:type="t:other" foo="1"/></s>`},
+		{"no open content, prefixed keys", `{"t:q":{"$xmlns":{"t":"urn:t"},"t:x":{"$type":"t:other","foo":"1"}}}`,
+			`<t:q ` + xsiDecl + ` xmlns:t="urn:t"><t:x xsi:type="t:other" foo="1"/></t:q>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, elt) })
 	}
@@ -460,6 +464,8 @@ func TestUngovernedParentTypeDeclines(t *testing.T) {
 	}{
 		{"a wildcard's top-level declaration governs the parent", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}]}}`,
 			"jsonsrc: instance.json:1:48: ", ungoverned},
+		{"prefixed keys", `{"t:w":{"$xmlns":{"t":"urn:t"},"t:y":[{},{"t:x":[{},{"$type":"t:other","k":"zz"}]}]}}`,
+			"jsonsrc: instance.json:1:54: ", ungoverned},
 		{"a grandparent's", `{"w2":{"y2":[{},{"v":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}}]}}`,
 			"jsonsrc: instance.json:1:55: ", ungoverned},
 		{"a locally declared type governs the parent", `{"r":{"u":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}}}`,

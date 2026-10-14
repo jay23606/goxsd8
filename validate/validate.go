@@ -99,7 +99,7 @@ func New(schema *xsd.Schema, backend value.Backend, opts ...Option) (*Validator,
 // to choose one from when the source names a root by local name alone, a
 // declaration's {type definition} resolved to its component, and the
 // declarations and wildcards a complex type's content model contains, against
-// which an adapter whose source spells no namespace classifies a child by
+// which an adapter whose source need spell no namespace classifies a child by
 // local name, or names one only a wildcard admits.
 //
 // Each method is the [xsd.Schema] method of the same name and answers on its

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The prefix group's second namespace, imported by prefix.xsd: a top-level
+     doc of empty content, k, holding an optional n, and the attribute a. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:goxsd8:json:prefix:other" elementFormDefault="qualified">
+  <xs:element name="doc">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="k">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="n" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:attribute name="a" type="xs:string"/>
+</xs:schema>

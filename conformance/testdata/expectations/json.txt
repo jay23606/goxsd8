@@ -11,6 +11,12 @@ goxsd8-json/child/json/child.v pass
 goxsd8-json/nil/json/nil-fixed.i pass
 goxsd8-json/nil/json/nil-not-nillable.i pass
 goxsd8-json/nil/json/nil.v pass
+goxsd8-json/prefix/json/prefix-attribute.v pass
+goxsd8-json/prefix/json/prefix-child.i pass
+goxsd8-json/prefix/json/prefix-child.v pass
+goxsd8-json/prefix/json/prefix-root.v pass
+goxsd8-json/prefix/json/prefix-undeclared-local.v pass
+goxsd8-json/prefix/json/prefix-undeclared.v pass
 goxsd8-json/scalar/json/scalar-integer.v pass
 goxsd8-json/scalar/json/scalar.i pass
 goxsd8-json/scalar/json/scalar.v pass
@@ -24,3 +30,5 @@ goxsd8-json/wildcard/json/wildcard-attribute.v pass
 goxsd8-json/wildcard/json/wildcard-element.i pass
 goxsd8-json/wildcard/json/wildcard-element.v pass
 goxsd8-json/wildcard/json/wildcard-local.v pass
+goxsd8-json/wildcard/json/wildcard-prefixed-xml.i pass
+goxsd8-json/wildcard/json/wildcard-prefixed.i pass

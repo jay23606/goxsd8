@@ -244,5 +244,70 @@
       <instanceDocument xlink:href="wildcard-attribute.i.json"/>
       <expected validity="invalid"/>
     </instanceTest>
+    <instanceTest name="wildcard-prefixed.i">
+      <annotation>
+        <documentation>expects cvc-complex-content: the prefixed key z:q is {urn:goxsd8:json:z}q, which bag's ##local wildcard does not admit (cvc-complex-type clause 1.4); its namespace is the key's, not the wildcard's.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="wildcard-prefixed.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+    <instanceTest name="wildcard-prefixed-xml.i">
+      <annotation>
+        <documentation>expects cvc-complex-type: the prefixed key xml:lang is the attribute {http://www.w3.org/XML/1998/namespace}lang, att's {attribute wildcard} being its only wildcard, and its ##targetNamespace wildcard does not admit it (clause 2.2.2, cvc-wildcard).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="wildcard-prefixed-xml.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
+  <testGroup name="prefix">
+    <annotation>
+      <documentation>A prefixed key "p:local" is {uri}local, uri the binding of p in scope at the element it names, its own "$xmlns" included: {"p:doc":{"$xmlns":{"p":"urn:x"}}} is &lt;p:doc xmlns:p="urn:x"/&gt;. It chooses between expanded names an unprefixed key, matched by local name, declines between, and names a root no top-level declaration carries.</documentation>
+    </annotation>
+    <schemaTest name="prefix">
+      <schemaDocument xlink:href="prefix.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
+    <instanceTest name="prefix-root.v">
+      <annotation>
+        <documentation>The root is this namespace's doc, through the root's own "$xmlns"; unprefixed, doc is carried by both namespaces' top-level declarations.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="prefix-root.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="prefix-child.v">
+      <annotation>
+        <documentation>o:k is the other namespace's k, through the child's own "$xmlns"; unprefixed, k is carried by doc's local k and its reference to the other namespace's.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="prefix-child.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="prefix-attribute.v">
+      <annotation>
+        <documentation>o:a is the other namespace's xs:string a, through doc's "$xmlns"; unprefixed, a is carried by doc's qualified xs:integer a and its reference to the other namespace's.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="prefix-attribute.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="prefix-undeclared.v">
+      <annotation>
+        <documentation>No top-level declaration carries p:none, so the root has no declaration and is assessed under the xsi:type its "$type" presents, empty (cvc-assess-elt clause 1.2).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="prefix-undeclared.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="prefix-undeclared-local.v">
+      <annotation>
+        <documentation>No top-level declaration carries none, so the root is the element none in no namespace, with no declaration, assessed under the xsi:type its "$type" presents, empty (cvc-assess-elt clause 1.2).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="prefix-undeclared-local.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="prefix-child.i">
+      <annotation>
+        <documentation>expects cvc-type: p:k is this namespace's xs:integer k, and "x" is not one (clause 3.1.3); the other namespace's k would hold it.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="prefix-child.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
   </testGroup>
 </testSet>

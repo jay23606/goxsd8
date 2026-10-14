@@ -270,11 +270,10 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 	}
 }
 
-// TestRootNaming pins how the validation root is named: by the one member of
-// a top-level object, matched by local name against the top-level element
-// declarations, exactly one of which must carry it. The key's declines are
-// rootDeclaration's, under its GAP(jsonsrc) markers; the top-level shapes it
-// declines have no XML twin (walker.root).
+// TestRootNaming pins the top-level shapes that name no validation root, none
+// of which has an XML twin (walker.root), and the shapes after the root's
+// value. How the root's key names it is TestPrefixedKey's and
+// TestRootOfTwoExpandedNames'.
 func TestRootNaming(t *testing.T) {
 	v := validatorOver(t, orderSchema)
 	for _, tc := range []struct {
@@ -288,8 +287,6 @@ func TestRootNaming(t *testing.T) {
 			"jsonsrc: instance.json:1:2: ", "the top-level object has no member"},
 		{"no top-level value", ``,
 			"jsonsrc: instance.json:1:1: ", "the document holds no JSON value"},
-		{"root naming no declaration", `{"size":1}`,
-			"jsonsrc: instance.json:1:2: ", `root member "size" names no top-level element declaration`},
 		{"root value an array", `{"order":[]}`,
 			"jsonsrc: instance.json:1:10: ", `the value of root member "order" is an array`},
 		{"second root member", `{"order":{"size":1,"item":{"sku":"ABC"}},"order":{}}`,
@@ -313,8 +310,9 @@ func TestRootNaming(t *testing.T) {
 	}
 }
 
-// TestRootOfTwoExpandedNames pins the root declining when two top-level
-// declarations share its local name in two namespaces.
+// TestRootOfTwoExpandedNames pins an unprefixed root key declining when two
+// top-level declarations share its local name in two namespaces, RULED
+// permanent by #2623 (walker.rootMember).
 func TestRootOfTwoExpandedNames(t *testing.T) {
 	b := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:a">
   <xs:import namespace="urn:b" schemaLocation="b.xsd"/>
