@@ -151,6 +151,7 @@ func (v *Validator) Assess(root Element) *Result {
 	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend), entities: entities,
 		declsUnread: told && !processed.AllDeclarationsProcessed(), now: time.Now().UTC()}
 	var g governance
+	mark := w.res.mark()
 	d, found := v.schema.Element(root.Name())
 	if found {
 		g = w.declaredGovernance(root, d, nil)
@@ -165,7 +166,7 @@ func (v *Validator) Assess(root Element) *Result {
 		}
 		g = typed
 	}
-	w.element(root, g, nil, assertionAncestry{}, nil)
+	w.element(root, g, mark, nil, assertionAncestry{}, nil)
 	w.ids.charge(&w, root)
 	return &w.res
 }
@@ -994,8 +995,17 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // before any {test} is evaluated, and clause 2.3 binds `$value` to what that
 // leaves: e's [schema actual value], known only once its character
 // [[children]] are exhausted, and the empty sequence where e is by then known
-// to be invalid — a violation recorded since e was entered, which
-// violationsBefore marks.
+// to be invalid — a violation recorded since mark.
+//
+// mark is the caller's [resultMark], taken before e's governance was decided
+// (g), so that a cvc-elt clause 4 charge or decline recorded while g was
+// settled makes e not known to be ·valid·, as the clause makes it invalid
+// whatever type then governs it. It does not span what the caller records
+// against e's PARENT (e-validity clause 1.1.3, cvc-complex-type clause 5,
+// [walk.child]). Clause 2.3's `$value` reads the violations since mark alone
+// (clause 2.3.1.1, "known to be invalid"); [walk.keepChild] and
+// [walk.tallyValue] read every record since mark, an [Unevaluated] leaving e's
+// validity undecided.
 //
 // parent is the enclosing element's identity-constraint state, nil at the
 // ·validation root·. It is what carries the {selector} and {fields} evaluations
@@ -1033,12 +1043,10 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // e contributes to every open frame beyond its text runs is settled once its
 // [[children]] are exhausted, before its own {test}s are evaluated
 // ([collectEnd]).
-func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAncestry, inherited []inheritedAttribute) {
+func (w *walk) element(e Element, g governance, mark resultMark, parent *icCheck, up assertionAncestry, inherited []inheritedAttribute) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
-	violationsBefore := len(w.res.violations)
-	unevaluatedBefore := len(w.res.unevaluated)
 	w.abstractDeclaration(e, g)
 	w.abstractType(e, g)
 	isNilled := w.nilCheck(e, g)
@@ -1069,11 +1077,11 @@ func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAnc
 		return
 	}
 	collectEnd(w.schema, e, inner, g, content)
-	w.elementAssertions(e, asserts, content, own, len(w.res.violations) > violationsBefore)
+	w.elementAssertions(e, asserts, content, own, w.res.violatedSince(mark))
 	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
-	recorded := len(w.res.violations) > violationsBefore || len(w.res.unevaluated) > unevaluatedBefore
+	recorded := w.res.recordedSince(mark)
 	w.keepChild(up.parent, e, g, content, frame, recorded)
 	w.tallyValue(e, g, content, up, recorded)
 }
@@ -1549,7 +1557,8 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, up assertionAn
 			// assessed· where one resolves, ·laxly assessed· again where none
 			// does, and never invalid for the want of one — the wildcard is lax,
 			// so e-validity clause 1.1.3 is not live (#1823).
-			w.element(e, w.resolvedGovernance(e, inherited), id, up, inherited)
+			mark := w.res.mark()
+			w.element(e, w.resolvedGovernance(e, inherited), mark, id, up, inherited)
 			return
 		}
 		if undecided {
@@ -1605,9 +1614,10 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, up assertionAn
 			// [walk.localGovernance] record or sits below one, so a record here
 			// would restate one decline per child.
 			w.ids.declined = true
-			w.element(e, governance{undecided: true}, id, up, inherited)
+			w.element(e, governance{undecided: true}, w.res.mark(), id, up, inherited)
 			return
 		}
+		mark := w.res.mark()
 		g, assess := w.childGoverning(e, a, content.g.complexType(), inherited)
 		if !assess {
 			w.logSkipped(e)
@@ -1616,9 +1626,12 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, up assertionAn
 			}
 			return
 		}
+		// These two charge the PARENT (e-validity clause 1.1.3,
+		// cvc-complex-type clause 5), so e's mark skips what they record.
+		parents := w.res.mark()
 		w.unresolvedStrictWildcardChild(content, e, a, g)
 		w.locallyDeclaredType(content, e, g)
-		w.element(e, g, id, up, inherited)
+		w.element(e, g, mark.skipping(parents, w.res.mark()), id, up, inherited)
 		return
 	}
 	t, ok := c.Text()

@@ -155,12 +155,16 @@ func TestAssertionRootedPathIsCharged(t *testing.T) {
 // an <n> String Valid rejects is invalid in the partial ·PSVI·, and so is an
 // <n> whose value maps but which carries an attribute its simple type admits
 // none of (cvc-type clause 3.1.1) — the row that is satisfied instead with
-// childValue's recorded check removed; a second <e1> is ·skipped· by the
-// wildcard, which is satisfied instead with assertionCheck.skipped removed. A
-// child no {test} reads declines nothing, which is the retention gate
-// (assertionCheck.reads): `@x = 1` and `e1 = 'present'` are each evaluated
-// beside an invalid <n>, which only its own charge reports. With reads
-// answering true for every name, both of those rows decline instead.
+// childValue's recorded check removed — and so is an <n> whose xsi:type,
+// xs:string, does not ·override· its declared xs:int (cvc-elt clause 4), which
+// is still read under xs:int, the row that is satisfied instead with
+// walk.child's main arm taking <n>'s mark after walk.childGoverning; a second
+// <e1> is ·skipped· by the wildcard, which is satisfied instead with
+// assertionCheck.skipped removed. A child no {test} reads declines nothing,
+// which is the retention gate (assertionCheck.reads): `@x = 1` and `e1 =
+// 'present'` are each evaluated beside an invalid <n>, which only its own
+// charge reports. With reads answering true for every name, both of those rows
+// decline instead.
 func TestAssertionOverAnUnreadableChildIsDeclined(t *testing.T) {
 	x := &testAttribute{name: local("x"), value: "1", loc: loc(1, 10)}
 	for _, tc := range []struct {
@@ -170,6 +174,8 @@ func TestAssertionOverAnUnreadableChildIsDeclined(t *testing.T) {
 	}{
 		{"an invalid child", "n > 0", []Child{acKid("n", 2, "abc")}, "the child element n of the element root"},
 		{"a child invalid for an attribute", "n > 0", []Child{acKid("n", 2, "5", &testAttribute{name: local("stray"), value: "1", loc: loc(2, 6)})},
+			"a violation or an unevaluated check was recorded for it"},
+		{"a child invalid by its xsi:type", "n > 0", []Child{acKid("n", 2, "5", xsiTypeAttr("xs:string"))},
 			"a violation or an unevaluated check was recorded for it"},
 		{"a skipped child", "e1 = 'present'", []Child{acKid("e1", 2, "present"), acKid("e1", 3, "present")}, "it is ·skipped·"},
 	} {

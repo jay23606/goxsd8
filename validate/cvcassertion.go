@@ -69,10 +69,10 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // which compiles every {test}) and nil where T has no {assertions}. Each compiled
 // test is evaluated with the binding [walk.assertionValue] gives `.` and `$value`:
 // invalid says whether e is known to be invalid in the partial ·PSVI· by now (clause
-// 2.3.1.1) — the caller's count of the violations recorded since e was entered — and
-// content is e's own content check, exhausted, which holds the ·initial value· and
-// the ·nilled· answer, and own is e's own string-value frame ([ownStringValue]),
-// nil where e opened none.
+// 2.3.1.1) — a violation recorded for e, the deciding of its governance included, or
+// below it ([walk.element]'s mark) — and content is e's own content check, exhausted,
+// which holds the ·initial value· and the ·nilled· answer, and own is e's own
+// string-value frame ([ownStringValue]), nil where e opened none.
 //
 // Each assertion takes exactly one of three outcomes: DECLINED, where
 // [xpath.CompileAssertionTest] reported false or e's attributes, the children
@@ -907,11 +907,11 @@ func (w *walk) attributeBelow(ct xsd.ComplexType, path []xsd.QName, u xsd.Attrib
 // ([assertionCheck.readsElementValue]), that value, once e's subtree is walked
 // and its own assessment is over ([xpath.Tally.ElementValue] is owed after the
 // reports of e's subtree). g is e's governance, content its content check, and
-// recorded whether any violation or [Unevaluated] was recorded since e was
-// entered, in e or below it. Each value is [walk.elementBelow]'s; where e has
-// none, the ancestor takes the lack instead ([lackingElementBelow]) and is told
-// nothing, so its assertions are declined and its Tallies, left owing the
-// value, are never read.
+// recorded whether any violation or [Unevaluated] was recorded for e, the
+// deciding of its governance included, or below it ([walk.element]'s mark).
+// Each value is [walk.elementBelow]'s; where e has none, the ancestor takes the
+// lack instead ([lackingElementBelow]) and is told nothing, so its assertions
+// are declined and its Tallies, left owing the value, are never read.
 func (w *walk) tallyValue(e Element, g governance, content *contentCheck, up assertionAncestry, recorded bool) {
 	// chain is on [walk.tallyElement]'s shared-array terms: e's subtree, which
 	// wrote the slots after e's, is walked, and e's own slot still holds its
@@ -954,18 +954,6 @@ func (w *walk) tallyValue(e Element, g governance, content *contentCheck, up ass
 //     chain's. The relation is tested on e's own type directly, never through
 //     the ·locally declared type· within its parent's own type;
 //   - its [schema normalized value] under its own type does not map under T.
-//
-// GAP(validate): recorded misses a cvc-elt clause 4 violation (an xsi:type
-// not validly derived from the declared type), which [walk.childGoverning]
-// records before [walk.element] takes the marks recorded counts from;
-// e is then read under the declared type it fell back to, where the partial
-// ·PSVI· annotates it xs:anyType and the value should be lacked (#2555). The
-// value feeds [xpath.AssertionTest.Evaluate] for an ancestor's {assertions},
-// whose cvc-assertion entry lands in w.res.violations, read by
-// [Result.Violations], or nowhere, where it should land in w.res.unevaluated,
-// read by [Result.Unevaluated]: the assertion is shown satisfied or charged
-// where it should be declined. The document's verdict cannot flip, because
-// w.res.violations already carries the cvc-elt clause 4 charge at e.
 func (w *walk) elementBelow(ct xsd.ComplexType, path []xsd.QName, e Element, g governance, content *contentCheck, recorded bool) (xpath.TypedValue, string) {
 	if recorded {
 		return nil, "a violation or an unevaluated check was recorded for it or below it, so it is not known to be ·valid·"
@@ -1203,8 +1191,9 @@ func (w *walk) assertionElementTypes(ct xsd.ComplexType) xpath.ElementTypes {
 // parent's assertions. A child read for its attributes alone is never asked its value,
 // so a value childValue could not give declines nothing there. frame is e's
 // string-value frame, nil where e opened none ([walk.stringValue]). recorded reports
-// whether any violation or [Unevaluated] was recorded since e was entered — in e itself
-// or anywhere below it.
+// whether any violation or [Unevaluated] was recorded for e — the deciding of its
+// governance included, so a cvc-elt clause 4 charge counts ([walk.element]'s mark)
+// — or anywhere below it.
 //
 // A child no {test} reads is kept nowhere, and a child that is read is kept as
 // ONE value and the values of the attributes of its own a {test} reads, never a
@@ -1307,18 +1296,6 @@ func (w *walk) childAttributes(parent *assertionCheck, names []xsd.QName, e Elem
 // whiteSpace (normalizedLexical) — an extension keeps it and a restriction
 // never weakens it — and mapped under the answered type, in the namespace
 // context assessed pairs it with.
-//
-// GAP(validate): recorded misses a cvc-elt clause 4 violation (an xsi:type
-// not validly derived from the declared type), which [walk.childGoverning]
-// records before [walk.element] takes the marks recorded counts from;
-// e is then read under the declared type it fell back to, where the partial
-// ·PSVI· annotates it xs:anyType and the value should be lacked (#2555). The
-// value feeds [xpath.AssertionTest.Evaluate] for the parent's {assertions},
-// whose cvc-assertion entry lands in w.res.violations, read by
-// [Result.Violations], or nowhere, where it should land in w.res.unevaluated,
-// read by [Result.Unevaluated]: the assertion is shown satisfied or charged
-// where it should be declined. The document's verdict cannot flip, because
-// w.res.violations already carries the cvc-elt clause 4 charge at e.
 func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *contentCheck, frame *stringValueFrame, recorded bool) (xpath.TypedValue, assertionLack) {
 	lacking := func(why string) (xpath.TypedValue, assertionLack) {
 		return nil, lackingChild{name: e.Name(), loc: e.Loc(), why: why}

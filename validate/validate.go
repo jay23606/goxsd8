@@ -232,6 +232,39 @@ func (r *Result) Unevaluated() []Unevaluated {
 // document is reported through [Result.Violations].
 func (r *Result) Err() error { return r.err }
 
+// resultMark is a position in a [Result]: how many violations and how many
+// [Unevaluated] it held when [Result.mark] took it. [walk.element] reads what
+// was recorded since its caller's mark to know whether its element is ·valid·
+// in the partial ·PSVI· (cvc-assertion clauses 1.2 and 2.3.1.1), and every
+// caller takes that mark BEFORE the element's governance is decided, so a
+// cvc-elt clause 4 charge or decline [walk.instanceOverride] records counts as
+// the element's own.
+type resultMark struct{ violations, unevaluated int }
+
+// mark is r's present position.
+func (r *Result) mark() resultMark {
+	return resultMark{violations: len(r.violations), unevaluated: len(r.unevaluated)}
+}
+
+// violatedSince reports whether r charged a violation after m.
+func (r *Result) violatedSince(m resultMark) bool { return len(r.violations) > m.violations }
+
+// recordedSince reports whether r charged a violation or recorded an
+// [Unevaluated] after m.
+func (r *Result) recordedSince(m resultMark) bool {
+	return r.violatedSince(m) || len(r.unevaluated) > m.unevaluated
+}
+
+// skipping is m with the records between from and to, two later marks, no
+// longer counted as recorded since it: a span about another item that falls
+// between m and the reader of m.
+func (m resultMark) skipping(from, to resultMark) resultMark {
+	return resultMark{
+		violations:  m.violations + to.violations - from.violations,
+		unevaluated: m.unevaluated + to.unevaluated - from.unevaluated,
+	}
+}
+
 // causedBy builds the [xsderr.Error] for one violation, carrying cause — the
 // verdict of the rule this one DELEGATES to — in both places a consumer looks
 // for it, from ONE argument (STYLE D3): appended to the formatted Msg after

@@ -173,15 +173,13 @@ func TestAssertionReadsGrandchildValues(t *testing.T) {
 	}
 }
 
-// GAP(validate): a d whose xsi:type, xs:string, is not validly derived from
-// its declared xs:date is charged under cvc-elt clause 4, and is then read
-// under xs:date as if ·valid·, so `data(event/d) instance of xs:date*` is
-// shown satisfied. This asserts today's behaviour, and that verdict is wrong:
-// d is not ·valid·, so the assertion should be declined (#2555). The
-// document's verdict is right either way, through the cvc-elt charge. With
-// walk.tallyValue not called, the assertion is charged too, and this fails;
-// with walk.elementBelow lacking a d whose cvc-elt charge is the latest
-// violation, it is declined, and this fails.
+// A d whose xsi:type, xs:string, is not validly derived from its declared
+// xs:date is charged under cvc-elt clause 4, which makes d invalid whatever
+// type then governs it, so it has no typed value under xs:date in the partial
+// ·PSVI· (cvc-assertion clause 1.2) and `data(event/d) instance of xs:date*` is
+// declined, never shown satisfied; the cvc-elt charge stays the one violation.
+// With walk.child's main arm taking d's mark after walk.childGoverning, the
+// assertion is shown satisfied, and this fails.
 func TestAssertionReadsAGrandchildInvalidByXsiType(t *testing.T) {
 	const test = "data(event/d) instance of xs:date*"
 	str := ccAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, "xs:string", 3)
@@ -191,9 +189,7 @@ func TestAssertionReadsAGrandchildInvalidByXsiType(t *testing.T) {
 		!strings.HasPrefix(vs[0].Msg, "the xsi:type attribute of the element d ") || !strings.Contains(vs[0].Msg, "cvc-elt clause 4") {
 		t.Errorf("Violations() = %v, want the one cvc-elt clause 4 charge at %s", vs, loc(3, 5))
 	}
-	if len(res.Unevaluated()) != 0 {
-		t.Errorf("Unevaluated() = %v, want none today (#2555 makes it a cvc-assertion decline)", messages(res.Unevaluated()))
-	}
+	evDeclined(t, res, "the element d at instance.xml:3:5, in the subtree of the element temp, whose typed value a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: a violation or an unevaluated check was recorded for it")
 }
 
 // A d the {test} reads that has no typed value under the type it was compiled
