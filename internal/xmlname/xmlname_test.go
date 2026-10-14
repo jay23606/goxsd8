@@ -177,3 +177,26 @@ func TestMultiplicationSignIsNoNameChar(t *testing.T) {
 		t.Error("U+00D7 is a NameChar; [4a] skips it")
 	}
 }
+
+// TestIsNCName pins Namespaces in XML [4]: a Name, so a NameStartChar first
+// and NameChars after, with no ':' anywhere.
+func TestIsNCName(t *testing.T) {
+	for _, tc := range []struct {
+		s    string
+		want bool
+	}{
+		{"t", true},
+		{"_x-1.é", true},
+		{"", false},
+		{"1x", false},
+		{"-x", false},
+		{"a b", false},
+		{"a:b", false},
+		{":a", false},
+		{"a×", false},
+	} {
+		if got := IsNCName(tc.s); got != tc.want {
+			t.Errorf("IsNCName(%q) = %v, want %v", tc.s, got, tc.want)
+		}
+	}
+}

@@ -16,6 +16,10 @@
 //   - Verdicts come from the same engine with the same cvc-* rule IDs
 //     as XML and JSON; the ber conformance lane pins the mapping with
 //     curated cases.
+//   - BER has no DTD-shaped declaration, so the adapter will not
+//     implement [github.com/kud360/goxsd8/validate.UnparsedEntities] and
+//     every ·ENTITY value· will fail cvc-simple-type clause 3, as that
+//     interface's doc states.
 //
 // Open questions to settle in the M11 design issue (with oracle
 // grounding): canonical lexical bridging for binary-native values

@@ -27,8 +27,42 @@ var (
 const xmlNamespace = "http://www.w3.org/XML/1998/namespace"
 
 // xsiNil is the expanded name of the xsi:nil attribute a null value presents
-// (walker.nilled).
-var xsiNil = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
+// (walker.nilled), and xsiType that of the xsi:type attribute a "$type"
+// member presents (walker.lead).
+var (
+	xsiNil  = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
+	xsiType = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}
+)
+
+// scope is the "$xmlns" bindings in scope at an element: those of the nearest
+// object carrying a "$xmlns" member, the element's own or an ancestor's, and
+// through parent those further out, to nil above the root. It is never
+// changed once built, so every element below shares it.
+type scope struct {
+	parent   *scope
+	bindings []binding
+}
+
+// binding is one member of a "$xmlns" object: prefix bound to uri. An
+// empty-prefix binding is held, so that a repeat of it declines as any
+// repeated prefix does, and is never read: element.LookupPrefix answers ""
+// before it consults the scope.
+type binding struct {
+	prefix, uri string
+}
+
+// lookup is the namespace name prefix is bound to in s, the innermost binding
+// winning, and false where none binds it.
+func (s *scope) lookup(prefix string) (string, bool) {
+	for ; s != nil; s = s.parent {
+		for _, b := range s.bindings {
+			if b.prefix == prefix {
+				return b.uri, true
+			}
+		}
+	}
+	return "", false
+}
 
 // cursor is an element's [[children]] as the walk drives them.
 type cursor interface {
@@ -50,9 +84,13 @@ type element struct {
 	// loc is where the member's key, or the array item, begins.
 	loc xsderr.Loc
 	// attrs is the element's [[attributes]], read whole as the element was
-	// built: an object value's leading attribute members (walker.attributes),
-	// or a null value's one xsi:nil (walker.nilled).
+	// built: an object value's xsi:type, from its "$type" member, and its
+	// leading attribute members (walker.attributes), or a null value's one
+	// xsi:nil (walker.nilled).
 	attrs []validate.Attribute
+	// scope is the "$xmlns" bindings in scope at the element: its own
+	// object's, or else its parent's.
+	scope *scope
 	// kids is the element's [[children]]: a members cursor for an object
 	// value, a scalarChildren for a scalar or null one.
 	kids cursor
@@ -68,9 +106,9 @@ type element struct {
 // mapping" and its NAMESPACE TRAP).
 func (e *element) Name() xsd.QName { return e.name }
 
-// Attributes is the element's attribute members in member order, the same
-// slice at every call: a scalar value has none, and a null value has its one
-// xsi:nil.
+// Attributes is the element's xsi:type, where its object carries "$type",
+// then its attribute members in member order, the same slice at every call: a
+// scalar value has none, and a null value has its one xsi:nil.
 func (e *element) Attributes() []validate.Attribute { return e.attrs }
 
 // Children reports the element's cursor. It panics once the walk has moved
@@ -85,8 +123,9 @@ func (e *element) Children() validate.Children {
 
 // LookupPrefix answers from the bindings a JSON document implies: the empty
 // prefix is bound to the element's own namespace name, as its XML twin <k
-// xmlns="N"> binds it (package doc), "xml" is bound as everywhere, and no
-// other prefix is bound.
+// xmlns="N"> binds it, whatever a "$xmlns" binds "" to (package doc); "xml"
+// is bound as everywhere; and any other prefix answers through the scope
+// chain, the innermost "$xmlns" binding it winning.
 func (e *element) LookupPrefix(prefix string) (string, bool) {
 	switch prefix {
 	case "":
@@ -94,7 +133,7 @@ func (e *element) LookupPrefix(prefix string) (string, bool) {
 	case "xml":
 		return xmlNamespace, true
 	}
-	return "", false
+	return e.scope.lookup(prefix)
 }
 
 func (e *element) Loc() xsderr.Loc { return e.loc }
@@ -108,8 +147,9 @@ func (e *element) finish() {
 
 // attribute is an attribute member — the expanded name of the attribute use its
 // key matched, or the one the {attribute wildcard}'s single enumerated
-// namespace gives it; its scalar's lexical form; and its key's location — or a
-// null value's xsi:nil, located at the null.
+// namespace gives it; its scalar's lexical form; and its key's location — a
+// "$type" member's xsi:type, located at its key, or a null value's xsi:nil,
+// located at the null.
 type attribute struct {
 	name  xsd.QName
 	value string
@@ -156,6 +196,9 @@ func (c *scalarChildren) drain() { c.done = true }
 // walker.attributes read.
 type members struct {
 	w *walker
+	// owner is the element whose members these are, whose scope its children
+	// inherit.
+	owner *element
 	// object is what the owner's members are classified against, read once
 	// per element.
 	object *object
@@ -225,7 +268,7 @@ func (m *members) next() (*element, error) {
 				m.run = nil
 				continue
 			}
-			return m.w.element(m.run.member, loc, m.run.key, tok, loc)
+			return m.w.element(m.run.member, loc, m.run.key, tok, loc, m)
 		}
 		p, err := m.key()
 		if err != nil {
@@ -244,7 +287,7 @@ func (m *members) next() (*element, error) {
 			m.run = &arrayRun{member: p.member, key: key}
 			continue
 		}
-		return m.w.element(p.member, p.loc, key, vtok, vloc)
+		return m.w.element(p.member, p.loc, key, vtok, vloc, m)
 	}
 }
 

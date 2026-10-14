@@ -64,7 +64,7 @@ func TestCuratedJSONCorpus(t *testing.T) {
 			t.Errorf("%s: passes declared the other way too", c.id)
 		}
 	}
-	for _, group := range []string{"scalar", "child", "array", "attribute", "nil"} {
+	for _, group := range []string{"scalar", "child", "array", "attribute", "nil", "type"} {
 		if p := polarity[group]; p[0] == 0 || p[1] == 0 {
 			t.Errorf("group %s holds %d valid and %d invalid cases, want at least one of each", group, p[0], p[1])
 		}
@@ -616,5 +616,50 @@ func TestJSONExecutorReadsWildcardAttributes(t *testing.T) {
 				t.Fatalf("execJSONCase = %v (refusal %q) on an \"invalid\" expectation, want pass", got, why)
 			}
 		})
+	}
+}
+
+// instanceTypeWildcardSchema declares r of type base, which has no {attribute
+// wildcard}, and the named type wild, an extension of base that adds a strict
+// one of the target namespace; no declaration carries wild, so only a
+// "$type" reaches it.
+const instanceTypeWildcardSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="base"/>
+  <xs:complexType name="wild">
+    <xs:complexContent>
+      <xs:extension base="t:base">
+        <xs:anyAttribute namespace="##targetNamespace" processContents="strict"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="r" type="t:base"/>
+</xs:schema>`
+
+// TestJSONExecutorRefusesInstanceTypeWildcard pins attributeGovernanceDiverges
+// over the named types a "$type" can name: wild ·overrides· base and governs
+// r, jsonsrc names q by wild's {attribute wildcard}, and the walk charges
+// nothing for the strict-attribute-unresolved twin, so the "valid" reading is
+// refused though no declaration's type has an {attribute wildcard}.
+func TestJSONExecutorRefusesInstanceTypeWildcard(t *testing.T) {
+	backend := strict.New()
+	dir := t.TempDir()
+	schemaDoc, doc, twin := filepath.Join(dir, "s.xsd"), filepath.Join(dir, "i.json"), filepath.Join(dir, "i.xml")
+	writeFixture(t, schemaDoc, instanceTypeWildcardSchema)
+	writeFixture(t, doc, `{"r":{"$xmlns":{"t":"urn:t"},"$type":"t:wild","q":"x"}}`)
+	writeFixture(t, twin, `<r xmlns="urn:t" xmlns:t="urn:t" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="t:wild" t:q="x"/>`)
+	schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+	if perr != nil {
+		t.Fatalf("assembling instanceTypeWildcardSchema: %v", perr)
+	}
+	if why := assessedSubtreeRoot(backend, schema, report, twin); why != refuseStrictAttribute {
+		t.Fatalf("assessedSubtreeRoot = %q, want %q: the twin does not have the shape the test claims", why, refuseStrictAttribute)
+	}
+	if charged := chargedRules(t, schema, backend, doc); charged != nil {
+		t.Fatalf("jsonsrc.Validate charges %v, want none", charged)
+	}
+	c := caseSpec{id: "instance-type-wildcard", kind: kindJSON, doc: doc, schemaDoc: schemaDoc, expect: expectValid()}
+	if got, why := newJSONExec()(c); got.IsPass() || why != refuseJSONAttributeGovernance {
+		t.Fatalf("execJSONCase = %v (refusal %q), want a fail refused as %q", got, why, refuseJSONAttributeGovernance)
 	}
 }

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The type group's schema, for the validate/jsonsrc "$type" and "$xmlns"
+     arms. Base holds a; Derived extends it with b and the attribute d;
+     Other, unrelated to Base, holds c. item is of type Base. names holds
+     an optional xs:QName q, its prefix resolved against the "$xmlns"
+     bindings in scope. Local
+     declarations are qualified, so a JSON key's namespace comes from its
+     declaration. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:goxsd8:json:type" xmlns="urn:goxsd8:json:type"
+           elementFormDefault="qualified">
+  <xs:complexType name="Base">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="Base">
+        <xs:sequence>
+          <xs:element name="b" type="xs:string"/>
+        </xs:sequence>
+        <xs:attribute name="d" type="xs:integer"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="Other">
+    <xs:sequence>
+      <xs:element name="c" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="item" type="Base"/>
+  <xs:element name="names">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="q" type="xs:QName" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

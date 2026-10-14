@@ -46,3 +46,21 @@ var NameCharExtra = &unicode.RangeTable{
 	},
 	LatinOffset: 4,
 }
+
+// IsNCName reports whether s matches Namespaces in XML production [4] NCName
+// (docs/specs/md/xml-names.md), Name - (Char* ':' Char*): a NameStartChar
+// other than ':' and then NameChars other than ':'.
+func IsNCName(s string) bool {
+	for i, r := range s {
+		if r == ':' {
+			return false
+		}
+		if i == 0 && !unicode.Is(NameStartChar, r) {
+			return false
+		}
+		if !unicode.In(r, NameStartChar, NameCharExtra) {
+			return false
+		}
+	}
+	return s != ""
+}

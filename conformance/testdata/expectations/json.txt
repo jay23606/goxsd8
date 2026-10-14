@@ -14,6 +14,11 @@ goxsd8-json/nil/json/nil.v pass
 goxsd8-json/scalar/json/scalar-integer.v pass
 goxsd8-json/scalar/json/scalar.i pass
 goxsd8-json/scalar/json/scalar.v pass
+goxsd8-json/type/json/qname-unbound.i pass
+goxsd8-json/type/json/qname.v pass
+goxsd8-json/type/json/type-unrelated.i pass
+goxsd8-json/type/json/type-unresolved.i pass
+goxsd8-json/type/json/type.v pass
 goxsd8-json/wildcard/json/wildcard-attribute.i pass
 goxsd8-json/wildcard/json/wildcard-attribute.v pass
 goxsd8-json/wildcard/json/wildcard-element.i pass

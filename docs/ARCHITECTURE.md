@@ -34,11 +34,19 @@ Value implementations, parsing, validation, and generation live above them.
                                   - internal/xmlname, XML 1.0 5e [4] NameStartChar and
                                     [4a] NameChar, which regex's \i/\c,
                                     parser/xmltree's DOCTYPE name checks and
-                                    internal/xmltok's name checks read.
+                                    internal/xmltok's name checks read, and
+                                    Namespaces in XML [4] NCName over them,
+                                    which validate/jsonsrc's "$xmlns" check
+                                    reads.
                                   - internal/xmlchar, XML 1.0 [2] Char, which
                                     parser/xmltree's character-reference and
                                     markup checks and internal/xmltok's text
                                     check read.
+                                  - internal/xmlqname, the QName split and prefix
+                                    resolution of an xsi:type lexical
+                                    (cvc-resolve-instance), which validate's walk
+                                    and validate/jsonsrc's "$type" member must
+                                    resolve alike.
                                   - internal/xmltok, encoding/xml's strict tokenizer
                                     forked to check names against internal/xmlname's
                                     5e tables, which parser/xmltree's reader and
@@ -92,8 +100,8 @@ and imports `xsd`, `value`, `regex` and
 
 **[2] The infoset seam, the assessment skeleton, the XML adapter and the
 first two slices of the JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views and
-`New`/`Validator`/`Result` and imports `xsd`, `xsderr`, `value`, `xpath` and
-`icpath` — no longer `regex` directly, whose NCName class left with the
+`New`/`Validator`/`Result` and imports `xsd`, `xsderr`, `value`, `xpath`,
+`icpath` and `internal/xmlqname` — no longer `regex` directly, whose NCName class left with the
 identity-constraint path lexer for `icpath`, though it stays in the closure
 behind `value` for the pattern facets validate compiles — but never a
 backend: `New` takes the `value.Backend` as a required parameter, so
@@ -102,14 +110,16 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and imports
 `parser/xmltree`, `validate`, `xsd` and `xsderr` — and neither `loader` nor
 `parser`, which an imports test pins; `validate/jsonsrc` exports
-`Validate`/`Option`/`WithURI`, imports `validate`, `xsd`, `xsderr` and
-`encoding/json`, and reads the schema through `validate.SchemaView`, the
-view `Validator.Schema` returns, to name the root and classify members;
+`Validate`/`Option`/`WithURI`, imports `validate`, `xsd`, `xsderr`,
+`internal/xmlname`, `internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
+view `Validator.Schema` returns, to name the root and classify members, and
+reads `xsd.Schema.LocallyDeclaredElementType` off that view through a
+capability interface, the one `xsd` method beyond it the mapping needs;
 `validate/bersrc` is a destination, on `[1]`'s terms.
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
 `internal/xmlenc`, `internal/xmlname`, `internal/xmlchar`,
-`internal/xmltok`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
+`internal/xmlqname`, `internal/xmltok`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
 `parser`, `parser/xmltree`, `xpath`, `icpath`, `validate`,
 `validate/xmlsrc`, `validate/jsonsrc`, `conformance` and `cmd/goxsd8` carry
 code today.
@@ -144,7 +154,10 @@ checks. [5] `Name` over those tables is still written twice, as `isName` in
 gives it its one home there. Whether that table is generated is
 #989's question, asked of `internal/xmlname`. [2] `Char` lives in
 `internal/xmlchar`, read by `parser/xmltree`'s character-reference check and
-markup check and `internal/xmltok`'s text check (#2187, #2265).
+markup check and `internal/xmltok`'s text check (#2187, #2265). The
+[7]-[11] `QName` split and prefix resolution of an xsi:type lexical lives in
+`internal/xmlqname`, read by `validate`'s walk and `validate/jsonsrc`'s
+"$type" member (#2615).
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to

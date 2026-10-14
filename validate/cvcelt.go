@@ -3,6 +3,7 @@ package validate
 import (
 	"strings"
 
+	"github.com/kud360/goxsd8/internal/xmlqname"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -297,42 +298,24 @@ func (w *walk) resolveInstanceType(e Element, a Attribute) (xsd.QName, xsd.TypeD
 	return name, t, instanceTypeResolved
 }
 
-// resolveInstanceQName splits a QName lexical per the QName production of
-// [XML Namespaces 1.1] and resolves its prefix against the bindings in scope at
-// e, which is the whole of cvc-resolve-instance (§3.17.6.3) up to the component
-// lookup itself. It is false for an empty lexical, a colon structure no QName
-// has, and a prefix with no binding, each of which leaves the ·actual value·
-// ·absent·.
+// resolveInstanceQName splits a QName lexical, A.[[normalized value]], and
+// resolves its prefix against the bindings in scope at e, which is the whole
+// of cvc-resolve-instance (§3.17.6.3) up to the component lookup itself. It is
+// false for an empty lexical, a colon structure no QName has, and a prefix with
+// no binding, each of which leaves the ·actual value· ·absent·.
 //
-// The lexical arrives as A.[[normalized value]] and is collapsed here, xs:QName
-// carrying a fixed whiteSpace = collapse (Datatypes §3.3.18).
-//
-// The two halves are checked for EMPTINESS and not against the NCName
-// production, so true does not make the lexical a QName: whether it is one is
-// cvc-attribute clause 3's to decide, through the backend's xs:QName mapping
-// ([walk.instanceTypeLexical], cvcattribute.go). A name that is not an NCName
-// cannot be the {name} of any component, so the lookup in
-// [walk.instanceTypeDefinition] turns it away exactly as it turns away a
-// well-formed name nothing declares, and a second encoding of the XML
-// name-character tables here would decide nothing the lookup does not (STYLE
-// T4).
+// The split, the whiteSpace = collapse xs:QName fixes and the prefix lookup
+// are [xmlqname.Resolve]'s, the one encoding validate/jsonsrc's "$type" member
+// resolves through too (STYLE T4). It checks the two halves for EMPTINESS and
+// not against the NCName production, so true does not make the lexical a
+// QName: whether it is one is cvc-attribute clause 3's to decide, through the
+// backend's xs:QName mapping ([walk.instanceTypeLexical], cvcattribute.go). A
+// name that is not an NCName cannot be the {name} of any component, so the
+// lookup in [walk.instanceTypeDefinition] turns it away exactly as it turns
+// away a well-formed name nothing declares.
 func resolveInstanceQName(e Element, lexical string) (xsd.QName, bool) {
-	collapsed := collapseXMLWhitespace(lexical)
-	prefix, local, prefixed := strings.Cut(collapsed, ":")
-	if !prefixed {
-		if collapsed == "" {
-			return xsd.QName{}, false
-		}
-		// An unprefixed QName takes the default namespace, and no binding for it
-		// is the ·absent· namespace name rather than a failure to resolve.
-		space, _ := e.LookupPrefix("")
-		return xsd.QName{Space: space, Local: collapsed}, true
-	}
-	if prefix == "" || local == "" || strings.Contains(local, ":") {
-		return xsd.QName{}, false
-	}
-	space, bound := e.LookupPrefix(prefix)
-	if !bound {
+	space, local, ok := xmlqname.Resolve(lexical, e.LookupPrefix)
+	if !ok {
 		return xsd.QName{}, false
 	}
 	return xsd.QName{Space: space, Local: local}, true
@@ -356,8 +339,8 @@ func instanceAttribute(e Element, local string) (Attribute, bool) {
 // collapseXMLWhitespace is the whiteSpace = collapse normalization (Datatypes
 // §4.3.6): every leading and trailing space, tab, carriage return and line feed
 // removed, and every internal run of them replaced by a single space. It is
-// applied to the two instance attributes this file reads, whose types —
-// xs:QName and xs:boolean — both fix that facet.
+// applied to xsi:nil, whose type xs:boolean fixes that facet; xsi:type's
+// xs:QName is collapsed inside [xmlqname.Resolve] (resolveInstanceQName).
 //
 // The white-space set is xmlWhitespace and deliberately not unicode.IsSpace: a
 // vertical tab is not white space to a schema processor, and collapsing one
