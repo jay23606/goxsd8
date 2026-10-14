@@ -1147,6 +1147,28 @@ func TestProduceNonSchemaRootRejected(t *testing.T) {
 	}
 }
 
+// TestProduceForeignSchemaRootNamesNamespace pins that a <schema> root outside
+// the XSD namespace is named with its namespace, since the bare "<schema>" the
+// message would otherwise print reads as the schema it is not (#2574).
+func TestProduceForeignSchemaRootNamesNamespace(t *testing.T) {
+	for _, tc := range []struct{ doc, want string }{
+		{`<schema xmlns="urn:x"/>`, `parser: <schema> in namespace "urn:x" at ` + produceURI + `:1:1 is not a <schema> document root: Produce requires one`},
+		{`<schema/>`, `parser: <schema> in no namespace at ` + produceURI + `:1:1 is not a <schema> document root: Produce requires one`},
+	} {
+		d, err := parser.ReadDocument(produceURI, strings.NewReader(tc.doc))
+		if err != nil {
+			t.Fatalf("ReadDocument(%s): %v", tc.doc, err)
+		}
+		_, err = parser.Produce(d, strict.New())
+		if err == nil {
+			t.Fatalf("Produce accepted a non-XSD <schema> root: %s", tc.doc)
+		}
+		if err.Error() != tc.want {
+			t.Errorf("error = %q, want %q", err, tc.want)
+		}
+	}
+}
+
 func TestProduceSkipsOutOfScope(t *testing.T) {
 	// annotation, group and friends are skipped, not rejected. (complexType is no
 	// longer out of scope — it is produced; see the complex-type tests below.)

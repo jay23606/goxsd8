@@ -165,7 +165,7 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 		return nil, err
 	}
 	if !doc.IsSchema() {
-		return nil, fmt.Errorf("parser: <%s> at %s is not a <schema> document root: Produce requires one", doc.Root().Name().Local(), doc.Root().Loc())
+		return nil, fmt.Errorf("parser: %s at %s is not a <schema> document root: Produce requires one", doc.rootSubject(), doc.Root().Loc())
 	}
 	builder := xsd.NewSchemaBuilder()
 	sym, err := newSymbols(builder, backend)

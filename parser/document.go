@@ -42,6 +42,22 @@ func (d *Document) IsSchema() bool {
 	return name.Space() == xsd.XMLSchemaNS && name.Local() == "schema"
 }
 
+// rootSubject names the root element for a "not a <schema> document root"
+// message. A <schema> outside the XSD namespace gets its namespace appended,
+// because the bare name would read as the schema it is not (#2574); every other
+// root keeps the bare local name.
+func (d *Document) rootSubject() string {
+	name := d.root.Name()
+	switch {
+	case name.Local() != "schema" || name.Space() == xsd.XMLSchemaNS:
+		return "<" + name.Local() + ">"
+	case name.Space() == "":
+		return "<schema> in no namespace"
+	default:
+		return fmt.Sprintf("<schema> in namespace %q", name.Space())
+	}
+}
+
 // ReadDocument reads a well-formed XML document from r into a schema-document
 // tree, folding the parser/xmltree token stream through an open-element stack
 // and composing each element's base URI top-down as it is built. uri names the
