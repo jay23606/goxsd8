@@ -165,8 +165,9 @@
 //     and an attribute member whose value is null, an object or an array;
 //   - an attribute use in the xsi namespace: xsi:nil is spelled by a null
 //     value alone, xsi:type is the planned "$type" arm's below, and
-//     xsi:schemaLocation and xsi:noNamespaceSchemaLocation await #2627's
-//     ruling on a key spelling;
+//     xsi:schemaLocation and xsi:noNamespaceSchemaLocation, schema-location
+//     hints (§2.7.3, §4.3.2) a JSON instance carries none of, are RULED
+//     permanent by #2627;
 //   - an attribute member of an element whose type has simple content, a
 //     use's or one its {attribute wildcard} alone admits: the mapping spells
 //     no text beside attribute members, so an object value carries no simple

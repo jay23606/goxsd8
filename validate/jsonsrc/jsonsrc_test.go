@@ -505,8 +505,9 @@ func TestAttributesReadWhole(t *testing.T) {
 // declared both as a child and as an attribute; k, the local name of an
 // unqualified use and of a reference to the top-level {urn:t}k; w, which r's
 // ##any {attribute wildcard} alone admits and fixes no namespace for;
-// price's currency, a use of a type with simple content; and x's reference
-// to xsi:type. a is a plain use.
+// price's currency, a use of a type with simple content; x's reference to
+// xsi:type; and s's references to xsi:schemaLocation and
+// xsi:noNamespaceSchemaLocation. a is a plain use.
 const attributeDeclinesSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
@@ -527,6 +528,12 @@ const attributeDeclinesSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XML
         <xs:element name="x" minOccurs="0">
           <xs:complexType>
             <xs:attribute ref="xsi:type"/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="s" minOccurs="0">
+          <xs:complexType>
+            <xs:attribute ref="xsi:schemaLocation"/>
+            <xs:attribute ref="xsi:noNamespaceSchemaLocation"/>
           </xs:complexType>
         </xs:element>
       </xs:sequence>
@@ -571,6 +578,10 @@ func TestAttributeMemberDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:16: ", `member "currency" names an attribute use of the type of {urn:t}price, whose {content type} is simple`},
 		{"a use in the xsi namespace", `{"r":{"x":{"type":"t:r"}}}`,
 			"jsonsrc: instance.json:1:12: ", `member "type" names the attribute use {http://www.w3.org/2001/XMLSchema-instance}type of the type of {urn:t}x; an xsi: attribute is presented only by`},
+		{"an xsi:schemaLocation use", `{"r":{"s":{"schemaLocation":"urn:a a.xsd"}}}`,
+			"jsonsrc: instance.json:1:12: ", `member "schemaLocation" names the attribute use {http://www.w3.org/2001/XMLSchema-instance}schemaLocation of the type of {urn:t}s; an xsi: attribute is presented only by`},
+		{"an xsi:noNamespaceSchemaLocation use", `{"r":{"s":{"noNamespaceSchemaLocation":"a.xsd"}}}`,
+			"jsonsrc: instance.json:1:12: ", `member "noNamespaceSchemaLocation" names the attribute use {http://www.w3.org/2001/XMLSchema-instance}noNamespaceSchemaLocation of the type of {urn:t}s; an xsi: attribute is presented only by`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
