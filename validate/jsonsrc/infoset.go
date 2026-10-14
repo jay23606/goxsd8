@@ -39,10 +39,13 @@ type cursor interface {
 }
 
 // element is one element information item: a member of a JSON object, or an
-// item of a member's array, under the declaration its key matched.
+// item of a member's array, under the expanded name its key was classified to.
 type element struct {
-	w    *walker
-	decl xsd.ElementDeclaration
+	w *walker
+	// name is the element's [namespace name] and [local name]: the matched
+	// declaration's expanded name, or the one a wildcard's single enumerated
+	// namespace gives the key (walker.wildcardMember).
+	name xsd.QName
 	// loc is where the member's key, or the array item, begins.
 	loc xsderr.Loc
 	// attrs is the element's [[attributes]], read whole as the element was
@@ -58,10 +61,11 @@ type element struct {
 	finished bool
 }
 
-// Name is the matched declaration's expanded name: a JSON key is a local
-// name, and its namespace is the declaration's (package doc, "The namespace
-// trap").
-func (e *element) Name() xsd.QName { return e.decl.Name() }
+// Name is the matched declaration's expanded name, or the one a wildcard's
+// single enumerated namespace gives the key: a JSON key is a local name, and
+// its namespace is the declaration's or the wildcard's (package doc, "The
+// mapping" and its NAMESPACE TRAP).
+func (e *element) Name() xsd.QName { return e.name }
 
 // Attributes is the element's attribute members in member order, the same
 // slice at every call: a scalar value has none, and a null value has its one
@@ -79,13 +83,13 @@ func (e *element) Children() validate.Children {
 }
 
 // LookupPrefix answers from the bindings a JSON document implies: the empty
-// prefix is bound to the element's own namespace name, as the matched
-// declaration's target namespace is its default namespace (package doc),
-// "xml" is bound as everywhere, and no other prefix is bound.
+// prefix is bound to the element's own namespace name, as its XML twin <k
+// xmlns="N"> binds it (package doc), "xml" is bound as everywhere, and no
+// other prefix is bound.
 func (e *element) LookupPrefix(prefix string) (string, bool) {
 	switch prefix {
 	case "":
-		return e.decl.Name().Space, true
+		return e.name.Space, true
 	case "xml":
 		return xmlNamespace, true
 	}
@@ -102,8 +106,9 @@ func (e *element) finish() {
 }
 
 // attribute is an attribute member — the expanded name of the attribute use its
-// key matched, its scalar's lexical form, and its key's location — or a null
-// value's xsi:nil, located at the null.
+// key matched, or the one the {attribute wildcard}'s single enumerated
+// namespace gives it; its scalar's lexical form; and its key's location — or a
+// null value's xsi:nil, located at the null.
 type attribute struct {
 	name  xsd.QName
 	value string
@@ -166,19 +171,20 @@ type members struct {
 	done bool
 }
 
-// peeked is a token read ahead of its cursor: a key with its classification,
-// or the object's close, and the token's location.
+// peeked is a token read ahead of its cursor: a key with its classification
+// as a child element, or the object's close (member nil), and the token's
+// location. An attribute member is never peeked: it ends no attribute run.
 type peeked struct {
 	tok    json.Token
 	loc    xsderr.Loc
-	member member
+	member elementMember
 }
 
-// arrayRun is one array-valued member: the declaration its key matched, and
-// the key, which each of its items is an element under.
+// arrayRun is one array-valued member: the child element its key was
+// classified as, and the key, which each of its items is an element under.
 type arrayRun struct {
-	decl xsd.ElementDeclaration
-	key  string
+	member elementMember
+	key    string
 }
 
 func (m *members) Next() (validate.Child, bool) {
@@ -218,7 +224,7 @@ func (m *members) next() (*element, error) {
 				m.run = nil
 				continue
 			}
-			return m.w.element(m.run.decl, loc, m.run.key, tok, loc)
+			return m.w.element(m.run.member, loc, m.run.key, tok, loc)
 		}
 		p, err := m.key()
 		if err != nil {
@@ -234,16 +240,16 @@ func (m *members) next() (*element, error) {
 			return nil, unexpectedEOF(err, vloc)
 		}
 		if vtok == json.Delim('[') {
-			m.run = &arrayRun{decl: p.member.decl, key: key}
+			m.run = &arrayRun{member: p.member, key: key}
 			continue
 		}
-		return m.w.element(p.member.decl, p.loc, key, vtok, vloc)
+		return m.w.element(p.member, p.loc, key, vtok, vloc)
 	}
 }
 
 // key reads the owner's next key, classified as a child, or its close: first
-// the head the attribute run ended on, then from the stream. A key naming an
-// attribute use there DECLINES: it follows a child member, and the owner's
+// the head the attribute run ended on, then from the stream. A key classified
+// as an attribute there DECLINES: it follows a child member, and the owner's
 // [[attributes]] were read whole before its first child (walker.attributes).
 //
 // GAP(jsonsrc): an attribute member after a child member declines, where its
@@ -267,11 +273,12 @@ func (m *members) key() (peeked, error) {
 	if err != nil {
 		return peeked{}, err
 	}
-	if mem.use != nil {
+	child, ok := mem.(elementMember)
+	if !ok {
 		return peeked{}, m.w.declinef(loc, "attribute member %q follows a child member of %s; attribute members lead the object, as an element's attributes are read before its children",
 			key, m.object.owner)
 	}
-	return peeked{tok: tok, loc: loc, member: mem}, nil
+	return peeked{tok: tok, loc: loc, member: child}, nil
 }
 
 // Err reports the walk's one latched fault (STYLE D3).

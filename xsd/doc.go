@@ -228,7 +228,9 @@
 // clause 5 asks against the ·locally declared type·
 // Schema.LocallyDeclaredElementType answers (key-ldt-elem).
 // Schema.ContainedElementDeclarations is the set that definition's case 2 reads, for
-// validate/jsonsrc, which classifies a JSON member by local name against it.
+// validate/jsonsrc, which classifies a JSON member by local name against it;
+// Schema.ContainedWildcards is the same walk's Wildcard {term}s, for the
+// namespace jsonsrc names a member only a wildcard admits under.
 // Schema.ElementDefaultValid is cos-valid-default's, for the one cvc-elt clause
 // 5.1.1 charges at assessment time over a type an xsi:type supplied rather than over
 // any declaration's. The rest is in-package machinery finalize drives.

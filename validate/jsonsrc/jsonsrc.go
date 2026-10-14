@@ -49,16 +49,20 @@ func WithURI(uri string) Option {
 // a top level that is not an object with exactly one member naming a
 // top-level element declaration, and, anywhere in the document, a member the
 // implemented arms do not map (a key no child element declaration and no
-// attribute use carries, a key two expanded names carry, a key both a child
-// declaration and an attribute use carry, an attribute member after a child
-// member or repeated, an attribute member whose value is null, an object or an
-// array, a "$"-prefixed reserved member, a nested array, a declaration with a
-// {type table}; the package doc lists them all). A decline names the arm it is
-// not, and is never a silent drop or a guessed mapping: a member that would
-// map to a wildcard's element or attribute or to xsi:type is not part of the
-// document the assessment saw, so its result is discarded rather than
-// returned. The whole document is read either way, so a fault after the point
-// the assessment stopped at is still reported.
+// attribute use carries whose namespace no wildcard of the type fixes, or
+// whose kind a type with both an element wildcard and an {attribute wildcard}
+// leaves open, or which a wildcard puts in the xsi or xml namespace; a member
+// of an object under a wildcard's child no top-level declaration governs; a
+// key two expanded names carry, a key both a child declaration and an
+// attribute use carry, an attribute member after a child member or repeated,
+// an attribute member whose value is null, an object or an array, a
+// "$"-prefixed reserved member, a nested array, a declaration with a {type
+// table}; the package doc lists them all). A decline names the arm it is not,
+// and is never a silent drop or a guessed mapping: a member the mapping cannot
+// name, or one that would map to xsi:type, is not part of the document the
+// assessment saw, so its result is discarded rather than returned. The whole
+// document is read either way, so a fault after the point the assessment
+// stopped at is still reported.
 //
 // Every error is a plain one, prefixed "jsonsrc: " and, past the nil checks,
 // the location of the construct it names. None is an [xsderr.Error]: none is a
@@ -172,7 +176,7 @@ func (w *walker) root() (*element, error) {
 	if vtok == json.Delim('[') {
 		return nil, w.declinef(vloc, "the value of root member %q is an array; the validation root is one element", key)
 	}
-	e, err := w.element(decl, loc, key, vtok, vloc)
+	e, err := w.element(declaredElement{decl: decl}, loc, key, vtok, vloc)
 	if err != nil {
 		return nil, err
 	}
@@ -204,29 +208,92 @@ func (w *walker) rootDeclaration(key string, loc xsderr.Loc) (xsd.ElementDeclara
 // object is what an object-valued element's members are classified against,
 // read once per element from its declaration's {type definition}: the owner's
 // expanded name, the child element declarations the type contains, the type's
-// {attribute uses}, and whether its {content type} is simple. A simple type
-// contains none and has none.
+// {attribute uses}, its element wildcards and {attribute wildcard}, and
+// whether its {content type} is simple. A simple type contains none and has
+// none.
 type object struct {
 	owner     xsd.QName
 	contained []xsd.ElementDeclaration
 	uses      []xsd.AttributeUse
+	// elementWildcards is every Wildcard {term} the type's content model
+	// contains (xsd.Schema.ContainedWildcards), whatever its {process
+	// contents}, then its {open content} wildcard where it has one.
+	elementWildcards []xsd.Wildcard
+	// attributeWildcard is the type's {attribute wildcard}, nil where it has
+	// none.
+	attributeWildcard *xsd.Wildcard
 	// simpleContent is the type's {content type} being simple: the mapping
 	// spells no text beside attribute members, so it declines one there.
 	simpleContent bool
+	// undeclared is the owner having no governing declaration: a wildcard's
+	// element whose expanded name no top-level declaration carries
+	// (bareElement), which has no type to classify a member against.
+	undeclared bool
 }
 
-// member is one key's classification: an attribute use of the enclosing type
-// where use is non-nil, and otherwise the child element declaration decl.
-type member struct {
+// member is one key's classification, a closed sum of two arms: an
+// attributeMember, or an elementMember — a declaredElement or a bareElement.
+type member interface {
+	classified()
+}
+
+// attributeMember is a key that is an attribute of the enclosing element,
+// named by the expanded name of the attribute use it matched, or by the one
+// namespace the type's {attribute wildcard} enumerates.
+type attributeMember struct {
+	name xsd.QName
+}
+
+// elementMember is a key that is a child element: the name it carries, and
+// what an object value under it classifies its own members against.
+type elementMember interface {
+	member
+	elementName() xsd.QName
+	object(w *walker, loc xsderr.Loc) (*object, error)
+}
+
+// declaredElement is a child under the element declaration decl: one the
+// enclosing type contains, the root's top-level one, or the top-level one a
+// wildcard-named child's expanded name resolves to.
+type declaredElement struct {
 	decl xsd.ElementDeclaration
-	use  *xsd.AttributeUse
+}
+
+// bareElement is a wildcard-named child whose expanded name no top-level
+// declaration carries: it has no governing declaration, so an object value
+// under it maps only empty.
+type bareElement struct {
+	name xsd.QName
+}
+
+func (attributeMember) classified() {}
+func (declaredElement) classified() {}
+func (bareElement) classified()     {}
+
+func (d declaredElement) elementName() xsd.QName { return d.decl.Name() }
+func (b bareElement) elementName() xsd.QName     { return b.name }
+
+func (d declaredElement) object(w *walker, loc xsderr.Loc) (*object, error) {
+	return w.object(d.decl, loc)
+}
+
+// object is the empty object a bareElement's value classifies against: {}
+// maps, and every member declines (walker.wildcardMember).
+func (b bareElement) object(*walker, xsderr.Loc) (*object, error) {
+	return &object{owner: b.name, undeclared: true}, nil
 }
 
 // classify resolves a member's key, at loc, against o: to the child element
 // declaration among o.contained whose local name it is, or to the attribute
 // use among o.uses whose {attribute declaration}'s local name it is
 // (cvc-complex-type clause 2.1 then matches the attribute to that use by
-// expanded name). The first declaration of the name stands for every other
+// expanded name), and, where neither carries it, to the element or attribute
+// a wildcard of the type names (wildcardMember). A key a declaration or a use
+// carries never reaches a wildcard: the mapping's own rule, which the spec
+// shares only where the wildcard's one namespace is the declaration's or the
+// use's own, so that both name one item (the Note under cvc-accept; the Note
+// after cvc-complex-type clause 4; package doc, "The mapping"). The first
+// declaration of the name stands for every other
 // (xsd.Schema.ContainedElementDeclarations says why that is sound).
 //
 // It DECLINES a reserved key; a key two expanded names carry among the
@@ -234,46 +301,154 @@ type member struct {
 // which no spec rule decides between; a use in the xsi namespace, xsi:nil
 // being the null arm's to present and xsi:type the reserved-member arm's; an
 // attribute use of a type with simple content, beside which the mapping spells
-// no text; and a key neither carries, whatever an {attribute wildcard} or an
-// element wildcard of the type would admit, a wildcard match being the arm this
-// slice does not take.
-//
-// GAP(jsonsrc): a key no child element declaration and no attribute use
-// carries declines, the wildcard member arm not being implemented. That covers
-// a key an element wildcard of the type admits (cvc-accept), and a key its
-// {attribute wildcard} admits, whose attribute cvc-complex-type clause 2.2
-// would match to that wildcard.
+// no text; and every key wildcardMember declines.
 //
 // GAP(jsonsrc): a key both a child element declaration and an attribute use
 // carry declines. RULED permanent by #2613: no spec rule decides between them,
 // and the mapping has no warning channel to report a choice through.
 //
+// GAP(jsonsrc): a key a declaration or use carries maps under its name even
+// where a wildcard of the type would name the key (N,key) in another namespace
+// N, or as the other kind. No spec rule makes that choice, and it is
+// observable by an ancestor's identity-constraint paths and assertions, as the
+// representative name of #2634's residue is; #2634 owns it.
+//
 // The xsi-namespace, two-expanded-name and simple-content declines among the
 // uses are useNamed's, under its GAP(jsonsrc) markers.
 func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error) {
 	if isReserved(key) {
-		return member{}, w.reserved(key, loc)
+		return nil, w.reserved(key, loc)
 	}
 	decl, declared, err := w.childNamed(o, key, loc)
 	if err != nil {
-		return member{}, err
+		return nil, err
 	}
 	use, used, err := w.useNamed(o, key, loc)
 	if err != nil {
-		return member{}, err
+		return nil, err
 	}
 	if declared && used {
-		return member{}, w.declinef(loc, "member %q names both the child element declaration %s and the attribute use %s of the type of %s; the mapping does not choose between them",
+		return nil, w.declinef(loc, "member %q names both the child element declaration %s and the attribute use %s of the type of %s; the mapping does not choose between them",
 			key, decl.Name(), use.DeclarationName(), o.owner)
 	}
 	if used {
-		return member{use: &use}, nil
+		return attributeMember{name: use.DeclarationName()}, nil
 	}
 	if !declared {
-		return member{}, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s; the wildcard member arm is not implemented",
+		return w.wildcardMember(o, key, loc)
+	}
+	return declaredElement{decl: decl}, w.typeTable(decl, loc)
+}
+
+// wildcardMember names a key no contained declaration and no attribute use of
+// o carries, where the model fixes its namespace (package doc, "The
+// mapping"). Element kind: every element wildcard of the type — each Wildcard
+// {term} its content model contains, whatever its {process contents}, and its
+// {open content} wildcard — enumerates the one namespace N, and the key is the
+// child (N,key), under the top-level declaration of that name where there is
+// one (declaredElement, which typeTable vets) and as a bareElement where there
+// is none. Attribute kind: the {attribute wildcard} enumerates the one
+// namespace M, and the key is the attribute (M,key).
+//
+// It does not test admission: a {disallowed names} entry, ##defined and
+// ##definedSibling are the engine's to charge (cvc-wildcard clauses 1 to 3),
+// and a name the wildcards reject is soundly invalid, because every other
+// namespace is outside every wildcard of that kind and no declaration or use
+// of the type carries the key. Which {process contents} applies, and whether
+// the element is ·skipped·, ·laxly assessed· or charged under e-validity
+// clause 1.1.3, is the engine's too.
+//
+// It DECLINES a member of a bareElement's object; a key the type has
+// wildcards of both kinds for (xs:anyType has); a key no wildcard of either
+// kind admits; a wildcard of variety any or not, an enumeration of more than
+// one namespace, or element wildcards whose namespaces differ; N or M the xsi
+// or the xml namespace; and an attribute key of a type with simple content.
+//
+// GAP(jsonsrc): a wildcard-only key whose namespace or kind the model does
+// not fix declines, owned by #2634: a wildcard of variety any or not,
+// xs:anyType's included, an enumeration of several namespaces, element
+// wildcards enumerating different ones, and a type with wildcards of both
+// kinds. The representative name a mapping would pick is observable by an
+// ancestor's identity-constraint paths and assertions. A bareElement's members
+// are classified against nothing, which is xs:anyType's wildcards, the same
+// residue.
+//
+// GAP(jsonsrc): a key of a type with no wildcard at all, so none of the key's
+// kind, declines, and so does a key a wildcard's single namespace, of either
+// kind, puts in the xml or the xsi namespace; #2635 owns all three.
+//
+// GAP(jsonsrc): a key a simple-content type's {attribute wildcard} alone
+// admits declines, on the ground useNamed's simple-content marker states for
+// an attribute use, RULED permanent by #2613: the mapping spells no text
+// beside attribute members.
+func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, error) {
+	if o.undeclared {
+		return nil, w.declinef(loc, "member %q of %s, a wildcard's element no top-level element declaration governs; only an empty object maps under it",
 			key, o.owner)
 	}
-	return member{decl: decl}, w.typeTable(decl, loc)
+	elemental := len(o.elementWildcards) > 0
+	if elemental && o.attributeWildcard != nil {
+		return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, which has both an element wildcard and an {attribute wildcard}; a JSON key does not say which it is",
+			key, o.owner)
+	}
+	if elemental {
+		ns, why, ok := fixedNamespace(o.elementWildcards)
+		if !ok {
+			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its element wildcard set %s",
+				key, o.owner, why)
+		}
+		name := xsd.QName{Space: ns, Local: key}
+		d, ok := w.schema.Element(name)
+		if !ok {
+			return bareElement{name: name}, nil
+		}
+		return declaredElement{decl: d}, w.typeTable(d, loc)
+	}
+	if o.attributeWildcard == nil {
+		return nil, w.declinef(loc, "member %q names no child element declaration, no attribute use and no wildcard of the type of %s",
+			key, o.owner)
+	}
+	if o.simpleContent {
+		return nil, w.declinef(loc, "member %q names only the {attribute wildcard} of the type of %s, whose {content type} is simple; the mapping spells no text beside attribute members",
+			key, o.owner)
+	}
+	ns, why, ok := fixedNamespace([]xsd.Wildcard{*o.attributeWildcard})
+	if !ok {
+		return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its {attribute wildcard} set %s",
+			key, o.owner, why)
+	}
+	return attributeMember{name: xsd.QName{Space: ns, Local: key}}, nil
+}
+
+// fixedNamespace is the one namespace name every wildcard of wildcards
+// enumerates, read in document order, and ok. It is not ok where one is of
+// variety any or not, where they enumerate more than one namespace, and where
+// the one is the xsi or the xml namespace; why then completes the caller's
+// decline, after the wildcards' noun.
+//
+// {variety} and {namespaces} are read here to name the key, not to admit it:
+// admission stays cvc-wildcard's, the engine's (wildcardMember).
+func fixedNamespace(wildcards []xsd.Wildcard) (uri, why string, ok bool) {
+	var fixed []xsd.Namespace
+	for _, wc := range wildcards {
+		nc := wc.NamespaceConstraint()
+		if nc.Variety() != xsd.NamespaceConstraintEnumeration {
+			return "", fmt.Sprintf("includes one of variety %s, which fixes no namespace for it", nc.Variety()), false
+		}
+		for _, n := range nc.Namespaces() {
+			if !slices.Contains(fixed, n) {
+				fixed = append(fixed, n)
+			}
+		}
+	}
+	if len(fixed) != 1 {
+		return "", fmt.Sprintf("enumerates %d namespaces; a JSON key carries no namespace to choose between them", len(fixed)), false
+	}
+	uri, _ = fixed[0].URI() // "" for ·absent·, a QName's no-namespace Space
+	if uri == xsd.XMLSchemaInstanceNS || uri == xmlNamespace {
+		return "", fmt.Sprintf("enumerates the namespace %s alone; the mapping names no key in the xsi or xml namespace", uri), false
+	}
+	return uri, "", true
 }
 
 // childNamed is the first of o.contained whose local name is key, declining
@@ -370,19 +545,19 @@ func (w *walker) reserved(key string, loc xsderr.Loc) error {
 }
 
 // element builds the element a member (or an item of a member's array) maps
-// to, from its declaration, the location of its key or item, the key, and the
-// value's first token and its location.
-func (w *walker) element(decl xsd.ElementDeclaration, loc xsderr.Loc, key string, tok json.Token, tokLoc xsderr.Loc) (*element, error) {
+// to, from its classification m, the location of its key or item, the key,
+// and the value's first token and its location.
+func (w *walker) element(m elementMember, loc xsderr.Loc, key string, tok json.Token, tokLoc xsderr.Loc) (*element, error) {
 	switch v := tok.(type) {
 	case nil:
-		return w.nilled(decl, loc, tokLoc), nil
+		return w.nilled(m.elementName(), loc, tokLoc), nil
 	case json.Delim:
 		if v != json.Delim('{') {
 			// '[' alone reaches here: Token never yields a closing delimiter
 			// where a value is due.
 			return nil, w.declinef(tokLoc, "an array is an item of the array of member %q; only an object or a scalar maps to one element", key)
 		}
-		o, err := w.object(decl, tokLoc)
+		o, err := m.object(w, tokLoc)
 		if err != nil {
 			return nil, err
 		}
@@ -390,13 +565,13 @@ func (w *walker) element(decl xsd.ElementDeclaration, loc xsderr.Loc, key string
 		if err != nil {
 			return nil, err
 		}
-		return &element{w: w, decl: decl, loc: loc, attrs: attrs, kids: &members{w: w, object: o, head: &head}}, nil
+		return &element{w: w, name: m.elementName(), loc: loc, attrs: attrs, kids: &members{w: w, object: o, head: &head}}, nil
 	}
 	lexical, ok := scalarLexical(tok)
 	if !ok {
 		panic(fmt.Sprintf("jsonsrc: Token yielded %T", tok))
 	}
-	return w.scalar(decl, loc, lexical, tokLoc), nil
+	return w.scalar(m.elementName(), loc, lexical, tokLoc), nil
 }
 
 // scalarLexical is the lexical form of a scalar token — a string's decoded
@@ -417,32 +592,34 @@ func scalarLexical(tok json.Token) (string, bool) {
 	return "", false
 }
 
-// scalar builds a scalar-valued element: lexical is its simple content. An
-// empty lexical is no text at all, as <size/> carries none.
-func (w *walker) scalar(decl xsd.ElementDeclaration, loc xsderr.Loc, lexical string, tokLoc xsderr.Loc) *element {
+// scalar builds a scalar-valued element named name: lexical is its simple
+// content. An empty lexical is no text at all, as <size/> carries none.
+func (w *walker) scalar(name xsd.QName, loc xsderr.Loc, lexical string, tokLoc xsderr.Loc) *element {
 	kids := &scalarChildren{}
 	if lexical != "" {
 		kids.text = &text{data: lexical, loc: tokLoc}
 	}
-	return &element{w: w, decl: decl, loc: loc, kids: kids}
+	return &element{w: w, name: name, loc: loc, kids: kids}
 }
 
-// nilled builds a null-valued element: one attribute, xsi:nil with the
-// lexical form true, located at the null token tokLoc, and no [[children]]
-// (package doc, "The mapping"). It reads no property of decl: whether the
-// element is ·nilled· (key-nilled) and whether cvc-elt clause 3.1 or 3.2.3.2
-// charges it are the engine's, as for the XML twin <e xsi:nil="true"/>. Where
-// it is ·nilled·, the xsi:nil keeps it from cvc-elt clause 5.1's {value
-// constraint}, which an empty element without one would take.
-func (w *walker) nilled(decl xsd.ElementDeclaration, loc, tokLoc xsderr.Loc) *element {
+// nilled builds a null-valued element named name: one attribute, xsi:nil with
+// the lexical form true, located at the null token tokLoc, and no
+// [[children]] (package doc, "The mapping"). It reads no declaration: whether
+// the element is ·nilled· (key-nilled) and whether cvc-elt clause 3.1 or
+// 3.2.3.2 charges it are the engine's, as for the XML twin <e
+// xsi:nil="true"/>. Where it is ·nilled·, the xsi:nil keeps it from cvc-elt
+// clause 5.1's {value constraint}, which an empty element without one would
+// take.
+func (w *walker) nilled(name xsd.QName, loc, tokLoc xsderr.Loc) *element {
 	attrs := []validate.Attribute{&attribute{name: xsiNil, value: "true", loc: tokLoc}}
-	return &element{w: w, decl: decl, loc: loc, attrs: attrs, kids: &scalarChildren{}}
+	return &element{w: w, name: name, loc: loc, attrs: attrs, kids: &scalarChildren{}}
 }
 
 // object is what an object-valued element of decl classifies its members
-// against, from its {type definition}: a complex type's contained declarations
-// and {attribute uses}; a simple type has neither, so every member of its
-// object declines and an empty object is an element with no children.
+// against, from its {type definition}: a complex type's contained
+// declarations, {attribute uses}, element wildcards and {attribute wildcard};
+// a simple type has none, so every member of its object declines and an
+// empty object is an element with no children.
 func (w *walker) object(decl xsd.ElementDeclaration, loc xsderr.Loc) (*object, error) {
 	td, ok := w.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
@@ -450,16 +627,28 @@ func (w *walker) object(decl xsd.ElementDeclaration, loc xsderr.Loc) (*object, e
 	}
 	switch t := td.(type) {
 	case xsd.ComplexType:
-		_, simple := t.ContentType().(xsd.SimpleContent)
-		return &object{owner: decl.Name(), contained: w.schema.ContainedElementDeclarations(t), uses: t.AttributeUses(), simpleContent: simple}, nil
+		o := &object{owner: decl.Name(), contained: w.schema.ContainedElementDeclarations(t), uses: t.AttributeUses()}
+		o.elementWildcards = w.schema.ContainedWildcards(t)
+		switch ct := t.ContentType().(type) {
+		case xsd.SimpleContent:
+			o.simpleContent = true
+		case xsd.ElementContent:
+			if ct.OpenContent != nil {
+				o.elementWildcards = append(o.elementWildcards, ct.OpenContent.Wildcard())
+			}
+		}
+		if aw, ok := t.AttributeWildcard(); ok {
+			o.attributeWildcard = &aw
+		}
+		return o, nil
 	case *xsd.SimpleType:
 		return &object{owner: decl.Name()}, nil
 	}
 	panic(fmt.Sprintf("jsonsrc: TypeDefinition arm %T", td))
 }
 
-// attributes reads the leading members of o's object that name attribute uses
-// (classify), each an attribute of the element, and returns them with the
+// attributes reads the leading members of o's object that classify as
+// attributes (classify), each an attribute of the element, and returns them with the
 // token that ends the run — the first key naming a child, or the object's
 // close — for the element's members cursor to start from.
 //
@@ -470,8 +659,9 @@ func (w *walker) object(decl xsd.ElementDeclaration, loc xsderr.Loc) (*object, e
 // after a child member therefore declines, under members.key's GAP(jsonsrc)
 // marker.
 //
-// Each attribute is named by its use's {attribute declaration}'s expanded name
-// and located at its key. Its [[normalized value]] is its scalar's lexical
+// Each attribute is named by its use's {attribute declaration}'s expanded name,
+// or by the namespace the {attribute wildcard} fixes (wildcardMember), and
+// located at its key. Its [[normalized value]] is its scalar's lexical
 // form (scalarLexical) unchanged, and the empty string is an attribute whose
 // value is empty. XML 1.0 §3.3.3 maps a literal #x9, #xA or #xD to #x20 and
 // keeps one a character reference names; a JSON string holds none literally
@@ -494,10 +684,11 @@ func (w *walker) attributes(o *object) ([]validate.Attribute, peeked, error) {
 		if err != nil {
 			return nil, peeked{}, err
 		}
-		if m.use == nil {
-			return attrs, peeked{tok: tok, loc: loc, member: m}, nil
+		a, ok := m.(attributeMember)
+		if !ok {
+			return attrs, peeked{tok: tok, loc: loc, member: m.(elementMember)}, nil
 		}
-		name := m.use.DeclarationName()
+		name := a.name
 		if slices.ContainsFunc(attrs, func(a validate.Attribute) bool { return a.Name() == name }) {
 			return nil, peeked{}, w.declinef(loc, "attribute member %q repeats in the object of %s; an element carries one attribute of each expanded name", key, o.owner)
 		}

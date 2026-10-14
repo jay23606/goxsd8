@@ -98,8 +98,9 @@ func New(schema *xsd.Schema, backend value.Backend, opts ...Option) (*Validator,
 // element declaration resolved by expanded name, the top-level declarations
 // to choose one from when the source names a root by local name alone, a
 // declaration's {type definition} resolved to its component, and the
-// declarations a complex type's content model contains, against which an
-// adapter whose source spells no namespace classifies a child by local name.
+// declarations and wildcards a complex type's content model contains, against
+// which an adapter whose source spells no namespace classifies a child by
+// local name, or names one only a wildcard admits.
 //
 // Each method is the [xsd.Schema] method of the same name and answers on its
 // terms.
@@ -108,6 +109,7 @@ type SchemaView interface {
 	Elements() []xsd.ElementDeclaration
 	ResolvedType(ref xsd.TypeDefinitionOrRef) (xsd.TypeDefinition, bool)
 	ContainedElementDeclarations(within xsd.ComplexType) []xsd.ElementDeclaration
+	ContainedWildcards(within xsd.ComplexType) []xsd.Wildcard
 }
 
 var _ SchemaView = (*xsd.Schema)(nil)

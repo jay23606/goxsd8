@@ -60,8 +60,10 @@ type containedElement struct {
 
 // groupContents is what one model group ·contains·, gathered in document order:
 // every element declaration reached directly, indirectly, or ·implicitly·, and
-// every strict or lax ·wildcard particle· (skip wildcards are excluded — clause
-// 2.1 names strict and lax only).
+// every Wildcard {term}, one per particle occurrence, whatever its {process
+// contents}. Clause 2.1 names strict and lax wildcards only, so its one
+// consumer, wildcardAdmitsName, passes over the skip ones; ContainedWildcards
+// reads them all.
 type groupContents struct {
 	elements  []containedElement
 	wildcards []Wildcard
@@ -269,6 +271,9 @@ func (s *Schema) checkTopLevelTypeTable(name QName, eds []ElementDeclaration, c 
 // last, so the answer does not depend on which one is looked at first.
 func (s *Schema) wildcardAdmitsName(c groupContents, containing ComplexType, oc *OpenContent, name QName) bool {
 	for _, w := range c.wildcards {
+		if w.ProcessContents() == ProcessSkip {
+			continue // clause 2.1 names strict and lax only
+		}
 		if s.allowsElementWildcardName(w, containing, name) {
 			return true // clause 2.1
 		}
@@ -447,10 +452,11 @@ func namespaceBindingsEquivalent(a, b XPathExpression) bool {
 }
 
 // gatherGroupContents appends everything a model group ·contains· — element
-// declarations directly and indirectly, and strict/lax ·wildcard particles· — in
-// document order. root and path carry the component identity of inline
-// declarations; a <group ref> re-roots them so one definition's inline
-// declarations key identically however many references reach them.
+// declarations directly and indirectly, and ·wildcard particles· of every
+// {process contents} — in document order. root and path carry the component
+// identity of inline declarations; a <group ref> re-roots them so one
+// definition's inline declarations key identically however many references
+// reach them.
 func (s *Schema) gatherGroupContents(g ModelGroup, root QName, path string, c *groupContents) {
 	for i, p := range g.particles {
 		s.gatherTermContents(p.Term(), root, path+"/"+strconv.Itoa(i), c)
@@ -494,9 +500,6 @@ func (s *Schema) gatherResolvedTermContents(t Term, root QName, path string, c *
 	case ModelGroup:
 		s.gatherGroupContents(t, root, path, c)
 	case Wildcard:
-		if t.ProcessContents() == ProcessSkip {
-			return // clause 2.1 names strict and lax only
-		}
 		c.wildcards = append(c.wildcards, t)
 	default:
 		panic("xsd: gatherResolvedTermContents: non-exhaustive Term switch")

@@ -150,4 +150,48 @@
       <expected validity="invalid"/>
     </instanceTest>
   </testGroup>
+  <testGroup name="wildcard">
+    <annotation>
+      <documentation>A key no child declaration and no attribute use carries is named by the one namespace the type's wildcards enumerate: {"box":{"w":5}} is &lt;box xmlns="urn:goxsd8:json:wildcard"&gt;&lt;w&gt;5&lt;/w&gt;&lt;/box&gt; under a ##targetNamespace element wildcard. Admission and processContents are the engine's.</documentation>
+    </annotation>
+    <schemaTest name="wildcard">
+      <schemaDocument xlink:href="wildcard.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
+    <instanceTest name="wildcard-element.v">
+      <annotation>
+        <documentation>w is the target namespace's w, strictly assessed against the top-level declaration; named without a namespace it would resolve none under the strict wildcard.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="wildcard-element.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="wildcard-element.i">
+      <annotation>
+        <documentation>expects cvc-type: the wildcard's w is governed by the top-level xs:integer declaration, and "five" is not one (clause 3.1.3).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="wildcard-element.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+    <instanceTest name="wildcard-local.v">
+      <annotation>
+        <documentation>Under bag's ##local wildcard, q has no namespace and no declaration, and is laxly assessed; named in the target namespace, the wildcard would reject it.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="wildcard-local.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="wildcard-attribute.v">
+      <annotation>
+        <documentation>p is the target namespace's p, assessed against the top-level xs:integer declaration; named without a namespace, the {attribute wildcard} would reject it.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="wildcard-attribute.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="wildcard-attribute.i">
+      <annotation>
+        <documentation>expects cvc-attribute: the {attribute wildcard}'s p resolves the top-level xs:integer declaration, and "five" is not one (clause 3, String Valid).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="wildcard-attribute.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
 </testSet>

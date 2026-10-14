@@ -499,3 +499,122 @@ func TestNillableErrorType(t *testing.T) {
 		}
 	}
 }
+
+// wildcardAttributeSchemas give a wildcard-named attribute jsonsrc presents at
+// a LOCAL element its own declaration governs each attribute refusal of
+// assessedSubtreeRoot. Each is r with one optional local child, under a
+// ##targetNamespace {attribute wildcard}: in ldt, c of type narrow, a
+// restriction of base prohibiting base's use of the top-level {urn:t}m, the
+// wildcard lax; in strict, s, the wildcard strict, and q resolving no
+// top-level declaration; in unadmitted, e, the wildcard lax and rejecting
+// {urn:t}p by name.
+var wildcardAttributeSchemas = map[string]string{
+	"ldt": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="base">
+    <xs:attribute ref="t:m"/>
+    <xs:anyAttribute namespace="##targetNamespace" processContents="lax"/>
+  </xs:complexType>
+  <xs:complexType name="narrow">
+    <xs:complexContent>
+      <xs:restriction base="t:base">
+        <xs:attribute ref="t:m" use="prohibited"/>
+        <xs:anyAttribute namespace="##targetNamespace" processContents="lax"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:attribute name="m" type="xs:string"/>
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="t:narrow" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+	"strict": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="s" minOccurs="0">
+          <xs:complexType>
+            <xs:anyAttribute namespace="##targetNamespace" processContents="strict"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+	"unadmitted": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="e" minOccurs="0">
+          <xs:complexType>
+            <xs:anyAttribute namespace="##targetNamespace" notQName="t:p" processContents="lax"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:attribute name="p" type="xs:string"/>
+</xs:schema>`,
+}
+
+// TestJSONExecutorReadsWildcardAttributes pins the attribute refusals of
+// assessedSubtreeRoot a wildcard-named attribute reaches at an element its own
+// local declaration governs: each JSON document's XML twin is refused as the
+// row's gate, and execJSONCase either refuses a "valid" reading as
+// json-attribute-governance (no charges: the walk charges nothing for
+// strict-attribute-unresolved or attribute-ldt) or reads "not valid" off the
+// rules the walk charges (attribute-unadmitted).
+func TestJSONExecutorReadsWildcardAttributes(t *testing.T) {
+	backend := strict.New()
+	for _, tc := range []struct {
+		schema, json, xml string
+		gate              refusal
+		charges           []xsderr.Rule
+	}{
+		{"ldt", `{"r":{"c":{"m":"x"}}}`,
+			`<r xmlns="urn:t" xmlns:t="urn:t"><c t:m="x"/></r>`, refuseAttributeLDT, nil},
+		{"strict", `{"r":{"s":{"q":"x"}}}`,
+			`<r xmlns="urn:t" xmlns:t="urn:t"><s t:q="x"/></r>`, refuseStrictAttribute, nil},
+		{"unadmitted", `{"r":{"e":{"p":"x"}}}`,
+			`<r xmlns="urn:t" xmlns:t="urn:t"><e t:p="x"/></r>`, refuseAttributeUnadmitted, []xsderr.Rule{"cvc-complex-type"}},
+	} {
+		t.Run(tc.schema, func(t *testing.T) {
+			dir := t.TempDir()
+			schemaDoc, doc, twin := filepath.Join(dir, "s.xsd"), filepath.Join(dir, "i.json"), filepath.Join(dir, "i.xml")
+			writeFixture(t, schemaDoc, wildcardAttributeSchemas[tc.schema])
+			writeFixture(t, doc, tc.json)
+			writeFixture(t, twin, tc.xml)
+			schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+			if perr != nil {
+				t.Fatalf("assembling %s: %v", tc.schema, perr)
+			}
+			if why := assessedSubtreeRoot(backend, schema, report, twin); why != tc.gate {
+				t.Fatalf("assessedSubtreeRoot(%s) = %q, want %q: the twin does not have the shape the test claims", tc.xml, why, tc.gate)
+			}
+			if charged := chargedRules(t, schema, backend, doc); !slices.Equal(charged, tc.charges) {
+				t.Fatalf("jsonsrc.Validate charges %v, want %v", charged, tc.charges)
+			}
+			c := caseSpec{id: tc.schema, kind: kindJSON, doc: doc, schemaDoc: schemaDoc, expect: expectValid()}
+			got, why := newJSONExec()(c)
+			if got.IsPass() {
+				t.Fatalf("execJSONCase = pass on a \"valid\" expectation")
+			}
+			if tc.charges == nil && why != refuseJSONAttributeGovernance {
+				t.Fatalf("execJSONCase refusal = %q, want %q", why, refuseJSONAttributeGovernance)
+			}
+			if tc.charges == nil {
+				return
+			}
+			c.expect = expectValidity(false)
+			if got, why := newJSONExec()(c); !got.IsPass() {
+				t.Fatalf("execJSONCase = %v (refusal %q) on an \"invalid\" expectation, want pass", got, why)
+			}
+		})
+	}
+}

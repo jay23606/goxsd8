@@ -13,3 +13,8 @@ goxsd8-json/nil/json/nil.v pass
 goxsd8-json/scalar/json/scalar-integer.v pass
 goxsd8-json/scalar/json/scalar.i pass
 goxsd8-json/scalar/json/scalar.v pass
+goxsd8-json/wildcard/json/wildcard-attribute.i pass
+goxsd8-json/wildcard/json/wildcard-attribute.v pass
+goxsd8-json/wildcard/json/wildcard-element.i pass
+goxsd8-json/wildcard/json/wildcard-element.v pass
+goxsd8-json/wildcard/json/wildcard-local.v pass

@@ -675,6 +675,30 @@ func (s *Schema) ContainedElementDeclarations(within ComplexType) []ElementDecla
 	return out
 }
 
+// ContainedWildcards returns the Wildcard {term}s within's ·content model·
+// contains directly or indirectly (§3.9.1), in document order, one per
+// particle occurrence — a <group ref> written twice contributes its wildcards
+// twice — whatever their {process contents}. It does not return the {open
+// content} wildcard, which ElementContent.OpenContent carries. It is nil for a
+// {content type} that is not element-only or mixed and for a content model
+// containing no wildcard. within must be a Complex Type Definition of s: the
+// <group ref>s its content model holds resolve against s. The slice is fresh.
+//
+// It is EXPORTED for validate/jsonsrc, which reads the namespaces a JSON
+// object's element wildcards admit to name a member key no contained
+// declaration carries, and cannot re-derive the set without a second
+// content-model walk (STYLE T4/T5). It is the walk contentModelDeclarations
+// reads, gatherTermContents, and nothing more.
+func (s *Schema) ContainedWildcards(within ComplexType) []Wildcard {
+	ec, ok := within.ContentType().(ElementContent)
+	if !ok {
+		return nil
+	}
+	var contents groupContents
+	s.gatherTermContents(ec.Particle.Term(), within.Name(), "", &contents)
+	return contents.wildcards
+}
+
 // containment says which declarations a ·content model· is read as ·containing·
 // for key-ldt-elem case 2: those it contains directly or indirectly, or those
 // and the ones it contains ·implicitly· (key-impl-cont) too.

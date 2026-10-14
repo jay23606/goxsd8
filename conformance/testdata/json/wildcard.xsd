@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The wildcard group's schema: the top-level element w and attribute p,
+     both xs:integer, and three roots whose wildcards each enumerate one
+     namespace, which names a key no declaration or use carries: box, a strict
+     ##targetNamespace element wildcard; bag, a lax ##local one; and att, a
+     lax ##targetNamespace {attribute wildcard} over element-only content. A
+     key named in the other namespace would be charged in every case: the
+     wildcard rejects it, or, for box's strict wildcard, it resolves no
+     declaration. No {attribute wildcard} is strict: the json lane refuses a
+     "valid" reading wherever one is (attributeGovernanceDiverges). -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:goxsd8:json:wildcard" xmlns="urn:goxsd8:json:wildcard"
+           elementFormDefault="qualified">
+  <xs:element name="box">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="##targetNamespace" processContents="strict" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="bag">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="##local" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="att">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="text" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+      <xs:anyAttribute namespace="##targetNamespace" processContents="lax"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="w" type="xs:integer"/>
+  <xs:attribute name="p" type="xs:integer"/>
+</xs:schema>

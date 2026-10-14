@@ -1010,3 +1010,60 @@ func TestContainedElementDeclarationsOnePerComponent(t *testing.T) {
 		t.Fatalf("ContainedElementDeclarations(T) names = %v, want %v", names, want)
 	}
 }
+
+// TestContainedWildcards pins ContainedWildcards' contract: every Wildcard
+// {term} the content model contains, in document order, one per particle
+// occurrence — a <group ref> written twice contributes its wildcard twice —
+// whatever its {process contents}, the skip one included, and never the
+// {open content} wildcard.
+func TestContainedWildcards(t *testing.T) {
+	a, b, o := NamespaceName("urn:a"), NamespaceName("urn:b"), NamespaceName("urn:o")
+	b0 := NewSchemaBuilder()
+	b0.AddType(dAnyType(t))
+	str := dPrimitive(t, uq("str"))
+	b0.AddType(str)
+	g, err := NewModelGroupDefinition(xsderr.Loc{}, uq("G"),
+		uGroup(t, CompositorSequence, uOne(t, ResolvedTerm{Term: uWildcard(t, NamespaceConstraintEnumeration, []Namespace{b}, ProcessSkip)})))
+	if err != nil {
+		t.Fatalf("NewModelGroupDefinition(G): %v", err)
+	}
+	b0.AddModelGroup(g)
+	model := uGroup(t, CompositorSequence,
+		uOne(t, ResolvedTerm{Term: uWildcard(t, NamespaceConstraintEnumeration, []Namespace{a}, ProcessStrict)}),
+		uOne(t, ModelGroupRef{Name: uq("G")}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("e"), uq("str"))}),
+		uOne(t, ModelGroupRef{Name: uq("G")}))
+	oc, err := NewOpenContent(xsderr.Loc{}, OpenContentSuffix, uWildcard(t, NamespaceConstraintEnumeration, []Namespace{o}, ProcessLax))
+	if err != nil {
+		t.Fatalf("NewOpenContent: %v", err)
+	}
+	content := dElementContent(t, false, model)
+	content.OpenContent = &oc
+	b0.AddType(dType(t, uq("T"), anyTypeName, content, nil, nil))
+	s, err := b0.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	td, _ := s.Type(uq("T"))
+	ct, ok := td.(ComplexType)
+	if !ok {
+		t.Fatalf("T is not a ComplexType")
+	}
+	type row struct {
+		ns Namespace
+		pc ProcessContents
+	}
+	var got []row
+	for _, w := range s.ContainedWildcards(ct) {
+		got = append(got, row{w.NamespaceConstraint().Namespaces()[0], w.ProcessContents()})
+	}
+	want := []row{{a, ProcessStrict}, {b, ProcessSkip}, {b, ProcessSkip}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("ContainedWildcards(T) = %v, want %v", got, want)
+	}
+	simple := dSimpleContentSchema(t)
+	std, _ := simple.Type(uq("ext"))
+	if got := simple.ContainedWildcards(std.(ComplexType)); got != nil {
+		t.Fatalf("ContainedWildcards(simple content) = %d wildcards, want nil", len(got))
+	}
+}
