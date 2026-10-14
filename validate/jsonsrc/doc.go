@@ -59,17 +59,20 @@
 //     outside every wildcard of that kind, and no declaration or use carries
 //     the key. A key a declaration or use carries is named by it and never
 //     by a wildcard: that is the mapping's own rule, as the NAMESPACE TRAP
-//     below says, and no spec text makes it in general. The spec makes the
-//     same choice for one item matched both ways, which here is where the
-//     wildcard's one namespace is the declaration's or the use's own: the
-//     Note under cvc-accept matches an element information item "accepted
-//     by either a Wildcard or an Element Declaration" against the Element
-//     Declaration, and the Note after cvc-complex-type clause 4 gives an
-//     attribute use "whose name and target namespace match" precedence
-//     over the {attribute wildcard}. Neither Note chooses between two
-//     expanded names, the declaration's or use's and the (N,key) a
-//     wildcard would give, nor across kinds, a declaration over an
-//     {attribute wildcard} or a use over an element wildcard.
+//     below says, and no spec text makes it in general; it is RULED permanent
+//     by #2634 because the spec is silent between the two names, and because
+//     a decline instead would refuse inputs it maps, the curated json cases
+//     wildcard-attribute.v and .i among them. The spec makes the same choice
+//     for one item matched both ways, which here is where the wildcard's one
+//     namespace is the declaration's or the use's own: the Note under
+//     cvc-accept matches an element information item "accepted by either a
+//     Wildcard or an Element Declaration" against the Element Declaration, and
+//     the Note after cvc-complex-type clause 4 gives an attribute use "whose
+//     name and target namespace match" precedence over the {attribute
+//     wildcard}. Neither Note chooses between two expanded names, the
+//     declaration's or use's and the (N,key) a wildcard would give, nor across
+//     kinds, a declaration over an {attribute wildcard} or a use over an
+//     element wildcard.
 //   - A scalar value is the element's simple content: {"size":10} ≡
 //     <size>10</size>. Its lexical form is the token's source text — a
 //     number's own digits, never a float64 round trip; a string's decoded
@@ -128,7 +131,18 @@
 //     the type at all, or a single namespace that is the xsi or the xml one;
 //     a key of a type with both an element wildcard and an {attribute
 //     wildcard}, whose kind the key does not say; and a member of an object
-//     under a wildcard's child that no top-level declaration governs;
+//     under a wildcard's child that no top-level declaration governs. All but
+//     the no-wildcard and xsi- or xml-namespace classes are RULED permanent by
+//     #2634: whichever (N,key) the mapping chose, its verdict depends on N
+//     through declaration lookup, attribution and an ancestor's
+//     identity-constraint paths and assertions. Conditions under which the
+//     verdict is the same for every admitted N exist — no {disallowed names}
+//     entry of the key's local name and ##defined and ##definedSibling
+//     inert for it, skip or no global declaration of it in an admitted
+//     namespace, one particle accepting every (N,key), no ancestor-or-self
+//     assertion, identity constraint or {type table} — and they are unbuilt by
+//     decision, not by oversight: testing the last needs a census of every
+//     ancestor, which the walker does not keep;
 //   - a key both a contained declaration and an attribute use carry, which no
 //     spec rule decides between;
 //   - an attribute member after a child member, a repeated attribute member,

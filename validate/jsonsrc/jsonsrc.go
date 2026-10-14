@@ -309,9 +309,10 @@ func (b bareElement) object(*walker, xsderr.Loc) (*object, error) {
 //
 // GAP(jsonsrc): a key a declaration or use carries maps under its name even
 // where a wildcard of the type would name the key (N,key) in another namespace
-// N, or as the other kind. No spec rule makes that choice, and it is
-// observable by an ancestor's identity-constraint paths and assertions, as the
-// representative name of #2634's residue is; #2634 owns it.
+// N, or as the other kind. RULED permanent by #2634 as the mapping's own
+// rule: the spec is silent, the Note under cvc-accept and the Note after
+// cvc-complex-type clause 4 giving a declaration or use precedence only over a
+// wildcard of its own kind that admits the same expanded name.
 //
 // The xsi-namespace, two-expanded-name and simple-content declines among the
 // uses are useNamed's, under its GAP(jsonsrc) markers.
@@ -365,13 +366,16 @@ func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error)
 // or the xml namespace; and an attribute key of a type with simple content.
 //
 // GAP(jsonsrc): a wildcard-only key whose namespace or kind the model does
-// not fix declines, owned by #2634: a wildcard of variety any or not,
-// xs:anyType's included, an enumeration of several namespaces, element
-// wildcards enumerating different ones, and a type with wildcards of both
-// kinds. The representative name a mapping would pick is observable by an
-// ancestor's identity-constraint paths and assertions. A bareElement's members
-// are classified against nothing, which is xs:anyType's wildcards, the same
-// residue.
+// not fix declines: a wildcard of variety any or not, xs:anyType's included,
+// an enumeration of several namespaces, element wildcards enumerating
+// different ones, a type with wildcards of both kinds, and a bareElement's
+// members, which xs:anyType's lax wildcards would classify. RULED permanent
+// by #2634: the verdict of whichever (N,key) the mapping chose depends on N
+// through declaration lookup (key-governing-ed clause 3), attribution
+// (cvc-accept, cvc-wildcard, cvc-wildcard-name) and an ancestor's
+// identity-constraint paths (c-selector-xpath, c-fields-xpaths) and
+// assertions (cvc-assertion), which the mapping cannot fix without an
+// ancestor census.
 //
 // GAP(jsonsrc): a key of a type with no wildcard at all, so none of the key's
 // kind, declines, and so does a key a wildcard's single namespace, of either

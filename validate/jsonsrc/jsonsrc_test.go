@@ -729,13 +729,17 @@ func TestNilledAttribute(t *testing.T) {
 // strict ##targetNamespace {open content}; att, a lax ##targetNamespace
 // {attribute wildcard} over element-only content; pre and preatt, the strict
 // element and lax attribute wildcards beside an unqualified local w and use p
-// of xs:string, which name the key instead; ref and def, whose wildcards reject p
-// and w by name; and the shapes the arm declines — mix, a skip urn:x wildcard
-// beside box's; ocmix, a ##local {open content} beside it; any, of
-// xs:anyType; both, with a ##targetNamespace element wildcard and {attribute
-// wildcard}; xsi and lang, an {attribute wildcard} of the xsi or the xml
-// namespace alone; price, simple content under an {attribute wildcard}; and
-// tt, a top-level declaration with a {type table} box's wildcard admits.
+// of xs:string, which name the key instead; preel, a strict element wildcard
+// beside an unqualified use w of xs:string, which names the key instead; ref
+// and def, whose wildcards reject p and w by name; and the shapes the arm
+// declines — mix, a skip urn:x wildcard beside box's; ocmix, a ##local {open
+// content} beside it; not and attnot, an element and an {attribute wildcard}
+// of variety not; two and atttwo, an element and an {attribute wildcard}
+// enumerating two namespaces; any, of xs:anyType; both, with a
+// ##targetNamespace element wildcard and {attribute wildcard}; xsi and lang,
+// an {attribute wildcard} of the xsi or the xml namespace alone; price, simple
+// content under an {attribute wildcard}; and tt, a top-level declaration with
+// a {type table} box's wildcard admits.
 const wildcardSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:w" xmlns="urn:w" xmlns:w="urn:w" elementFormDefault="qualified">
   <xs:element name="box">
@@ -814,6 +818,38 @@ const wildcardSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
       </xs:sequence>
     </xs:complexType>
   </xs:element>
+  <xs:element name="not">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any notNamespace="urn:x" processContents="lax" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="two">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="##targetNamespace urn:x" processContents="lax" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="attnot">
+    <xs:complexType>
+      <xs:anyAttribute notNamespace="urn:x" processContents="lax"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="atttwo">
+    <xs:complexType>
+      <xs:anyAttribute namespace="##targetNamespace urn:x" processContents="lax"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="preel">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace="##targetNamespace" processContents="strict" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attribute name="w" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
   <xs:element name="any"/>
   <xs:element name="both">
     <xs:complexType>
@@ -890,10 +926,14 @@ func TestWildcardMember(t *testing.T) {
 
 // TestDeclarationNamesKey pins the mapping's own rule that a key a contained
 // declaration or an attribute use carries is named by it and never by a
-// wildcard of the type (package doc, "The mapping"). Each row's declaration or
-// use is the unqualified one of xs:string, where the wildcard would name
-// urn:w's xs:integer: two expanded names, between which no spec Note chooses,
-// and "x" is valid only under the declaration's or use's.
+// wildcard of the type (package doc, "The mapping"), RULED permanent by #2634.
+// The first two rows' declaration or use is the unqualified one of xs:string,
+// where the wildcard of its own kind would name urn:w's xs:integer: two
+// expanded names, between which no spec Note chooses, and "x" is valid only
+// under the declaration's or use's. The last two cross kinds: att's text, an
+// element declaration, beside an {attribute wildcard}, where an attribute
+// would decline its object value; and preel's use w beside a strict element
+// wildcard, where the child {urn:w}w of xs:integer would charge cvc-type.
 func TestDeclarationNamesKey(t *testing.T) {
 	v := validatorOver(t, wildcardSchema)
 	for _, tc := range []struct {
@@ -902,6 +942,8 @@ func TestDeclarationNamesKey(t *testing.T) {
 	}{
 		{"element", `{"pre":{"w":"x"}}`, `<pre xmlns="urn:w"><w xmlns="">x</w></pre>`, none},
 		{"attribute", `{"preatt":{"p":"x"}}`, `<preatt xmlns="urn:w" p="x"/>`, none},
+		{"element over an attribute wildcard", `{"att":{"text":{}}}`, `<att xmlns="urn:w"><text/></att>`, none},
+		{"attribute over an element wildcard", `{"preel":{"w":"x"}}`, `<preel xmlns="urn:w" w="x"/>`, none},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
@@ -909,7 +951,10 @@ func TestDeclarationNamesKey(t *testing.T) {
 
 // TestWildcardMemberDeclines pins every wildcard-only key the arm does not
 // name: each is (nil, err), err opening with "jsonsrc: <uri>:<line>:<col>: "
-// at the key.
+// at the key and naming what declines it. The two-namespace, variety-not,
+// both-kinds and undeclared-wildcard-child rows are wildcardMember's declines
+// RULED permanent by #2634, whose variety-any rows are
+// TestOutOfSliceInputDeclines' and TestAttributeMemberDeclines'.
 func TestWildcardMemberDeclines(t *testing.T) {
 	v := validatorOver(t, wildcardSchema)
 	for _, tc := range []struct {
@@ -921,6 +966,14 @@ func TestWildcardMemberDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:9: ", `member "w" names no child element declaration and no attribute use of the type of {urn:w}mix, and its element wildcard set enumerates 2 namespaces`},
 		{"element wildcard and open content of two namespaces", `{"ocmix":{"w":5}}`,
 			"jsonsrc: instance.json:1:11: ", `member "w" names no child element declaration and no attribute use of the type of {urn:w}ocmix, and its element wildcard set enumerates 2 namespaces`},
+		{"element wildcard of variety not", `{"not":{"w":5}}`,
+			"jsonsrc: instance.json:1:9: ", `member "w" names no child element declaration and no attribute use of the type of {urn:w}not, and its element wildcard set includes one of variety not, which fixes no namespace for it`},
+		{"element wildcard of two namespaces", `{"two":{"w":5}}`,
+			"jsonsrc: instance.json:1:9: ", `member "w" names no child element declaration and no attribute use of the type of {urn:w}two, and its element wildcard set enumerates 2 namespaces`},
+		{"attribute wildcard of variety not", `{"attnot":{"w":5}}`,
+			"jsonsrc: instance.json:1:12: ", `member "w" names no child element declaration and no attribute use of the type of {urn:w}attnot, and its {attribute wildcard} set includes one of variety not, which fixes no namespace for it`},
+		{"attribute wildcard of two namespaces", `{"atttwo":{"w":5}}`,
+			"jsonsrc: instance.json:1:12: ", `member "w" names no child element declaration and no attribute use of the type of {urn:w}atttwo, and its {attribute wildcard} set enumerates 2 namespaces`},
 		{"both kinds of wildcard, xs:anyType", `{"any":{"w":5}}`,
 			"jsonsrc: instance.json:1:9: ", `member "w" names no child element declaration and no attribute use of the type of {urn:w}any, which has both an element wildcard and an {attribute wildcard}`},
 		{"both kinds of wildcard, one namespace each", `{"both":{"w":5}}`,
