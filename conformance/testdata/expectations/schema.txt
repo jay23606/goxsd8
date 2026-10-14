@@ -14838,7 +14838,7 @@ TypeAlternativeTests/s3_12ii02/schema/s3_12ii02s pass
 TypeAlternativeTests/s3_12ii03/schema/s3_12ii03s pass
 TypeAlternativeTests/s3_12ii04/schema/s3_12ii04s pass
 TypeAlternativeTests/s3_12ii05/schema/s3_12ii05s pass
-TypeAlternativeTests/s3_12ii06/schema/s3_12ii06s fail
+TypeAlternativeTests/s3_12ii06/schema/s3_12ii06s pass
 TypeAlternativeTests/s3_12si01/schema/s3_12si01s pass
 TypeAlternativeTests/s3_12si02/schema/s3_12si02s pass
 TypeAlternativeTests/s3_12si03/schema/s3_12si03s pass

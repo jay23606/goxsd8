@@ -136,65 +136,65 @@ func (t ctaTypes) ancestor(st *xsd.SimpleType, name xsd.QName) (*xsd.SimpleType,
 }
 
 // castTarget is the datatype [15] ta-CastExpr's tail and [18]
-// ta-ConstructorFunction cast to, or false where this engine declines the
-// whole expression rather than casting to it.
+// ta-ConstructorFunction cast to, or the defect that keeps this engine from
+// casting to it. The zero ctaDefect comes with the target, and every other
+// defect with none.
 //
-// The three conditions §3.12.6 and xpath20.md §3.10.2 separate are separated
-// here, and two of them share the false because they share their consequence
-// at the caller ([CompileCTATest]):
+// The target classes xpath20.md §3.10.2 separates are separated here, on the
+// oracle's #894 ruling over xpath-valid clause 2.2.5, which puts only "those
+// components that are present in every schema by definition" in the
+// ·in-scope schema definitions· — so a schema's own type definitions never
+// are, and a target naming one is no valid XPath outside the required subset
+// but a static error:
 //
-//   - a BUILTIN atomic datatype is the required subset's own case, which
-//     §3.12.6 clause 4 fixes for the cast spelling and clause 3 for the
-//     constructor spelling, and it is admitted.
-//   - any OTHER in-scope atomic type — a user-defined one — is valid XPath
-//     that does not belong to the required subset, and §3.12.6's Note licenses
-//     declining exactly that: "Conforming processors may but are not required
-//     to support XPath expressions not belonging to the required subset of
-//     XPath."
-//   - a name resolving to nothing, to a complex type, to a non-atomic type
-//     (xs:anySimpleType, and the list builtins xs:IDREFS, xs:NMTOKENS,
-//     xs:ENTITIES), or to xs:anyAtomicType or xs:NOTATION is a STATIC error:
-//     err:XPST0051 for "the target type must be an atomic type that is in the
-//     in-scope schema types", and err:XPST0080 for the two named exclusions.
+//   - a BUILTIN atomic datatype, xs:QName included, is the required subset's
+//     own case, which §3.12.6 clause 4 fixes for the cast spelling and clause 3
+//     for the constructor spelling, and it is admitted. §3.10.2 excludes only
+//     xs:NOTATION and xs:anyAtomicType by name; xs:QName's cast is
+//     context-dependent (PRINCIPLES 19), and which operands it admits is
+//     castsFrom's to judge (qnameTarget).
+//   - xs:anyAtomicType and xs:NOTATION are err:XPST0080, a ctaStaticError
+//     defect: "the target type cannot be xs:NOTATION or xs:anyAtomicType".
+//   - every other name is err:XPST0051, a ctaStaticError defect: "The target
+//     type must be an atomic type that is in the in-scope schema types". That
+//     is a name resolving to nothing — ctaUnresolvedName among them, whose
+//     err:XPST0081 the parser recorded first — a name outside the XSD
+//     namespace, a complex type, and a non-atomic builtin (xs:anySimpleType,
+//     and the list builtins xs:IDREFS, xs:NMTOKENS, xs:ENTITIES).
+//   - xs:untypedAtomic declines, a ctaUnsupported defect, and is not
+//     charged: XPath's predefined types include it (xpath20.md §2.1.1) where
+//     clause 2.2.5's list does not, and the ruling holds the target to no
+//     static error.
 //
-// GAP(xpath): the XPST0051/XPST0080 arm is folded into the compile-time
-// withhold and xpath-valid cl. 2 is NOT charged for it — the static conditions
-// [CTATestStaticError] proves are err:XPST0003 and err:XPST0081, and proving this one
-// takes a parse that runs PAST the failed target to the end of a [8] ta-Test,
-// which "unsupported dominates static" requires and which no target stands in
-// for: an unbound prefix carries on under ctaUnresolvedName because a QName has
-// a zero value the grammar cannot write, and a *[xsd.SimpleType] has none. The
-// classification the charge would need is not this arm either, since the second
-// bullet above declines a user-defined atomic target as outside the required
-// subset while xpath-valid clause 2.2.5 puts only the BUILT-INS in scope — a
-// target that is out of scope there is err:XPST0051 rather than declinable, and
-// which reading governs wants its own grounding before either becomes a
-// rejection. Under-charging is a rejection this engine can take later;
-// over-charging is a false reject now. (#894)
+// A base chain this resolver cannot walk declines too, and is no verdict.
 //
-// xs:QName is admitted: §3.10.2 excludes only xs:NOTATION and xs:anyAtomicType
-// by name. Its cast is context-dependent (PRINCIPLES 19), and which operands
-// it admits is castsFrom's to judge (qnameTarget).
-func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
-	st, declared := t.simple(name)
-	if !declared {
-		return nil, false
-	}
-	if name.Space != xsd.XMLSchemaNS {
-		return nil, false
+// The two STATIC arms are the CAST spelling's charge alone: the constructor
+// spelling names a function, not a target type, and declines on any defect
+// here (ctaParser.constructorFunction).
+func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, ctaDefect) {
+	if name == ctaBuiltin("untypedAtomic") {
+		return nil, ctaDefect{kind: ctaUnsupported}
 	}
 	if name == ctaBuiltin("anyAtomicType") || name == ctaBuiltin("NOTATION") {
-		return nil, false
+		return nil, ctaStaticDefect(ruleXPST0080, "the cast target %q is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids", name)
+	}
+	st, declared := t.simple(name)
+	if !declared || name.Space != xsd.XMLSchemaNS {
+		return nil, ctaStaticDefect(ruleXPST0051, "the cast target %q is no simple type in the in-scope schema types, which err:XPST0051 forbids", name)
 	}
 	// §3.10.2's "the target type must be an atomic type" is decided on the
 	// {primitive type definition} and not on the {variety}, because the
 	// property is ·absent· for EXACTLY the targets that rule excludes: the
 	// list and union varieties, xs:anySimpleType's ·absent· {variety}, and
-	// xs:anyAtomicType, which the line above already excluded by name.
-	if _, resolved := t.primitive(st); !resolved {
-		return nil, false
+	// xs:anyAtomicType, which is excluded by name above.
+	p, err := st.Primitive(t.resolver)
+	if err != nil {
+		return nil, ctaDefect{kind: ctaUnsupported}
 	}
-	return st, true
+	if p == nil {
+		return nil, ctaStaticDefect(ruleXPST0051, "the cast target %q is no atomic type, which err:XPST0051 forbids", name)
+	}
+	return st, ctaDefect{}
 }
 
 // qnameTarget reports whether target's {primitive type definition} is
@@ -284,8 +284,7 @@ func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
 // nearest builtin as its dynamic type (dt-xdmrep clause 2) where a typed
 // attribute carries its own type annotation, so the two answer such a name
 // differently, and instanceItem keeps no record of which it read. The
-// XPST0051 arm is folded into the same withhold, as castTarget folds it.
-// (#1042)
+// XPST0051 arm is folded into the same withhold. (#1042)
 func (t ctaTypes) itemMatches(item ctaStatic, name xsd.QName) (matches, admitted bool) {
 	if name == ctaBuiltin("untypedAtomic") {
 		_, untyped := item.(ctaUntypedAtomic)
@@ -337,8 +336,8 @@ func (t ctaTypes) itemMatches(item ctaStatic, name xsd.QName) (matches, admitted
 // no record of which ·special· type annotates it.
 //
 // GAP(xpath): each of those declines, the err:XPST0008 arm folded into the
-// withhold as castTarget folds err:XPST0051. The direction is the withhold
-// [CompileAssertionTest] reports. (#1042)
+// withhold. The direction is the withhold [CompileAssertionTest] reports.
+// (#1042)
 func (t ctaTypes) annotationDerives(v ctaValue, name xsd.QName) (derives, decided bool) {
 	if _, simple := t.simple(name); name.Space != xsd.XMLSchemaNS || !simple && name != ctaBuiltin("untypedAtomic") {
 		return false, false

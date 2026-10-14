@@ -668,22 +668,55 @@ func TestProduceTypeTableWildcardStaticErrorIsCharged(t *testing.T) {
 }
 
 // A cast TARGET that is err:XPST0051 or err:XPST0080 is an xpath-valid clause 2
-// failure this engine does not prove: the target declines the parse before it
-// reaches the end of a ta-Test, so the {test} is withheld at ·assessment· and
-// nothing is charged here. The under-charge is deliberate and pinned at the
-// charging site so a change to it is visible (#894).
-func TestProduceTypeTableCastTargetStaticErrorIsNotCharged(t *testing.T) {
-	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
-	<xs:element name="e" type="B">
-	  <xs:alternative test="@k cast as xs:Missing = 't'" type="T"/>
-	  <xs:alternative test="@k cast as xs:anyAtomicType = 't'" type="U"/>
-	  <xs:alternative type="V"/>
-	</xs:element>`), xsd.QName{Local: "e"})
-	if !present {
-		t.Fatal("{type table} is ·absent·, want present")
+// failure, and ta-props-correct clause 2 is charged over it: xpath-valid clause
+// 2.2.5 puts only the built-ins in scope, and §3.12.6's Note licenses declining
+// only an expression "containing no static errors" (#894). An unbound prefix
+// on the target itself, or on the operand before it, is err:XPST0081 — the
+// first static error in expression order, which the target's own err:XPST0051
+// or err:XPST0080 does not overwrite. Each row is its own document, because a
+// schema is rejected at its first charge.
+func TestProduceTypeTableCastTargetStaticErrorIsCharged(t *testing.T) {
+	for _, tc := range []struct{ test, rule string }{
+		{"@k cast as xs:Missing = 't'", "err:XPST0051"},
+		{"@k cast as xs:anyAtomicType = 't'", "err:XPST0080"},
+		{"@k cast as q:Missing = 't'", "err:XPST0081"},
+		{"@p:k cast as xs:anyAtomicType = 't'", "err:XPST0081"},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			_, err := produce(t, wrap("", typeTableTypes+`
+			<xs:element name="e" type="B">
+			  <xs:alternative test="`+tc.test+`" type="T"/>
+			  <xs:alternative type="V"/>
+			</xs:element>`))
+			assertRule(t, err, "ta-props-correct")
+			if rule, ok := xsderr.RuleOf(errors.Unwrap(err)); !ok || string(rule) != tc.rule {
+				t.Errorf("wrapped cause of %v carries rule %q (found %t), want %s", err, rule, ok, tc.rule)
+			}
+		})
 	}
-	if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T", "U"}) {
-		t.Fatalf("{alternatives} = %v, want [T U]", got)
+}
+
+// The CONSTRUCTOR spelling names a function, not a cast target: err:XPST0051
+// and err:XPST0080 are cast-target errors, and a name with no constructor
+// signature is err:XPST0017 at most, which xpath-valid clause 2.2.8 leaves
+// implementation-defined. So neither call is charged, and both are withheld
+// at ·assessment· (#894). Each row is its own document, so a charge of the
+// first does not hide the second.
+func TestProduceTypeTableConstructorTargetIsNotCharged(t *testing.T) {
+	for _, test := range []string{"string(@k) = 't'", "xs:anyAtomicType(@k) = 't'"} {
+		t.Run(test, func(t *testing.T) {
+			tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+			<xs:element name="e" type="B">
+			  <xs:alternative test="`+test+`" type="T"/>
+			  <xs:alternative type="V"/>
+			</xs:element>`), xsd.QName{Local: "e"})
+			if !present {
+				t.Fatal("{type table} is ·absent·, want present")
+			}
+			if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T"}) {
+				t.Fatalf("{alternatives} = %v, want [T]", got)
+			}
+		})
 	}
 }
 
@@ -693,23 +726,20 @@ func TestProduceTypeTableCastTargetStaticErrorIsNotCharged(t *testing.T) {
 // costs is validate's, at ·assessment· time, and is not this producer's
 // business.
 //
-// Both expressions carry an unbound p: too, so this pins the dominance
-// end to end — an unsupported construct is declined and never charged, whatever
-// its names resolve to. The second goes further: the walk RECORDS p's
-// err:XPST0081 and then meets a cast target that declines, and the recorded
-// defect dies with the parse rather than reaching the charge.
+// The expression carries an unbound p: too, so this pins the dominance end to
+// end — an unsupported construct is declined and never charged, whatever its
+// names resolve to.
 func TestProduceTypeTableUnsupportedTestIsNotCharged(t *testing.T) {
 	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
 	<xs:element name="e" type="B">
 	  <xs:alternative test="count(//p:x) &gt; 1" type="T"/>
-	  <xs:alternative test="@p:k cast as xs:anyAtomicType = 't'" type="U"/>
 	  <xs:alternative type="V"/>
 	</xs:element>`), xsd.QName{Local: "e"})
 	if !present {
 		t.Fatal("{type table} is ·absent·, want present")
 	}
-	if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T", "U"}) {
-		t.Fatalf("{alternatives} = %v, want [T U]", got)
+	if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T"}) {
+		t.Fatalf("{alternatives} = %v, want [T]", got)
 	}
 }
 
@@ -742,8 +772,8 @@ func TestProduceTypeTableReservedXMLPrefixInTestIsNotCharged(t *testing.T) {
 func TestProduceTypeTableStaticTypesAreOrderIndependent(t *testing.T) {
 	const declaration = `<xs:simpleType name="myAtomic"><xs:restriction base="xs:string"/></xs:simpleType>`
 	// The cast target is the schema's OWN type, which clause 2.2.5 leaves out of
-	// scope, so the target declines and the unbound zz: prefix beside it is never
-	// reached — an unsupported construct dominates a recorded static error.
+	// scope, so it is err:XPST0051 — the first static error in expression order,
+	// ahead of the unbound zz: prefix beside it (#894).
 	const element = `<xs:element name="e" type="xs:string">
 	  <xs:alternative test="@a cast as xs:myAtomic and @zz:b = '1'" type="xs:string"/>
 	  <xs:alternative type="xs:string"/>
@@ -757,8 +787,10 @@ func TestProduceTypeTableStaticTypesAreOrderIndependent(t *testing.T) {
 		{name: "declared after the element", doc: head + element + declaration + `</xs:schema>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := produce(t, tc.doc); err != nil {
-				t.Fatalf("Produce: %v, want no charge — xs:myAtomic is this schema's own type and clause 2.2.5 does not put it in scope", err)
+			_, err := produce(t, tc.doc)
+			assertRule(t, err, "ta-props-correct")
+			if rule, ok := xsderr.RuleOf(errors.Unwrap(err)); !ok || rule != "err:XPST0051" {
+				t.Errorf("wrapped cause of %v carries rule %q (found %t), want err:XPST0051 — xs:myAtomic is this schema's own type and clause 2.2.5 does not put it in scope", err, rule, ok)
 			}
 		})
 	}

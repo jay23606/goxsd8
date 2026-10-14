@@ -522,8 +522,8 @@ read it there. Two consumers take the exports in two phases. `parser` calls
 `CTATestStaticError` at schema construction, charging `ta-props-correct`
 clause 2 over `xpath-valid` clause 2 for a Type Alternative `{test}` with an
 XPath static error — wrapping the `*xsderr.Error` this package returns,
-which carries the XPath code (`err:XPST0003` or `err:XPST0081`) as its own
-rule. `validate`
+which carries the XPath code (`err:XPST0003`, `err:XPST0081`, or
+`err:XPST0051`/`err:XPST0080` for a cast target) as its own rule. `validate`
 takes the rest at ·assessment· time: it compiles and evaluates the same
 `{test}` against §3.12.6's `ta-Test` grammar; it compiles and evaluates an
 assertion `{test}` over the typed values of the element's attributes, of its

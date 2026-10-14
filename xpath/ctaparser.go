@@ -10,7 +10,6 @@ import (
 
 	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/xsd"
-	"github.com/kud360/goxsd8/xsderr"
 )
 
 // This file is the lexer and the recursive-descent parser for the §3.12.6
@@ -237,11 +236,9 @@ func (p *ctaParser) elementName(text string) xsd.QName {
 // (xpath20.md §3.10.2) rather than the no-namespace answer an attribute
 // NameTest gets or the function-namespace one a function name gets.
 //
-// The err:XPST0081 an unbound prefix records here is always DISCARDED, because
-// ctaTypes.castTarget resolves no type under ctaUnresolvedName and so declines
-// the whole expression before the parse can reach the end of a [8] ta-Test.
-// That is one more cast-target static condition this engine does not charge,
-// under the marker ctaTypes.castTarget carries.
+// An unbound prefix records err:XPST0081 here, and ctaTypes.castTarget's
+// err:XPST0051 for the ctaUnresolvedName it yields comes second and is not
+// kept (ctaParser.record).
 func (p *ctaParser) typeName(text string) xsd.QName {
 	prefix, local, prefixed := strings.Cut(text, ":")
 	if !prefixed {
@@ -288,25 +285,28 @@ func (p *ctaParser) prefixedSpace(prefix string) (string, bool) {
 
 // recordUnbound records the err:XPST0081 an unbound prefix is (xpath20.md
 // Appendix G: "a static error if a QName used in an expression contains a
-// namespace prefix that cannot be expanded into a namespace URI") and lets the
-// parse go on. The code is the recorded verdict's own rule (ruleXPST0081) and
-// its [xsderr.Loc] is the zero one, this package holding no schema position.
+// namespace prefix that cannot be expanded into a namespace URI") on record's
+// terms. The code is the recorded verdict's own rule (ruleXPST0081).
+func (p *ctaParser) recordUnbound(prefix string) {
+	p.record(ctaStaticDefect(ruleXPST0081, "no statically-known namespace binding for prefix %q, which err:XPST0081 forbids", prefix))
+}
+
+// record records the ctaStaticError defect d and lets the parse go on: an
+// unbound prefix (recordUnbound) or a cast target that is err:XPST0051 or
+// err:XPST0080 (singleType).
 //
-// The FIRST unbound prefix decides the message, so the answer is the one the
-// walk reaches first in expression order and not a map's (STYLE D2).
+// The FIRST static error decides the verdict, so the answer is the one the
+// walk reaches first in expression order and not a map's (STYLE D2): `@p:k
+// cast as xs:anyAtomicType` with p unbound is err:XPST0081, not err:XPST0080.
 //
 // The record is PROVISIONAL: compileCTATest keeps it only where the parse then
 // reached the end of a complete [8] ta-Test, because an expression outside the
 // required subset is declined rather than charged, however its names resolve.
-func (p *ctaParser) recordUnbound(prefix string) {
+func (p *ctaParser) record(d ctaDefect) {
 	if p.defect.kind != ctaNoDefect {
 		return
 	}
-	p.defect = ctaDefect{
-		kind: ctaStaticError,
-		static: xsderr.New(ruleXPST0081, xsderr.Loc{},
-			"no statically-known namespace binding for prefix %q", prefix),
-	}
+	p.defect = d
 }
 
 // ctaKind identifies one token of the subset's lexical structure.
@@ -712,10 +712,10 @@ type ctaParser struct {
 	// node differs between the façades, and admits each settled comparison type
 	// (compileCTATest).
 	facade ctaFacade
-	// defect is what name resolution found wrong, which is the one defect kind
-	// the walk itself has to carry: every other one is the false a production
-	// returns. It lives here rather than on ctaNames because a value receiver
-	// cannot keep it.
+	// defect is the first static error the walk found (record), which is the
+	// one defect kind the walk itself has to carry: every other one is the false
+	// a production returns. It lives here rather than on ctaNames because a
+	// value receiver cannot keep it.
 	defect ctaDefect
 }
 
@@ -3037,9 +3037,9 @@ func (p *ctaParser) countStep(elements, attributes ctaCountAxis) (ctaCounted, bo
 // (castableTail).
 //
 // The tail's QName is resolved as a TYPE name and classified before the node
-// is built, so a target this engine does not cast to declines the whole
-// expression here rather than deciding anything at evaluation time
-// (ctaTypes.castTarget). §3.12.6 clause 4 fixes what an admitted one is: "Any
+// is built, so a target this engine does not cast to never reaches evaluation
+// time: it is a recorded static error or a decline (singleType,
+// ctaTypes.castTarget). §3.12.6 clause 4 fixes what an admitted one is: "Any
 // explicit casts (i.e. any strings which match the optional "cast as" QName in
 // the CastExpr production) are casts to built-in datatypes."
 //
@@ -3073,8 +3073,9 @@ func (p *ctaParser) castExpr() (ctaValue, bool) {
 // admits it (ctaFacade.castable), so a Type Alternative's {test} declines it
 // as outside its required subset. It holds the cast `v cast as` the same
 // SingleType builds (singleType), so a target or operand castTarget or
-// castsFrom declines for the cast declines for `castable` too, and no second
-// casting rule exists to disagree with the cast's (ctaCastable).
+// castsFrom refuses for the cast is refused for `castable` too, err:XPST0051
+// and err:XPST0080 alike (xpath20.md §3.10.3), and no second casting rule
+// exists to disagree with the cast's (ctaCastable).
 func (p *ctaParser) castableTail(v ctaValue) (ctaValue, bool) {
 	if !p.facade.castable() {
 		return nil, false
@@ -3093,8 +3094,20 @@ func (p *ctaParser) castableTail(v ctaValue) (ctaValue, bool) {
 
 // singleType parses the `'as' QName '?'?` following a `cast` or `castable`
 // keyword — xpath20.md [49] SingleType — into the cast of v to the type the
-// QName names, reporting false where the tail is malformed, castTarget does
-// not admit the target or castsFrom does not admit the cast.
+// QName names, reporting false where the tail is malformed, castTarget
+// declines the target or castsFrom does not admit the cast.
+//
+// A target castTarget finds to be err:XPST0051 or err:XPST0080 is recorded
+// (ctaParser.record) and the parse goes on, so that [CTATestStaticError] can
+// tell a complete [8] ta-Test carrying that static error from an expression
+// outside the subset, which "unsupported dominates static" declines: §3.12.6
+// clause 2's Note licenses declining only an expression "containing no static
+// errors" (the oracle's #894 ruling). The node built in its place is a
+// STAND-IN, a cast of v to xs:string that castsFrom is not asked about: no
+// façade evaluates a tree whose defect is not ctaNoDefect, so its one job is
+// to let the productions after it parse, and xs:string is a target no
+// comparison over it declines: ctaTypes.comparison declines a pair only over
+// a numeric operand (untypedAgainst, ctaWider, sumCompares).
 func (p *ctaParser) singleType(v ctaValue) (ctaCast, bool) {
 	if !p.atName("as") {
 		return ctaCast{}, false
@@ -3110,31 +3123,37 @@ func (p *ctaParser) singleType(v ctaValue) (ctaCast, bool) {
 		p.advance()
 		allowsEmpty = true
 	}
-	return p.cast(v, p.typeName(text), allowsEmpty)
+	target, defect := p.types.castTarget(p.typeName(text))
+	switch defect.kind {
+	case ctaNoDefect:
+		return p.cast(v, target, allowsEmpty)
+	case ctaStaticError:
+		p.record(defect)
+		return ctaCast{operand: v, target: p.types.str, allowsEmpty: allowsEmpty}, true
+	default:
+		return ctaCast{}, false
+	}
 }
 
-// cast builds the cast of v to the datatype named name, both spellings' one
-// node (ctaCast), reporting false where castTarget does not admit the target,
-// castsFrom does not admit the cast, or the cast converts a StringLiteral to
-// xs:QName whose prefix the static context does not bind.
+// cast builds the cast of v to target, a datatype castTarget admitted, both
+// spellings' one node (ctaCast), reporting false where castsFrom does not
+// admit the cast, or the cast converts a StringLiteral to xs:QName whose
+// prefix the static context does not bind.
 //
 // A cast to xs:QName from a StringLiteral resolves the literal against the
 // expression's static context (xpath-functions.md §5.3), which the node
 // carries as its names; every other cast carries none. An unbound prefix there
 // is err:FONS0004, a static error ("A static error is raised [err:FONS0004] if
 // the prefix is not bound in the static context"), which this engine
-// WITHHOLDS rather than charges: [CTATestStaticError] proves err:XPST0003 and
-// err:XPST0081 alone, and an assertion has no static-error channel at all, so charging
-// cvc-assertion at the instance would blame the instance for a fault of the
-// schema.
+// WITHHOLDS rather than charges: [CTATestStaticError] does not prove it, and an
+// assertion has no static-error channel at all, so charging cvc-assertion at
+// the instance would blame the instance for a fault of the schema.
 //
 // GAP(xpath): err:FONS0004 is folded into the compile-time withhold on every
-// façade, as ctaTypes.castTarget folds err:XPST0051, and xpath-valid clause 2
-// is not charged for it. The direction is the withhold [CompileAssertionTest]
-// reports. (#1042)
-func (p *ctaParser) cast(v ctaValue, name xsd.QName, allowsEmpty bool) (ctaCast, bool) {
-	target, admitted := p.types.castTarget(name)
-	if !admitted || !p.types.castsFrom(v, target) {
+// façade, and xpath-valid clause 2 is not charged for it. The direction is the
+// withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) cast(v ctaValue, target *xsd.SimpleType, allowsEmpty bool) (ctaCast, bool) {
+	if !p.types.castsFrom(v, target) {
 		return ctaCast{}, false
 	}
 	cast := ctaCast{operand: v, target: target, allowsEmpty: allowsEmpty}
@@ -3174,6 +3193,14 @@ func (p *ctaParser) cast(v ctaValue, name xsd.QName, allowsEmpty bool) (ctaCast,
 // restricts the Type Alternative subset alone (§3.12.6), so on the assertion
 // and facet façades `xs:date(concat(string($value), '!!!'))` is the cast of a
 // function result, judged by castsFrom on its static type.
+//
+// Every defect castTarget finds in the name DECLINES here, the static ones
+// too, and none is recorded: err:XPST0051 and err:XPST0080 are cast and
+// castable TARGET errors (xpath20.md §3.10.2, §3.10.3), and a name with no
+// constructor is a call to a function the static context has no signature
+// for, err:XPST0017 at most — which xpath-valid clause 2.2.8 leaves
+// ·implementation-defined·, and the oracle's #894 ruling does not extend to.
+// So `string(@k)` and `xs:anyAtomicType(@k)` are withheld, never charged.
 func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 	name := p.functionName(p.peek(0).text)
 	p.advance() // the function name
@@ -3186,7 +3213,11 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 		return nil, false
 	}
 	p.advance()
-	cast, ok := p.cast(arg, name, true)
+	target, defect := p.types.castTarget(name)
+	if defect.kind != ctaNoDefect {
+		return nil, false
+	}
+	cast, ok := p.cast(arg, target, true)
 	if !ok {
 		return nil, false
 	}

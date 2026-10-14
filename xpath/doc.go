@@ -445,21 +445,25 @@
 // it. Under-charging is a rejection this engine can take later;
 // over-charging is a false reject now.
 //
-// Two static conditions are proven today: err:XPST0003 for a {test} no
+// The static conditions proven today are err:XPST0003 for a {test} no
 // derivation of the full grammar (xpath20.md A.1) covers, asked of the
 // recognizer only once the subset parser has declined and winning over
-// any unbound prefix that parse met; and err:XPST0081 for an unbound
-// prefix in a complete ta-Test. Only CTATestStaticError reports either:
-// CompileAssertionTest and FacetAssertions decline a text outside the
-// grammar like any other.
+// every static error that parse met; and, in a complete ta-Test, the
+// first in expression order of err:XPST0081 for an unbound prefix and
+// err:XPST0051 or err:XPST0080 for a `cast as` target that is no builtin
+// atomic type, xs:untypedAtomic aside — the schema's own types included,
+// since xpath-valid clause 2.2.5 puts only the built-ins in scope. The
+// parse runs past a failed target on a stand-in cast to xs:string
+// (ctaParser.singleType). Only CTATestStaticError reports any of them:
+// CompileAssertionTest and FacetAssertions decline every one like any
+// other defect. A cast-target err:XPST0051 or err:XPST0080 the parse
+// proved before a later construct declines is withheld with that decline,
+// under the GAP(xpath) at compileCTATest's discard (#2631).
 //
-// The cast-target conditions — err:XPST0051 and err:XPST0080 — are not
-// proven, because proving one takes a parse that runs PAST the failed
-// target to the end of a ta-Test and no target stands in for one that
-// resolved to nothing; they stay folded into the compile-time withhold
-// under ctaTypes.castTarget's marker. So does err:FONS0004, an unbound
+// A constructor call naming such a type is withheld, never charged: it
+// names a function, not a cast target. So is err:FONS0004, an unbound
 // prefix in the StringLiteral a cast to xs:QName converts, under
-// ctaParser.cast's.
+// ctaParser.cast's marker.
 //
 // # Static context
 //

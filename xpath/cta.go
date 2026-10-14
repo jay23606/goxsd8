@@ -182,19 +182,16 @@ type CTATest struct{ root ctaExpr }
 //     apart: a promotion that cannot be performed is not err:XPTY0004 and must
 //     not become one, because that error is a decided false the caller reads as
 //     "this alternative did not select";
-//   - a cast target this engine does not cast to, which is TWO conditions
-//     sharing one encoding deliberately. A target naming an in-scope atomic
-//     type outside the XSD namespace is valid XPath outside §3.12.6's
-//     required subset, which that section's own Note licenses a processor to
-//     decline ("Conforming processors may but are not required to support
-//     XPath expressions not belonging to the required subset of XPath"); a
-//     target that resolves to nothing, to a complex type, to a non-atomic
-//     type or to xs:anyAtomicType/xs:NOTATION is err:XPST0051/err:XPST0080, a
-//     STATIC error and so an xpath-valid clause 2 failure. The encoding
-//     tracks the CONSEQUENCE, and both consequences are the one withhold
-//     validate/cta.go's conditionallySelected argues: the element's
-//     ·governing type definition· is not determined, and no type is assessed
-//     against in its place;
+//   - a cast target this engine does not cast to (ctaTypes.castTarget): every
+//     target but a builtin atomic datatype. Written as a cast, every such
+//     target but xs:untypedAtomic is err:XPST0051 or err:XPST0080, a STATIC
+//     error and so an xpath-valid clause 2 failure — one naming the schema's
+//     OWN type among them, since xpath-valid clause 2.2.5 puts only the
+//     built-ins in the in-scope schema definitions; written as a constructor
+//     call, it names a function with no constructor signature. The
+//     consequence is the one withhold validate/cta.go's conditionallySelected
+//     argues: the element's ·governing type definition· is not determined, and
+//     no type is assessed against in its place;
 //   - a cast of a numeric literal that F&O §17 does not define over its
 //     ·canonical representation·, the one cast this façade declines for its
 //     OPERAND (ctaTypes.castsFrom, literalCastsTo): a DoubleLiteral to any
@@ -215,9 +212,7 @@ type CTATest struct{ root ctaExpr }
 // [CTATestStaticError]'s to report, over the same traversal and disagreeing
 // with nothing here — this entry point still withholds them, because a tree
 // built over a text outside the grammar, an unresolved name or an unadmitted
-// cast target is not evaluable whatever the schema's fate. The first two are
-// reported today; the cast-target conditions are folded into this withhold and
-// reach no charge, under the marker ctaTypes.castTarget carries.
+// cast target is not evaluable whatever the schema's fate.
 //
 // The static context is xpath-valid clause 2.2's: XPath 1.0 compatibility mode
 // false (2.2.1), statically known namespaces from expr.NamespaceBindings()
@@ -256,6 +251,17 @@ func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, 
 // ta-props-correct — off the wrapper the assembler minted over it.
 const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 
+// ruleXPST0051 is the XPath static error a cast target outside the in-scope
+// atomic types is (xpath20.md §3.10.2: "The target type must be an atomic
+// type that is in the in-scope schema types"), carried on ruleXPST0081's
+// terms (ctaTypes.castTarget).
+const ruleXPST0051 xsderr.Rule = "err:XPST0051"
+
+// ruleXPST0080 is the XPath static error a cast to one of the two types
+// §3.10.2 excludes by name is ("the target type cannot be xs:NOTATION or
+// xs:anyAtomicType"), carried on ruleXPST0081's terms (ctaTypes.castTarget).
+const ruleXPST0080 xsderr.Rule = "err:XPST0080"
+
 // CTATestStaticError reports the XPath STATIC error the {test} of a Type
 // Alternative carries, and nil for every other {expression} — including one
 // this engine merely cannot evaluate.
@@ -267,22 +273,28 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 // whether any instance is ever ·assessed·, so the charge belongs to the
 // assembler: it mints ta-props-correct at the <alternative>'s location and
 // wraps what this returns as the cause. The CODE is this package's, because
-// err:XPST0003 and err:XPST0081 are XPath's static errors and not the
-// assembler's rule, so the result is an *[xsderr.Error] carrying one
-// (ruleXPST0003, ruleXPST0081) and a consumer reads it with [xsderr.RuleOf]
+// the errors below are XPath's static errors and not the assembler's rule, so
+// the result is an *[xsderr.Error] carrying one (ruleXPST0003, ruleXPST0081,
+// ruleXPST0051, ruleXPST0080) and a consumer reads it with [xsderr.RuleOf]
 // after one errors.Unwrap of the charge.
 //
-// Two static errors are reported, and they read the {expression} differently:
+// Two kinds of static error are reported, and they read the {expression}
+// differently:
 //
 //   - err:XPST0003, for text that is not an XPath 2.0 expression at all: no
 //     derivation of the FULL grammar of xpath20.md Appendix A covers it
 //     (§2.2.3.1), not merely none of §3.12.6's ta-Test. It is asked only of an
-//     {expression} the subset parser declined, and it wins over an unbound
-//     prefix that parse recorded on the way: a text outside the grammar has
-//     no name to resolve. The message names where the grammar stopped, as a
-//     byte offset into the {expression};
-//   - err:XPST0081, for a prefix with no binding in a COMPLETE [8] ta-Test
-//     production whose name resolution was its sole defect.
+//     {expression} the subset parser declined, and it wins over every static
+//     error that parse recorded on the way: a text outside the grammar has no
+//     name to resolve. The message names where the grammar stopped, as a byte
+//     offset into the {expression};
+//   - in a COMPLETE [8] ta-Test production whose static errors were its only
+//     defects, the FIRST of them in expression order: err:XPST0081 for a
+//     prefix with no binding among the statically known namespaces, and
+//     err:XPST0051 or err:XPST0080 for the target of a `cast as` tail
+//     (ctaTypes.castTarget, the oracle's #894 ruling). A constructor call
+//     naming such a type is no cast target and is not charged
+//     (ctaParser.constructorFunction).
 //
 // UNSUPPORTED DOMINATES STATIC for everything else. Text the full grammar
 // accepts but the subset parser declines is legal XPath 2.0 this engine
@@ -291,21 +303,28 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 // subset of XPath"), and it answers nil: `count(//p:a) > 1` with p unbound is
 // one, and reading its unbound prefix in isolation would turn that decline
 // into the rejection of a conforming schema. Under-charging is a rejection
-// this engine can take later; over-charging is a false reject now.
+// this engine can take later; over-charging is a false reject now. A
+// cast-target err:XPST0051 or err:XPST0080 the parse proved before such a
+// decline is under-charged with it, under compileCTATest's GAP(xpath) (#2631).
 //
 // types is the IN-SCOPE SCHEMA DEFINITIONS of the static context this question
 // is asked in, which xpath-valid clause 2.2.5 fixes as "those components that
 // are present in every schema by definition" — the built-ins of §3.2.7, §3.4.7
 // and §3.16.7, and NOT the schema's own {type definitions}, which that clause
 // does not put in scope. It is read exactly as [CompileCTATest] reads it and
-// stored nowhere.
+// stored nowhere, and a cast target it does not hold as a builtin atomic type
+// is err:XPST0051.
 //
 // The rule is the XPath error code and the message is the fact, so the result
 // renders as
 //
-//	?: [err:XPST0081] no statically-known namespace binding for prefix "p"
+//	?: [err:XPST0081] no statically-known namespace binding for prefix "p", which err:XPST0081 forbids
 //
 // naming the FIRST unbound prefix in expression order (STYLE D2), or as
+//
+//	?: [err:XPST0051] the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids
+//
+// or as
 //
 //	?: [err:XPST0003] ")(" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 0, which err:XPST0003 forbids
 //
@@ -338,9 +357,11 @@ func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error 
 // ctaTypeAlternativeFacade for a Type Alternative, whose instance is untyped,
 // and ctaAssertionFacade for an assertion, whose attributes are typed.
 //
-// Name resolution never fails a parse — it records and carries on — so a parse
-// that failed at all failed for another reason, and is ctaUnsupported with
-// whatever an unbound prefix recorded along the way DISCARDED. That is where
+// A static error never fails a parse — an unbound prefix or a `cast as` target
+// castTarget finds static records it and carries on (ctaParser.record) — so a
+// parse that failed at all failed for another reason, and is ctaUnsupported
+// with whatever was recorded along the way DISCARDED — the GAP(xpath) at the
+// discard says what that under-charges (#2631). That is where
 // "unsupported dominates static" is enforced, once, for every façade. Whether
 // such a declined text is XPath at all is asked by [CTATestStaticError] alone,
 // of the full grammar (syntaxError), and never here: the assertion and facet
@@ -364,6 +385,12 @@ func compileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver, facade cta
 	p := ctaParser{toks: toks, names: names, types: known, facade: facade}
 	root, ok := p.test()
 	if !ok {
+		// GAP(xpath): a recorded err:XPST0051 or err:XPST0080 dies here with
+		// the parse a later construct declines, though castTarget proved it:
+		// §3.12.6 clause 2's Note licenses declining only an expression
+		// containing no static errors, so `@kind cast as xs:Missing = 'x' and
+		// count(//a:x) > 1` is under-charged. The direction is the withhold.
+		// (#2631)
 		return nil, ctaDefect{kind: ctaUnsupported}
 	}
 	return root, p.defect
@@ -386,6 +413,13 @@ type ctaDefect struct {
 	// the err:XPST0003 of one outside the grammar is syntaxError's, not this
 	// traversal's.
 	static *xsderr.Error
+}
+
+// ctaStaticDefect is the ctaStaticError defect carrying rule, its message
+// formatted from format and args, at the zero [xsderr.Loc]: this package
+// holds no schema position.
+func ctaStaticDefect(rule xsderr.Rule, format string, args ...any) ctaDefect {
+	return ctaDefect{kind: ctaStaticError, static: xsderr.New(rule, xsderr.Loc{}, format, args...)}
 }
 
 // ctaDefectKind is the kind of a [ctaDefect].
