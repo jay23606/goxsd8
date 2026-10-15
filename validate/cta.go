@@ -195,7 +195,11 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 // which members of a JSON object are attributes by the type their selection
 // gives.
 func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inherited []Attribute) (xsd.TypeDefinitionOrRef, bool) {
-	i, decided := selectAlternative(table, v.backend, v.schema, ctaAttributes(attributes, inherited))
+	copied := make([]inheritedAttribute, 0, len(inherited))
+	for _, a := range inherited {
+		copied = append(copied, inheritedAttribute{name: a.Name(), value: a.Value()})
+	}
+	i, decided := selectAlternative(table, v.backend, v.schema, ctaAttributes(attributes, copied))
 	if !decided {
 		return nil, false
 	}
@@ -239,8 +243,8 @@ func selectAlternative(table xsd.TypeTable, backend value.Backend, types xsd.Typ
 // attribute wins outright over a same-named inherited one. That filter is E's
 // alone and is a second one: the shadowing among E's ancestors is already
 // settled in inherited. The walk hands inherited as the []inheritedAttribute
-// it computes, [Validator.ConditionallySelected] as the []Attribute its caller
-// does, and both meet this one filter.
+// it computes, and [Validator.ConditionallySelected] copies its caller's
+// []Attribute into one, so both meet this one filter.
 //
 // The xsi: attributes are among the first half, because clause 1.1.2 copies E's
 // [[attributes]] whole and names no exception; the namespace declarations are
@@ -250,7 +254,7 @@ func selectAlternative(table xsd.TypeTable, backend value.Backend, types xsd.Typ
 //
 // attrs is read once, not per {test}: [Element]'s Attributes may build it, and
 // a {test} naming three attributes would otherwise build it three times.
-func ctaAttributes[I copiedAttribute](attrs []Attribute, inherited []I) xpath.Attributes {
+func ctaAttributes(attrs []Attribute, inherited []inheritedAttribute) xpath.Attributes {
 	return func(yield func(xsd.QName, string) bool) {
 		for _, a := range attrs {
 			if !yield(a.Name(), a.Value()) {
@@ -258,19 +262,12 @@ func ctaAttributes[I copiedAttribute](attrs []Attribute, inherited []I) xpath.At
 			}
 		}
 		for _, a := range inherited {
-			if hasAttributeNamed(attrs, a.Name()) {
+			if hasAttributeNamed(attrs, a.name) {
 				continue
 			}
-			if !yield(a.Name(), a.Value()) {
+			if !yield(a.name, a.value) {
 				return
 			}
 		}
 	}
-}
-
-// copiedAttribute is what key-cta-ta-select clause 1.1.3 copies of an
-// [inherited attributes] member: its ·expanded name· and [[normalized value]].
-type copiedAttribute interface {
-	Name() xsd.QName
-	Value() string
 }
