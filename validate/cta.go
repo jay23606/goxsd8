@@ -3,6 +3,7 @@ package validate
 import (
 	"fmt"
 
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -109,7 +110,9 @@ func (w *walk) absentHead(ref xsd.TypeDefinitionOrRef) bool {
 // key-cta-ta-select — its {test} evaluates to true), and if none does, the
 // {default type definition}'s {type definition} is the answer. Every {test}
 // reads e's own [[attributes]] and inherited, e's [inherited attributes]
-// (ctaAttributes).
+// (ctaAttributes). The scan is selectAlternative's, the one
+// [Validator.ConditionallySelected] makes too; this method adds the walk's
+// record of a withhold and resolvedSelection's reading of the slot selected.
 //
 // The scan is LAZY in both directions the rule quantifies in. It compiles and
 // evaluates one alternative at a time, because "if any Type Alternative
@@ -154,21 +157,17 @@ func (w *walk) absentHead(ref xsd.TypeDefinitionOrRef) bool {
 // anyway, because a zero XPath Expression record has an empty {expression} and
 // no {expression} is a Test production.
 func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited []inheritedAttribute) (xsd.TypeDefinition, bool) {
-	attr := ctaAttributes(e, inherited)
 	alts := table.Alternatives()
-	for i, alt := range alts {
-		test, _ := alt.Test()
-		compiled, evaluable := xpath.CompileCTATest(test, w.schema)
-		if !evaluable {
-			w.decline("assessing element", e.Name(), e.Loc(), ruleKeyCTATASelect, "2",
-				"alternative %d of %d in the {alternatives} of the {type table} of %s's ·governing element declaration·, whose {test} is %q, was not evaluated: this engine's §3.12.6 required-subset compiler declined it, which ta-props-correct clause 2 licenses (a conforming processor may but is not required to support XPath outside that subset), so whether it ·successfully selects· its {type definition} is undecided and the type the table ·conditionally selects· (§3.3.4.1, key-cta-select) is withheld along with it, together with every alternative behind it",
-				i+1, len(alts), e.Name(), test.Expression())
-			return nil, false
-		}
-		if !compiled.Evaluate(w.backend, w.schema, attr) {
-			continue
-		}
-		return w.resolvedSelection(e, alt.TypeDefinition(), fmt.Sprintf(
+	i, decided := selectAlternative(table, w.backend, w.schema, ctaAttributes(e.Attributes(), inherited))
+	if !decided {
+		test, _ := alts[i].Test()
+		w.decline("assessing element", e.Name(), e.Loc(), ruleKeyCTATASelect, "2",
+			"alternative %d of %d in the {alternatives} of the {type table} of %s's ·governing element declaration·, whose {test} is %q, was not evaluated: this engine's §3.12.6 required-subset compiler declined it, which ta-props-correct clause 2 licenses (a conforming processor may but is not required to support XPath outside that subset), so whether it ·successfully selects· its {type definition} is undecided and the type the table ·conditionally selects· (§3.3.4.1, key-cta-select) is withheld along with it, together with every alternative behind it",
+			i+1, len(alts), e.Name(), test.Expression())
+		return nil, false
+	}
+	if i < len(alts) {
+		return w.resolvedSelection(e, alts[i].TypeDefinition(), fmt.Sprintf(
 			"the {type definition} of alternative %d of %d in the {alternatives} of the {type table} of its ·governing element declaration·, which ·successfully selects· it,",
 			i+1, len(alts)))
 	}
@@ -176,14 +175,76 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 		"the {type definition} of the {default type definition} of the {type table} of its ·governing element declaration·, which the table ·conditionally selects· because no alternative ·successfully selects· a type definition,")
 }
 
+// ConditionallySelected is the {type definition} slot table ·conditionally
+// selects· (§3.3.4.1, key-cta-select) for an element E whose [attributes] are
+// attributes, in source order, and whose [inherited attributes] are inherited
+// (§3.3.5.6, e-inherited_attributes): the slot of the first of table's
+// {alternatives} whose {test} evaluates to true (§3.12.4, key-cta-ta-select),
+// or, where none does, the slot of its {default type definition}, with ok
+// true. The slot is unresolved; [SchemaView]'s ResolvedType resolves it.
+//
+// Each {test} reads E's attributes, then each of inherited whose ·expanded
+// name· no member of attributes has (key-cta-ta-select clauses 1.1.2 and
+// 1.1.3); inherited is required, and nil only where E has no [inherited
+// attributes]. It is the selection [Validator.Assess] makes for E, by the same
+// scan: a dynamic or type error inside a {test} counts as false
+// (key-cta-ta-select clause 2), and ok is false exactly where Assess withholds
+// E's ·selected type definition· — an alternative tried before any succeeds
+// has a {test} this engine's §3.12.6 compiler declines — never where no
+// alternative succeeds. The one consumer is validate/jsonsrc, which settles
+// which members of a JSON object are attributes by the type their selection
+// gives.
+func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inherited []Attribute) (xsd.TypeDefinitionOrRef, bool) {
+	copied := make([]inheritedAttribute, 0, len(inherited))
+	for _, a := range inherited {
+		copied = append(copied, inheritedAttribute{name: a.Name(), value: a.Value()})
+	}
+	i, decided := selectAlternative(table, v.backend, v.schema, ctaAttributes(attributes, copied))
+	if !decided {
+		return nil, false
+	}
+	alts := table.Alternatives()
+	if i < len(alts) {
+		return alts[i].TypeDefinition(), true
+	}
+	return table.DefaultTypeDefinition().TypeDefinition(), true
+}
+
+// selectAlternative is key-cta-select's scan of table over attrs: the index of
+// the first of its {alternatives} that ·successfully selects· its {type
+// definition} (key-cta-ta-select), or len of them where none does and the
+// {default type definition} is selected, with decided true; and, decided
+// false, the index of the alternative whose {test} [xpath.CompileCTATest]
+// declined, which the scan reached before any success and stopped at. types
+// is the xsd.TypeResolver both halves of the engine take, and backend the
+// value space the evaluation casts in. It is the one scan
+// [walk.conditionallySelected] and [Validator.ConditionallySelected] share.
+func selectAlternative(table xsd.TypeTable, backend value.Backend, types xsd.TypeResolver, attrs xpath.Attributes) (int, bool) {
+	alts := table.Alternatives()
+	for i, alt := range alts {
+		test, _ := alt.Test()
+		compiled, evaluable := xpath.CompileCTATest(test, types)
+		if !evaluable {
+			return i, false
+		}
+		if compiled.Evaluate(backend, types, attrs) {
+			return i, true
+		}
+	}
+	return len(alts), true
+}
+
 // ctaAttributes is the attribute sequence a {test} evaluates against, the two
 // halves §3.12.4 key-cta-ta-select copies into the XDM instance the test runs
-// over, in that order. First clause 1.1.2's: the [[attributes]] of e itself, in
-// SOURCE order. Then clause 1.1.3's: each member of inherited, e's own
-// [inherited attributes] (§3.3.5.6, e-inherited_attributes, [walk.handedDown]),
-// whose ·expanded name· no attribute of e has — so e's own attribute wins
-// outright over a same-named inherited one. That filter is e's alone and is a
-// second one: the shadowing among e's ancestors is already settled in inherited.
+// over, in that order. First clause 1.1.2's: attrs, the [[attributes]] of E
+// itself, in SOURCE order. Then clause 1.1.3's: each member of inherited, E's
+// own [inherited attributes] (§3.3.5.6, e-inherited_attributes,
+// [walk.handedDown]), whose ·expanded name· no attribute of E has — so E's own
+// attribute wins outright over a same-named inherited one. That filter is E's
+// alone and is a second one: the shadowing among E's ancestors is already
+// settled in inherited. The walk hands inherited as the []inheritedAttribute
+// it computes, and [Validator.ConditionallySelected] copies its caller's
+// []Attribute into one, so both meet this one filter.
 //
 // The xsi: attributes are among the first half, because clause 1.1.2 copies E's
 // [[attributes]] whole and names no exception; the namespace declarations are
@@ -191,10 +252,9 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 // wildcard NameTest from ranging over xmlns bindings as if they were attribute
 // nodes.
 //
-// The slice is read once, not per walk: [Element]'s Attributes may build it,
-// and a {test} naming three attributes would otherwise build it three times.
-func ctaAttributes(e Element, inherited []inheritedAttribute) xpath.Attributes {
-	attrs := e.Attributes()
+// attrs is read once, not per {test}: [Element]'s Attributes may build it, and
+// a {test} naming three attributes would otherwise build it three times.
+func ctaAttributes(attrs []Attribute, inherited []inheritedAttribute) xpath.Attributes {
 	return func(yield func(xsd.QName, string) bool) {
 		for _, a := range attrs {
 			if !yield(a.Name(), a.Value()) {

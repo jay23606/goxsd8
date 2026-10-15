@@ -1,6 +1,7 @@
 package jsonsrc
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -65,11 +66,13 @@ const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
 </xs:schema>`
 
-// TestTypeTable pins an element whose declaration carries a {type table}: its
-// members are classified under its declared {type definition}, and alike
-// under every type the table can select (walker.alike) — a scalar or null
-// child by its name alone, whatever declarations it is under — a "$type" on
-// its child is settled alike under every one (walker.instanceGoverned), and
+// TestTypeTable pins an element whose declaration carries a {type table},
+// each of whose members every type the table can select classifies alike
+// (walker.alike) — a scalar or null child by its name alone, whatever
+// declarations it is under: at the root the mapping classifies them under the
+// type the table selects (walker.settled), below it under its declared {type
+// definition}, a "$type" on its child is settled under the selected type at
+// the root and alike under every one below it (walker.instanceGoverned), and
 // the engine assesses it under the type the table selects. The rows marked
 // "selected" discriminate the selection: under typeTableSchema with its
 // <xs:alternative>s removed, the first, the particle's first and the "$type"
@@ -127,32 +130,118 @@ func TestTypeTable(t *testing.T) {
 	}
 }
 
-// TestTypeTableDeclines pins the {type table} decline of a member the declared
-// type and a selectable type classify differently (walker.classify's
-// GAP(jsonsrc) marker, #2696), though the engine assesses each XML twin: m is
-// the child m under T and the attribute m under U; and k, an object, is under
-// V's local declaration of one anonymous type and, W containing no k, under
-// the top-level k of another, whose {context}s differ (oneType).
-func TestTypeTableDeclines(t *testing.T) {
+// TestTypeTableSelected pins a root whose {type table}'s types classify a
+// member differently: the mapping reads the type the table ·conditionally
+// selects· for the root's leading attribute members (walker.attributes,
+// walker.settled) and classifies the members under that type, as the engine
+// assesses each XML twin under it. Under T, m is the child m, and a = "u"
+// selects U, under which m is an attribute; under U, a = "u" and m = "x"
+// select U again, so m is U's attribute. k, an object, is under V's local
+// declaration of one anonymous type and, W containing no k, under the
+// top-level k of another, whose {context}s differ (oneType); no a selects V,
+// which classifies k as its own, as the member that ends the attribute run
+// (walker.agrees) and as a later one (walker.classify, under V's object
+// alone).
+func TestTypeTableSelected(t *testing.T) {
 	v := validatorOver(t, typeTableSchema)
 	for _, tc := range []struct {
 		name, json, xml string
-		opens           string
+		want            []xsderr.Rule
 	}{
 		{"a key classified as a child under one type and an attribute under another", `{"tu":{"a":"u","m":"x"}}`,
-			`<tu xmlns="urn:c" a="u" m="x"/>`,
-			`jsonsrc: instance.json:1:16: member "m" of {urn:c}tu is not classified alike under its declaration's {type definition} and every type its {type table} can select`},
+			`<tu xmlns="urn:c" a="u" m="x"/>`, none},
 		{"a child under declarations of two anonymous types", `{"tv":{"k":{}}}`,
-			`<tv xmlns="urn:c"><k/></tv>`,
-			`jsonsrc: instance.json:1:8: member "k" of {urn:c}tv is not classified alike`},
+			`<tv xmlns="urn:c"><k/></tv>`, none},
+		{"a later child under declarations of two anonymous types", `{"tv":{"n":"x","k":{}}}`,
+			`<tv xmlns="urn:c"><n>x</n><k/></tv>`, none},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// runSchema declares, in urn:s, T, empty content with the attribute a; U,
+// which extends T with the attribute m; Q, with the attribute a and a lax
+// ##local {attribute wildcard}, and Q1 and Q2, which extend Q with an
+// attribute m, unqualified and qualified. tu is of type T and selects U where
+// its a is "u"; p holds an optional tu. tn is of type T and selects T where it
+// has an m, else U where its a is "u". tw selects U where its a is "u" and it
+// has no m, and its second {test} is outside the §3.12.6 compiler's subset, as
+// tx's first is. tq is of type Q and selects Q1 where its a is "1" and Q2 where
+// it is "2". Under T a key "m" is a child no wildcard names (walker.namedChild).
+const runSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:s" xmlns:s="urn:s" elementFormDefault="qualified">
+  <xs:complexType name="T"><xs:attribute name="a" type="xs:string"/></xs:complexType>
+  <xs:complexType name="U">
+    <xs:complexContent><xs:extension base="s:T"><xs:attribute name="m" type="xs:string"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="tu" type="s:T"><xs:alternative test="@a = 'u'" type="s:U"/></xs:element>
+  <xs:element name="p"><xs:complexType><xs:sequence><xs:element ref="s:tu" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="tn" type="s:T">
+    <xs:alternative test="@m" type="s:T"/>
+    <xs:alternative test="@a = 'u'" type="s:U"/>
+  </xs:element>
+  <xs:element name="tw" type="s:T">
+    <xs:alternative test="@a = 'u' and not(@m)" type="s:U"/>
+    <xs:alternative test="count(@a) > 0" type="s:T"/>
+  </xs:element>
+  <xs:element name="tx" type="s:T"><xs:alternative test="count(@a) > 0" type="s:U"/></xs:element>
+  <xs:complexType name="Q"><xs:attribute name="a" type="xs:string"/><xs:anyAttribute namespace="##local" processContents="lax"/></xs:complexType>
+  <xs:complexType name="Q1">
+    <xs:complexContent><xs:extension base="s:Q"><xs:attribute name="m" type="xs:string"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="Q2">
+    <xs:complexContent><xs:extension base="s:Q"><xs:attribute name="m" form="qualified" type="xs:string"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="tq" type="s:Q">
+    <xs:alternative test="@a = '1'" type="s:Q1"/>
+    <xs:alternative test="@a = '2'" type="s:Q2"/>
+  </xs:element>
+</xs:schema>`
+
+// TestTypeTableRunDeclines pins the declines the selection leaves, each
+// beside the verdict the engine gives its XML twin: below the root, where the
+// mapping computes no [inherited attributes] (selection's GAP(jsonsrc)
+// marker); a member one type takes as an attribute while the type the
+// attributes before it select ends the run on it, and one two types take as
+// attributes of different names (walker.extend's); a run no selection
+// settles: under T, a = "u" selects U, which takes m as an attribute, and
+// under U, m selects T, which does not (walker.settled's); and a {test} the
+// engine withholds the selection at, after a candidate dropped or where the
+// candidates classify a member differently (walker.settled's).
+func TestTypeTableRunDeclines(t *testing.T) {
+	v := validatorOver(t, runSchema)
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+		withheld        bool
+		opens           string
+	}{
+		{"below the root", `{"p":{"tu":{"a":"u","m":"x"}}}`,
+			`<p xmlns="urn:s"><tu a="u" m="x"/></p>`, none, false,
+			`jsonsrc: instance.json:1:21: member "m" of {urn:s}tu is not classified alike`},
+		{"an attribute under one type where the selected type ends the run", `{"tu":{"a":"z","m":"x"}}`,
+			`<tu xmlns="urn:s" a="z"><m>x</m></tu>`, complexType, false,
+			`jsonsrc: instance.json:1:16: member "m" of {urn:s}tu is an attribute under a type its {type table} can select and a child under the one`},
+		{"attributes of two expanded names", `{"tq":{"m":"x"}}`,
+			`<tq xmlns="urn:s" m="x"/>`, none, false,
+			`jsonsrc: instance.json:1:8: member "m" of {urn:s}tq is an attribute of the expanded names`},
+		{"no run settled", `{"tn":{"a":"u","m":"x"}}`,
+			`<tn xmlns="urn:s" a="u" m="x"/>`, complexType, false,
+			`jsonsrc: instance.json:1:23: the members of {urn:s}tn settle no type`},
+		{"withheld after a candidate dropped", `{"tw":{"a":"u","m":"x"}}`,
+			`<tw xmlns="urn:s" a="u" m="x"/>`, none, true,
+			`jsonsrc: instance.json:1:23: the members of {urn:s}tw are classified differently`},
+		{"withheld where the candidates classify a member differently", `{"tx":{"a":"u","m":"x"}}`,
+			`<tx xmlns="urn:s" a="u" m="x"/>`, none, true,
+			`jsonsrc: instance.json:1:16: member "m" of {urn:s}tx is not classified alike`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			xres, err := xmlsrc.Validate(v, strings.NewReader(tc.xml), xmlsrc.WithURI("instance.xml"))
 			if err != nil {
 				t.Fatalf("xmlsrc.Validate(%s): %v", tc.xml, err)
 			}
-			if got := rules(xres); len(got) > 0 || len(xres.Unevaluated()) > 0 {
-				t.Fatalf("XML twin %s charges %v, %d unevaluated; want none", tc.xml, got, len(xres.Unevaluated()))
+			if got := rules(xres); !slices.Equal(got, tc.want) || (len(xres.Unevaluated()) > 0) != tc.withheld {
+				t.Fatalf("XML twin %s charges %v, %d unevaluated; want %v, withheld %t", tc.xml, got, len(xres.Unevaluated()), tc.want, tc.withheld)
 			}
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
 			if err == nil {
@@ -163,4 +252,13 @@ func TestTypeTableDeclines(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestTypeTableWithheldMaps pins a root whose {type table}'s selection the
+// engine withholds where every type the table can select classifies its
+// members alike: the mapping maps them as without a selection, and the
+// engine records the withhold for the JSON instance as for its XML twin.
+func TestTypeTableWithheldMaps(t *testing.T) {
+	v := validatorOver(t, runSchema)
+	twin(t, v, `{"tx":{"a":"u"}}`, `<tx xmlns="urn:s" a="u"/>`, none)
 }
