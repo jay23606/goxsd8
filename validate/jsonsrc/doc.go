@@ -180,7 +180,9 @@
 //     run of attribute members ends at the first member that the type the
 //     attributes before it select classifies as no attribute, having
 //     classified those as the run did; the members after it are classified
-//     under that type alone, which governs the element. Where no run is so
+//     under that type alone, which governs the element. A candidate type that
+//     declines a member drops from the run, and the member declines only
+//     where the type the attributes select is that one. Where no run is so
 //     settled, where one candidate type would carry the run on past the
 //     member the selected type ends it at, and where the engine withholds the
 //     selection while the candidate types classify the members differently,
@@ -332,12 +334,13 @@
 //     can select classify differently, or that one of them declines: there the
 //     mapping reads no ·selected type definition·, so it maps only what
 //     classifies alike whichever type is selected; and, at the root, a member
-//     any candidate type declines, one the candidates still reading attributes
-//     take as attributes of different expanded names, one a candidate takes as
-//     an attribute where the type the attributes before it select ends the run
-//     on it, members no run of attributes settles, and members the candidate
-//     types classify differently where the engine withholds the selection, a
-//     {test} it reaches being outside its compiler's §3.12.6 subset;
+//     the type the attributes select declines, as that type's own decline
+//     above, one the candidates still reading attributes take as attributes of
+//     different expanded names, one a candidate takes as an attribute where
+//     the type the attributes before it select ends the run on it, members no
+//     run of attributes settles, and members the candidate types classify
+//     differently, or one declines, where the engine withholds the selection,
+//     a {test} it reaches being outside its compiler's §3.12.6 subset;
 //   - a {type definition} that does not resolve, under an object value.
 //
 // # Locations
