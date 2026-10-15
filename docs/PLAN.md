@@ -17,19 +17,21 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-15 (#2561's post-land pass, on `main` at `043f1a8`)
+## Status — 2026-10-15 (#2647's post-land pass, on `main` at `6009fc0`)
 
-**North star: grow the `json` lane, M8, at 34. Its next lift waits on one
-ruling.** #2630 (the `{type table}` lift) was stood down at grounding and is
-`blocked` until a `RULING:` comment picks its Surface arm. #2647 is `ready`, but
-its soundness couples to the `blocked` #2081, and #2561's session passed it over
-for that reason. Both share `validate/jsonsrc/jsonsrc.go`, so they go one at a
-time. **Lean: product.** Both measured W3C lanes stand at what rulings leave, and
-Tier B's first row is a wrong verdict.
+**North star: grow the `json` lane, M8, now at 38.** #2647 (`6009fc0`) lifted
+#2615's open-content `"$type"` decline and banked json +4. Its remainder,
+#2666 (two disagreeing candidate types, or a `{type table}` ancestor reached
+through a wildcard), is now `ready` and is Tier A row 1. #2630 (the `{type
+table}` lift) stays `blocked` until a `RULING:` comment picks its Surface arm.
+#2655 is `ready` below the band. All three share
+`validate/jsonsrc/jsonsrc.go`, so they go one at a time. **Lean: product.**
+Both measured W3C lanes stand at what rulings leave, and Tier B's first row is
+a wrong verdict.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `043f1a8`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `6009fc0`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -38,12 +40,12 @@ lane score (#1120).
 | `ber` | — | — | 0 |
 | `datatypes` | 1163 | 10 | 1173 |
 | `instance` | 26268 | 93 | 26361 |
-| `json` | 34 | 0 | 34 |
+| `json` | 38 | 0 | 38 |
 | `schema` | 15300 | 98 | 15398 |
 | `xpath` | — | — | 0 |
 
-**No lane moved since `59108b5`.** #2630's grounding banked nothing, and #2561
-(`043f1a8`) landed at `Ratchet: unchanged`. **`datatypes ⊆ instance` is
+**Only `json` moved since `043f1a8`: 34 → 38**, #2647's four curated
+`governed` cases (`6009fc0`). No W3C lane moved. **`datatypes ⊆ instance` is
 intended** (#1507). **An em dash means a lane with no cases yet, not a lane
 scoring zero.** `datatypes` is M3 and complete. `schema` is M4 and `instance` is
 M5, and both are active. `json` is M8 and the north star. Its cases are curated
@@ -54,8 +56,8 @@ in `conformance/testdata/json/`, outside the W3C suite. `xpath` waits on M7 and
 
 **Measured on `b79687d`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
 conformance run fed to `go tool lanepartition`, and not re-run here: #2615's,
-#2555's, #2616's, #2623's and #2561's arbiters each measured their change as
-moving no W3C case.
+#2555's, #2616's, #2623's, #2561's and #2647's arbiters each measured their
+change as moving no W3C case.
 It stands less four banked flips: #2608's three and #894's one, all `schema`
 decided-`(accepted)` cases, so that column reads 86, not 90. Every figure is a
 part of the banked fails and a bound from above. `json` has no fails to
@@ -95,12 +97,12 @@ partition.
 
 ### Branch namespace, `origin` (report-only; containers cannot delete a ref)
 
-**Not re-surveyed by `wipsurvey` this pass**, which fed no walk. Read from `git
-ls-remote origin` at `043f1a8`; the states below are the 2026-10-14 `/backlog`
-stamp's, plus what landed since.
+**Not re-surveyed by `wipsurvey` this pass.** Read from `git ls-remote origin`
+at `6009fc0`; the states below are the 2026-10-14 `/backlog` stamp's, plus what
+landed since.
 
 - **`wip/issue-2630` holds #2630's stood-down grounding**, no code, on an issue
-  `blocked` on a Surface-arm ruling. `wip/issue-2561` is gone from `origin`.
+  `blocked` on a Surface-arm ruling. `wip/issue-2647` is gone from `origin`.
 - **`wip/issue-2013` and `wip/issue-2332` are RETIRED:** both issues are closed
   `not_planned` with their contents accounted for. **`wip/issue-2081` is
   EXPIRED:** a parked grounding with no code, on an issue `blocked` on an owner
@@ -122,16 +124,17 @@ stamp's, plus what landed since.
 
 ### Marker census
 
-`go tool gapaudit`, unfed, at `043f1a8`: **169 markers across 11 areas** (xpath
-63, xsd 32, validate 23, jsonsrc 17, value 11, parser 8, conformance 7, xml 3,
-landcheck 2, regex 2, cmd 1). Groups 1 and 2 were not reconciled this pass.
-#2561 added no marker; it widened `walk.elementAssertions`' `GAP(validate)`
-residue, which cites #1042. The 2026-10-14 `/backlog`'s fed run had 11 Group 1
-rows with no dead ends, and 26 Group 2 rows.
+`go tool gapaudit`, fed (walk stamp `rows 2667 distinct 2667 min 1 max 2667 no
+gaps`), at `6009fc0`: **169 markers across 11 areas** (xpath 63, xsd 32,
+validate 23, jsonsrc 17, value 11, parser 8, conformance 7, xml 3, landcheck 2,
+regex 2, cmd 1). Groups 1 and 2 were not reconciled this pass. #2647 kept the
+jsonsrc count: its `walker.instanceGoverned` marker cites #2666, now `ready`.
+The 2026-10-14 `/backlog`'s fed run had 11 Group 1 rows with no dead ends, and
+26 Group 2 rows.
 
 ### Milestones and queue
 
-**Read from GitHub on `043f1a8`: 333 open issues.**
+**Read from GitHub on `6009fc0`: 333 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -142,20 +145,21 @@ rows with no dead ends, and 26 Group 2 rows.
 | **M5 — Instance validation (XML)** | **8** | **136** | active |
 | **M6 — XPath required subset** | **6** | **45** | active |
 | M7 — XPath 2.0 growth | 1 | 1 | #2619 open |
-| **M8 — JSON instance adapter** | **3** | **10** | north star; `json` 34 |
+| **M8 — JSON instance adapter** | **3** | **11** | north star; `json` 38 |
 | M9–M12 | 0 | 0 | not started |
 
 M3's one open issue is #2566, a `value.Context` doc defect. It is follow-up,
-not milestone scope. M8's three are #2630 (`blocked`), #2647 and #2655. M6
-gained #2662 and #2663, #2561's follow-ups.
+not milestone scope. M8's three are #2666 (filed by #2647's session and
+milestoned this pass), #2630 (`blocked`) and #2655; #2647 closed.
 
 The open issues are **316 `ready`, 15 `blocked`, 0 `needs-replan` and 2
 `epic`**, which sums to 333. Open `kind/process` is 6: #1880 and #1885, both
 `blocked` on the owner, and #2610, #2637, #2650 and #2664, `ready`.
 
 - **`blocked` is 15:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #2022, #2081, #2376, #2533 and #2630. None of the dependencies
-  closed and none of the triggers fired:
+  #1880, #1885, #2022, #2081, #2376, #2533 and #2630. #2666, `blocked` on #2647
+  alone, was relabelled `ready` when it landed. Of these 15, none of the
+  dependencies closed and none of the triggers fired:
   - #2630 waits on a `RULING:` comment picking its Surface arm (A, B or
     surface-free).
   - #2533 waits on an evaluation-time CTA decline landing. #2561's new declines
@@ -169,7 +173,7 @@ The open issues are **316 `ready`, 15 `blocked`, 0 `needs-replan` and 2
   - #1374 and #555 wait on written triggers, and #16 on M9.
   - No human ruling is recorded on #1880, #1885, #1790, #2022 or #2081.
 - **Measured refactors were not re-run this pass; each carries its last run.**
-  On `043f1a8`: #2663 (4), newly filed. #2237 (24) on `7139873`. On `207d52c`:
+  On `043f1a8`: #2663 (4). #2237 (24) on `7139873`. On `207d52c`:
   #848 (2 stale "future consumer" lines, 0 outside consumers). On `4914723`:
   #2595 (1 and 1), #2599 (186 methods), #2601 (0 outside consumers), #2239 (2),
   #2372 (27), #1080 (8) and #2375 (1 and 1). On `46bda66`: #2600 (2 copies),
@@ -194,7 +198,7 @@ This is ordered for a `/develop` session: take the highest row you can start.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2647 | **Lifts #2615's open-content `$type` decline**, and pins the two decline-only mutations #2615's verdict left. It needs ·override· and a warden ruling. Its soundness couples to the `blocked` #2081; the grounding rules whether that coupling stops it. #2630, the other M8 lift, is `blocked` on its Surface-arm ruling. |
+| 1 | #2666 | **#2647's remainder, the next M8 lift:** a `"$type"` whose parent's governing type only an ·attribution· settles, pinned by the three `TestAncestryTypeDeclines` rows. Its body's hypothesis is that it runs the parent's content model over the object's members, so the grounding sizes it first and may split it. #2630, the other M8 lift, is `blocked` on its Surface-arm ruling. |
 
 **Tier B: wrong verdicts and the persona findings.**
 
@@ -217,7 +221,7 @@ This is ordered for a `/develop` session: take the highest row you can start.
 **Named below the band, on purpose.**
 - **M8, `Ratchet: unchanged`:** #2655 (#2616's follow-up: jsonsrc reports a
   reader I/O fault as "malformed JSON", so it exits 4 where XML's exits 1). It
-  shares `validate/jsonsrc/jsonsrc.go` with #2630 and #2647, so a session taking
+  shares `validate/jsonsrc/jsonsrc.go` with #2630 and #2666, so a session taking
   one of them absorbs it when it can.
 - **#2561's follow-ups, M6:** #2663 (the `attributeVerdict` two-arm type, the
   `AttributeTypes` clause and a clause 3 test below E; measured at 4) waits on
@@ -282,15 +286,16 @@ This is ordered for a `/develop` session: take the highest row you can start.
    before either is taken.
 3. **After #2577, #2566 and #2315 land,** the same or a later `/backlog` runs the
    deferred libuser round. It reads #2622's `xsd.(*Schema).ContainedWildcards`
-   and any surface #2630 or #2647 adds.
-4. **The next `/backlog` re-runs the fed surveys** (`wipsurvey`, `gapaudit`)
-   these post-land passes carried.
+   and any surface #2630 or #2666 adds; #2647 added none.
+4. **The next `/backlog` re-runs `wipsurvey` fed and reconciles `gapaudit`'s
+   groups**, which these post-land passes carried.
 5. **Owner decisions outstanding:**
    - #1880, which frees #1002's 16 `VC` `<versioned>` cases, the largest
      `instance` cluster any single ruling would free, and `vc002.v1`, the last
      assertion decline.
    - #2081, the wild062.n3 loss. Its lift must also re-examine jsonsrc's
-     `walker.governing` and `walker.instanceGoverned` (its body says so).
+     `walker.governing` and `walker.instanceUnder`, one of whose arms is wrong
+     once it lands (its body says so).
    - #1885, #1790 and #2022.
    - The branch deletions listed under Branch namespace.
 
