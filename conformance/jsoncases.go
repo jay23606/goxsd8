@@ -126,15 +126,13 @@ func newJSONExec() laneExecutor {
 //     equivalent {type table}s. A child either names with no declaration,
 //     ·laxly assessed· or governed by a ·locally declared type·, has no {type
 //     table} to select through. A child classified under the declarations of
-//     the type X its parent's "$type" names is governed by them wherever X
-//     governs the parent; where X does not ·override· the type a ·governing
-//     element declaration· supplies, the walk charges cvc-elt clause 4 at the
-//     parent, so no "valid" reading stands on what the child's governing
-//     declaration selects; and jsonsrc declines the "$type" wherever a
-//     ·locally declared type· could supply it uncharged — where the type the
-//     parent's members are classified under has a non-skip {open content}
-//     under which the child's name has one, and where that type may not
-//     govern the parent at all (walker.localType, walker.governs);
+//     the type T jsonsrc settles for its parent's "$type" is governed by them
+//     wherever T governs the parent, and T governs it wherever the parent's
+//     verdict stands uncharged: jsonsrc settles T as the ·governing type
+//     definition· every type that may govern the grandparent gives the
+//     parent, and as the type the "$type" names where every one charges the
+//     parent, and declines the "$type" where those types settle on two or the
+//     mapping bounds none (walker.instanceGoverned, walker.governing);
 //   - strict-attribute-unresolved and attribute-ldt: refused here on a "valid"
 //     reading, through attributeGovernanceDiverges, which says why no other
 //     element reaches them;
@@ -369,31 +367,40 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // type's {attribute uses} (cvc-complex-type clause 2.2):
 //
 //   - jsonsrc presents an attribute under a use of the type its element's
-//     members are classified under — the one its "$type" member names where
-//     that resolves, a named type X, and otherwise the type of the
-//     declaration D its element was classified by (jsonsrc's
-//     walker.classifyingType) — or, where no use carries the key, under the
-//     one namespace that type's {attribute wildcard} enumerates
-//     (walker.wildcardMember). Wherever that type governs the element, the
-//     second is ·attributed to· that wildcard, and
+//     members are classified under — where its "$type" member names a type
+//     X, the one jsonsrc's walker.instanceGoverned settles, X itself or the
+//     type of a declaration D, and otherwise the type of the declaration D
+//     its element was classified by (declaredElement.object) — or, where no
+//     use carries the key, under the one namespace that type's {attribute
+//     wildcard} enumerates (walker.wildcardMember). Wherever that type
+//     governs the element, the second is ·attributed to· that wildcard, and
 //     subtreeGate.wildcardAttribute refuses it where the wildcard is strict
 //     and the name ·resolves· to no top-level declaration, and where a base's
 //     use of the name gives it a non-·absent· ·locally declared type·: so the
 //     strict and the lacks conditions bind every D, local ones included, and
 //     every X;
-//   - where a "$type" names X, X governs wherever it ·overrides· the type a
-//     ·governing element declaration· supplies, and wherever the element has
-//     neither that nor a ·locally declared type· (key-governing-type-elem
-//     clause 8); where X does not ·override· a declaration's type, the walk
-//     charges cvc-elt clause 4 (walk.instanceOverride), and no "valid"
+//   - where a "$type" names X, jsonsrc classifies the element under the type
+//     T walker.instanceGoverned settles: X at the root, which ·overrides· its
+//     declaration's type or is charged cvc-elt clause 4
+//     (walk.instanceOverride); below it, the ·governing type definition·
+//     every type that may govern the parent gives the element wherever its
+//     verdict stands uncharged — X where it ·overrides· the ·locally declared
+//     type· L ·without limitation·, or where L is ·absent· and no top-level
+//     declaration X fails to ·override· is there (key-governing-type-elem
+//     clauses 6 and 8), and L where X does not ·override· L and an {open
+//     content} may take the element (clause 7) — and X where every reading
+//     charges the element, under cvc-elt clause 4 or cvc-complex-type clause
+//     5 (walk.instanceOverride, walk.locallyDeclaredType), so no "valid"
 //     reading stands, whatever the element's descendants are classified
-//     under; and jsonsrc declines the "$type" wherever a non-·absent·
-//     ·locally declared type· could govern instead (clauses 6 and 7): under
-//     a non-skip {open content} of the parent's classifying type where the
-//     name has one, and under a parent that type may not govern (walker.localType,
-//     walker.governs). Where the "$type" names none, the walk charges cvc-attribute or
-//     records it unevaluated (execJSONCase's xsi-type bullet), and the members are
-//     classified under D's type, which governs;
+//     under. jsonsrc declines the "$type" where those types settle on two or
+//     the mapping bounds none. So T governs wherever the verdict stands
+//     uncharged, and T is X, a named type visited here, or L, the {type
+//     definition} of a declaration the content model of a type on the
+//     parent's type's {base type definition} chain contains (key-ldt-elem),
+//     which anyDeclaration visits. Where the "$type" names none, the walk
+//     charges cvc-attribute or records it unevaluated (execJSONCase's
+//     xsi-type bullet), and the members are classified under D's type, which
+//     governs;
 //   - with no "$type", D's type governs the root, a child under an element particle
 //     (cos-element-consistent gives same-named contained declarations one
 //     type), and a child jsonsrc names, under a wildcard or a type with none,

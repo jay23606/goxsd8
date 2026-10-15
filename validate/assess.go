@@ -759,7 +759,8 @@ func (w *walk) locallyDeclaredType(content *contentCheck, child Element, g gover
 // definition·, which may be a {type table} selection, where sameDeclaredType
 // is sound only for two declarations' {type definition}s. It is not unified
 // with it, because the export would carry a precondition only one caller
-// meets.
+// meets. jsonsrc's sameType is the third copy, under sameDeclaredType's
+// precondition: check the other two when editing any one.
 //
 // It is clause 5's "the same as" for a child's ·governing type
 // definition· a and its ·locally declared type· b. Named types are one

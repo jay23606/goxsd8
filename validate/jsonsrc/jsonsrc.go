@@ -62,8 +62,8 @@ func WithURI(uri string) Option {
 // attribute use carry, an attribute member after a child member or repeated,
 // an attribute member whose value is null, an object or an array, a "$type"
 // or "$xmlns" member out of its leading place or of the wrong shape, a
-// "$type" on an element an {open content} may take where its name has a
-// ·locally declared type·, any other "$"-prefixed reserved member, a nested
+// "$type" whose element's ·governing type definition· the types that may
+// govern its parent do not settle, any other "$"-prefixed reserved member, a nested
 // array, a declaration with a {type table}; the package doc lists them all).
 // A decline names the arm it is not, and is never a silent drop or a guessed
 // mapping: a member the mapping cannot name is not part of the document the
@@ -294,13 +294,13 @@ func (w *walker) keyName(key string, sc *scope, loc xsderr.Loc) (keyName, error)
 }
 
 // object is what an object-valued element's members are classified against,
-// read once per element from the type walker.classifyingType chose — its
-// declaration's {type definition}, or the type its "$type" names: the owner's
-// expanded name, the child element declarations the type contains, the type's
-// {attribute uses}, its element wildcards and {attribute wildcard}, whether
-// its {content type} is simple, the type itself where its {open content} is
-// not skip, and whether the type is known to govern the owner. A simple type
-// contains none and has none.
+// read once per element from the type declaredElement.object chose — its
+// declaration's {type definition}, or, under a "$type", the type
+// walker.instanceGoverned settles: the owner's expanded name, the child
+// element declarations the type contains, the type's {attribute uses}, its
+// element wildcards and {attribute wildcard}, whether its {content type} is
+// simple, and the types that may govern the owner. A simple type contains
+// none and has none.
 type object struct {
 	owner     xsd.QName
 	contained []xsd.ElementDeclaration
@@ -319,24 +319,12 @@ type object struct {
 	// names whose expanded name no top-level declaration carries (bareElement),
 	// which has no type to classify a member against.
 	undeclared bool
-	// open is the type, where its {content type} has an {open content} whose
-	// {wildcard}'s {process contents} is not skip, and nil otherwise: a child
-	// that {open content} may take carries no "$type" where its name has a
-	// ·locally declared type· within the type (walker.localType).
-	open *xsd.ComplexType
-	// governs is the type the members are classified under being the owner's
-	// ·governing type definition· wherever the owner's verdict stands
-	// uncharged (walker.governs). A child of an owner it is false for carries
-	// no "$type" (walker.localType).
-	governs bool
-}
-
-// reattributes reports whether o's type has an element wildcard whose
-// {process contents} is not skip, a Wildcard {term} or its {open content}
-// one: a child matched to a contained declaration may be ·attributed to· it
-// instead of to the declaration's particle.
-func (o *object) reattributes() bool {
-	return slices.ContainsFunc(o.elementWildcards, func(wc xsd.Wildcard) bool { return wc.ProcessContents() != xsd.ProcessSkip })
+	// governing is the type the members are classified under, then every
+	// other type that may be the owner's ·governing type definition· wherever
+	// its verdict stands uncharged (walker.governing); nil where the mapping
+	// cannot bound that set, or the owner has no declaration. A child's
+	// "$type" is settled against each of them (walker.instanceGoverned).
+	governing []xsd.TypeDefinition
 }
 
 // member is one key's classification, a closed sum of two arms: an
@@ -385,20 +373,38 @@ func (bareElement) classified()     {}
 func (d declaredElement) elementName() xsd.QName { return d.decl.Name() }
 func (b bareElement) elementName() xsd.QName     { return b.name }
 
+// object classifies e's members under the type that governs e wherever its
+// verdict stands uncharged: where e carries an xsi:type typ naming a type
+// (instanceType), the one walker.instanceGoverned settles, which then alone
+// may govern e; and otherwise d's {type definition} (declaredType), beside
+// the others walker.governing finds.
 func (d declaredElement) object(w *walker, e *element, typ *attribute, parent *object, loc xsderr.Loc) (*object, error) {
-	td, instance, err := w.classifyingType(d.decl, e, typ, loc)
+	declared, err := w.declaredType(d.decl, loc)
 	if err != nil {
 		return nil, err
 	}
-	o := w.object(e.name, td)
-	o.governs = w.governs(d, e.name, instance, parent)
+	if typ != nil {
+		if instance, ok := w.instanceType(e, typ.value); ok {
+			td, err := w.instanceGoverned(e, typ, instance, parent)
+			if err != nil {
+				return nil, err
+			}
+			o := w.object(e.name, td)
+			o.governing = []xsd.TypeDefinition{td}
+			return o, nil
+		}
+	}
+	o := w.object(e.name, declared)
+	o.governing = w.governing(e.name, declared, parent)
 	return o, nil
 }
 
 // object is the empty object a bareElement's value classifies against: {}
 // maps, and every member declines (walker.wildcardMember), those after a
 // "$type" included — whatever type it names, the element has no declaration
-// for it to stand beside.
+// for it to stand beside. No member being classified under any type, its
+// "$type" is settled against none (walker.instanceGoverned), and no type is
+// bounded for it to govern (object.governing).
 func (b bareElement) object(*walker, *element, *attribute, *object, xsderr.Loc) (*object, error) {
 	return &object{owner: b.name, undeclared: true}, nil
 }
@@ -768,7 +774,7 @@ func isReserved(key string) bool { return len(key) > 0 && key[0] == '$' }
 // namespace declarations or the xsi:type. RULED permanent by #2615: no spec
 // text orders an element's attributes, so the decline is never a charge, and
 // reading the two first is what lets the members after them be classified
-// under the type "$type" names, resolved through the bindings "$xmlns" makes,
+// under the type the "$type" decides, resolved through the bindings "$xmlns" makes,
 // without holding the object (STYLE P4), as members.key's marker says of an
 // attribute member after a child.
 func (w *walker) reserved(key string, loc xsderr.Loc) error {
@@ -878,9 +884,9 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 
 // objectElement builds an object-valued element from its value v, in the
 // parent's members cursor in (nil for the root): its scope, v's, its "$type"
-// (typeMember), vetted by localType, then its attribute members
-// (attributes), each classified under the type its members are
-// (elementMember.object), and a cursor over the rest.
+// (typeMember), then its attribute members (attributes), each classified
+// under the type its members are (elementMember.object), and a cursor over
+// the rest.
 func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, in *members) (*element, error) {
 	e := &element{w: w, name: m.elementName(), loc: loc, scope: v.scope}
 	typ, tok, tokAt, err := w.typeMember(e, v.next, v.nextLoc)
@@ -890,11 +896,6 @@ func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, in *mem
 	var up *object
 	if in != nil {
 		up = in.object
-	}
-	if typ != nil && up != nil {
-		if err := w.localType(up, e, typ); err != nil {
-			return nil, err
-		}
 	}
 	o, err := m.object(w, e, typ, up, v.loc)
 	if err != nil {
@@ -920,7 +921,7 @@ func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, in *mem
 // the token after it, a key or the object's close, and its location.
 //
 // Reading the two first is what lets the members after them be classified
-// under the type "$type" names, and "$type" resolve against the bindings
+// under the type the "$type" decides, and "$type" resolve against the bindings
 // "$xmlns" makes, without holding any of the document (STYLE P4). A "$type"
 // before a "$xmlns", a repeat of either, and either after another member are
 // left to walker.entry, which declines them (walker.reserved): no spec text
@@ -996,18 +997,8 @@ func (w *walker) xmlns(key string) ([]binding, error) {
 	}
 }
 
-// classifyingType is the type definition the members of e, an element under
-// decl, are classified under, tokLoc locating its object, and whether it is
-// the one e's xsi:type names: decl's {type definition}, which must resolve,
-// or, where e carries an xsi:type typ whose lexical names a type
-// (instanceType), that ·instance-specified type definition·. The second is
-// taken whether or not it ·overrides· the type the engine would otherwise
-// assess e under: where it does not, the engine assesses the members under
-// that type and charges cvc-elt clause 4 where a ·governing element
-// declaration· supplied it, and they are still the members of the type
-// "$type" names. Where a ·locally declared type· could supply it instead,
-// uncharged (key-governing-type-elem clause 7), localType declined the
-// "$type" before this was reached.
+// declaredType is decl's {type definition}, which must resolve, tokLoc
+// locating the object classified under it.
 //
 // It DECLINES a {type definition} that does not resolve.
 //
@@ -1020,18 +1011,12 @@ func (w *walker) xmlns(key string) ([]binding, error) {
 // records — so no schema document reaches either; and under lax assessment
 // the members would classify against no type, the bareElement case, whose
 // verdicts depend on the namespace chosen, as #2634's grounding found.
-func (w *walker) classifyingType(decl xsd.ElementDeclaration, e *element, typ *attribute, tokLoc xsderr.Loc) (xsd.TypeDefinition, bool, error) {
+func (w *walker) declaredType(decl xsd.ElementDeclaration, tokLoc xsderr.Loc) (xsd.TypeDefinition, error) {
 	declared, ok := w.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
-		return nil, false, w.declinef(tokLoc, "the {type definition} of %s does not resolve; its members cannot be classified", decl.Name())
+		return nil, w.declinef(tokLoc, "the {type definition} of %s does not resolve; its members cannot be classified", decl.Name())
 	}
-	if typ == nil {
-		return declared, false, nil
-	}
-	if instance, ok := w.instanceType(e, typ.value); ok {
-		return instance, true, nil
-	}
-	return declared, false, nil
+	return declared, nil
 }
 
 // instanceType is the top-level type definition an xsi:type of e whose value
@@ -1050,110 +1035,290 @@ func (w *walker) instanceType(e *element, lexical string) (xsd.TypeDefinition, b
 	return w.schema.ResolvedType(xsd.TypeDefinitionRef{Name: xsd.QName{Space: space, Local: local}})
 }
 
-// governs reports whether the type the members of the element name, under d,
-// are classified under is its ·governing type definition· wherever its
-// verdict stands uncharged — instance being that type's coming from its
-// "$type" — given parent, the object it is a member of (nil for the root).
-// It is true for the root, which d or an xsi:type ·overriding· d's type
-// governs, cvc-elt clause 4 being charged otherwise. Below the root it needs
-// the parent's own type to govern the parent (parent.governs), and then:
-//
-//   - with an xsi:type naming the type, localType having let it through: the
-//     type ·overrides· whatever else would govern, or cvc-elt clause 4 is
-//     charged, or no declaration and no ·locally declared type· is there and
-//     the type governs (key-governing-type-elem clause 8);
-//   - with d a declaration the parent's type contains: false where that type
-//     has a non-skip element wildcard (object.reattributes) and a top-level
-//     declaration of the name exists, which may govern the element in d's
-//     place once it is ·attributed to· that wildcard (key-governing-ed
-//     clauses 3 and 4) with no charge where its type is ·validly
-//     substitutable· for d's (cvc-complex-type clause 5); an {open content}
-//     with no such declaration leaves the ·locally declared type·, which is
-//     d's type (key-ldt-elem case 2, cos-element-consistent);
-//   - with d the top-level declaration a wildcard names: false where the
-//     name has a ·locally declared type· within the parent's type under a
-//     non-skip {open content}, which governs in d's place
-//     (key-governing-ed clause 4.3, key-governing-type-elem clause 7).
-//
-// It is over-approximate in the declining direction: false wherever another
-// type may govern, whether or not one does.
-func (w *walker) governs(d declaredElement, name xsd.QName, instance bool, parent *object) bool {
-	if parent == nil {
-		return true
-	}
-	if !parent.governs {
-		return false
-	}
-	if instance {
-		return true
-	}
-	if d.named {
-		return parent.open == nil || !w.locallyDeclared(*parent.open, name)
-	}
-	if !parent.reattributes() {
-		return true
-	}
-	_, global := w.schema.Element(name)
-	return !global
-}
-
-// localDeclarer is the one method of *xsd.Schema the mapping reads beyond
+// governor is the two methods of *xsd.Schema the mapping reads beyond
 // validate.SchemaView: xsd.Schema.LocallyDeclaredElementType, key-ldt-elem's
-// base-chain walk, which validate's walk governs an {open content} child by.
-// Reading it through this capability keeps one encoding of that walk (STYLE
-// T4) without widening SchemaView's exported surface.
-type localDeclarer interface {
+// base-chain walk, and xsd.Schema.ValidlySubstitutable, key-val-sub-type,
+// which validate's walk settles ·override· by (walk.instanceOverride,
+// walk.localGovernance). Reading them through this capability keeps one
+// encoding of each (STYLE T4) without widening SchemaView's exported surface.
+// Under a view without it, which validate.Validator.Schema never returns, the
+// mapping bounds no type that may govern an element below the root
+// (walker.governing), and every "$type" there declines
+// (walker.instanceGoverned).
+type governor interface {
 	LocallyDeclaredElementType(within xsd.ComplexType, name xsd.QName) (xsd.TypeDefinition, bool)
+	ValidlySubstitutable(sub, super xsd.TypeDefinition, blocked []xsd.DerivationMethod) (bool, error)
 }
 
-// locallyDeclared reports whether name has a non-·absent· ·locally declared
-// type· within t (key-ldt-elem), as the engine reads it. A schema view
-// without the capability, which validate.Validator.Schema never returns,
-// answers true: the mapping cannot rule one out, and declines.
-func (w *walker) locallyDeclared(t xsd.ComplexType, name xsd.QName) bool {
-	ld, ok := w.schema.(localDeclarer)
-	if !ok {
-		return true
-	}
-	_, local := ld.LocallyDeclaredElementType(t, name)
-	return local
-}
+// anyTypeRef names ·xs:anyType·, the type a ·laxly assessed· element is
+// validated against (key-lva).
+var anyTypeRef = xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}}
 
-// localType vets the xsi:type typ of e, a child of the object parent. It
-// DECLINES typ, whatever it names, where the type the parent's members are
-// classified under is not known to govern the parent (parent.governs, from
-// walker.governs), and where that type P has an {open content} whose
-// {wildcard} is not skip (parent.open) and e's expanded name has a ·locally
-// declared type· within P (locallyDeclared, key-ldt-elem).
+// governing is every type that may be the ·governing type definition· of an
+// element named name, carrying no "$type" that names a type, wherever its
+// verdict stands uncharged, given classified, the type its members are
+// classified under, and parent, the object it is a member of (nil for the
+// root): classified, then what each type P that may govern the parent
+// (parent.governing) may give it. The root has a ·governing element
+// declaration·, the one classified is read off.
 //
-// Such an e may be ·attributed to· that {open content}, which the mapping
-// cannot tell from a particle without running the content model. It then has
-// no ·governing element declaration· (key-governing-ed clause 4.3), and the
-// ·locally declared type· L governs it unless the type typ names ·overrides·
-// L (key-governing-type-elem clauses 6 and 7), with no cvc-elt clause 4
-// charge. The mapping classifies e's members under the type typ names
-// (classifyingType), so where that type does not ·override· L, e's attributes
-// and its descendants would be classified under one type and assessed under
-// another, uncharged; validate.SchemaView cannot ask ·override·. Where P may
-// not govern the parent, the type that does may have such an {open content},
-// so the "$type" declines there too.
+// Under a complex P the element may be ·attributed to· an element particle, a
+// ·wildcard particle· or P's {open content}, which the mapping cannot tell
+// apart without running P's content model, so each attribution contributes:
 //
-// GAP(jsonsrc): a "$type" on an element a non-skip {open content} may take,
-// whose name has a ·locally declared type· within the type, declines, and so
-// does one under a parent the mapping cannot show its classifying type
-// governs, where the engine assesses the XML twin under the ·governing type
-// definition·. Owned by #2647, the lift that classifies under the ·governing
-// type definition·.
-func (w *walker) localType(parent *object, e *element, typ *attribute) error {
-	if !parent.governs {
-		return w.declinef(typ.loc, "the \"$type\" member of %s: the type the members of %s are classified under may not govern it, and the one that does may give %s a ·locally declared type· under an {open content}, which governs it unless the type \"$type\" names ·overrides· it (key-governing-type-elem clauses 6 and 7); the mapping does not ask ·override·",
-			e.name, parent.owner, e.name)
+//   - the element's ·locally declared type· L within P (key-ldt-elem), where
+//     it is non-·absent·: an element particle's declaration of the name has
+//     that type (key-governing-ed clause 2, cos-element-consistent), and under
+//     an {open content} it governs (clause 4.3, key-governing-type-elem clause
+//     7);
+//   - under a ·wildcard particle· whose {process contents} is not skip
+//     (particleWildcard), and under a non-skip {open content} where L is
+//     ·absent·, the type walker.resolvedType gives the name: the top-level
+//     declaration's it ·resolves· to (key-governing-ed clauses 3 and 4), or
+//     ·xs:anyType· where it resolves to none (key-lva).
+//
+// A skip wildcard leaves the element ·skipped· (cvc-assess-elt clause 2), and
+// a simple P, or one with no wildcard and no L, charges it (cvc-type clause
+// 3.1.2, cvc-complex-content): neither contributes. It is nil where
+// parent.governing is, where resolvedType gives no type, and where the schema
+// view lacks the governor capability; a "$type" below then declines
+// (walker.instanceGoverned).
+//
+// It is over-approximate in the declining direction: a type is listed wherever
+// an attribution may give it, whether or not one does.
+func (w *walker) governing(name xsd.QName, classified xsd.TypeDefinition, parent *object) []xsd.TypeDefinition {
+	types := []xsd.TypeDefinition{classified}
+	if parent == nil {
+		return types
 	}
-	if parent.open == nil || !w.locallyDeclared(*parent.open, e.name) {
+	g, ok := w.schema.(governor)
+	if !ok || parent.governing == nil {
 		return nil
 	}
-	return w.declinef(typ.loc, "the \"$type\" member of %s: the {open content} of the type of %s may take it, and its name has a ·locally declared type· there, which governs it unless the type \"$type\" names ·overrides· it (key-governing-type-elem clauses 6 and 7); the mapping does not ask ·override·",
-		e.name, parent.owner)
+	for _, p := range parent.governing {
+		ct, ok := p.(xsd.ComplexType)
+		if !ok {
+			continue
+		}
+		ldt, local := g.LocallyDeclaredElementType(ct, name)
+		if local {
+			types = withType(types, ldt)
+		}
+		if !w.particleWildcard(ct) && (local || !openContent(ct)) {
+			continue
+		}
+		resolved, ok := w.resolvedType(name)
+		if !ok {
+			return nil
+		}
+		types = withType(types, resolved)
+	}
+	return types
+}
+
+// resolvedType is the type a wildcard's ·attribution· gives an element named
+// name that carries no xsi:type: the {type definition} of the top-level
+// declaration its name ·resolves· to (key-governing-ed clauses 3 and 4), or
+// ·xs:anyType· where it resolves to none (key-lva). It is false where that
+// declaration carries a {type table}, whose selection turns on the element's
+// attributes (key-selected-type clause 1), and where the type does not
+// resolve.
+func (w *walker) resolvedType(name xsd.QName) (xsd.TypeDefinition, bool) {
+	var ref xsd.TypeDefinitionOrRef = anyTypeRef
+	if d, ok := w.schema.Element(name); ok {
+		if _, table := d.TypeTable(); table {
+			return nil, false
+		}
+		ref = d.TypeDefinition()
+	}
+	return w.schema.ResolvedType(ref)
+}
+
+// particleWildcard reports whether t's content model contains a Wildcard
+// {term} whose {process contents} is not skip: a ·wildcard particle· an
+// element matched to a contained declaration may be ·attributed to· instead,
+// which a skip one leaves ·skipped·.
+func (w *walker) particleWildcard(t xsd.ComplexType) bool {
+	return slices.ContainsFunc(w.schema.ContainedWildcards(t), func(wc xsd.Wildcard) bool { return wc.ProcessContents() != xsd.ProcessSkip })
+}
+
+// openContent reports whether t's {content type} has an {open content} whose
+// {wildcard}'s {process contents} is not skip.
+func openContent(t xsd.ComplexType) bool {
+	ec, ok := t.ContentType().(xsd.ElementContent)
+	return ok && ec.OpenContent != nil && ec.OpenContent.Wildcard().ProcessContents() != xsd.ProcessSkip
+}
+
+// withType is types with t appended, unless one of them is t already
+// (sameType).
+func withType(types []xsd.TypeDefinition, t xsd.TypeDefinition) []xsd.TypeDefinition {
+	if slices.ContainsFunc(types, func(u xsd.TypeDefinition) bool { return sameType(u, t) }) {
+		return types
+	}
+	return append(types, t)
+}
+
+// sameType reports whether a and b are one type definition: equal expanded
+// names, or, both anonymous and complex, one {context}, which is the only
+// identity an anonymous complex type has — validate's sameType reading. Two
+// anonymous simple types are never reported the same, which only adds
+// declines (walker.instanceGoverned).
+//
+// It is the third copy of one identity predicate, with validate's sameType and
+// xsd's sameDeclaredType: check the other two when editing any one. Its
+// operands are a declaration's {type definition} or a named instance type —
+// {type table}s decline — so it carries sameDeclaredType's precondition, not
+// validate's weaker one. It is not unified, because an export would have this
+// package as its only consumer.
+func sameType(a, b xsd.TypeDefinition) bool {
+	if a.Name() != (xsd.QName{}) || b.Name() != (xsd.QName{}) {
+		return a.Name() == b.Name()
+	}
+	ca, ok := a.(xsd.ComplexType)
+	if !ok {
+		return false
+	}
+	cb, ok := b.(xsd.ComplexType)
+	if !ok {
+		return false
+	}
+	xa, ok := ca.Context()
+	if !ok {
+		return false
+	}
+	xb, ok := cb.Context()
+	if !ok {
+		return false
+	}
+	return xa.ID() == xb.ID()
+}
+
+// instanceGoverned is the type the members of e are classified under where
+// its xsi:type typ names instance: the ·governing type definition· e takes
+// wherever its verdict stands uncharged. At the root, which has a ·governing
+// element declaration·, that is instance, which ·overrides· its type or is
+// charged under cvc-elt clause 4. Below it, it is the one type instanceUnder
+// settles on under every type that may govern the parent, parent.governing,
+// those that charge e left out, and instance where every one charges it.
+//
+// It DECLINES typ where parent.governing is nil, the mapping bounding no type
+// that may govern the parent, and where two of those types settle on two
+// types (sameType). It declines too where ·override· is not decided, an error
+// of xsd.Schema.ValidlySubstitutable unreachable for a finalized Schema, which
+// the engine declines for the XML twin as well (walk.instanceOverride,
+// walk.localGovernance), so no marker tracks it.
+//
+// GAP(jsonsrc): a "$type" declines where the types that may govern its
+// parent — each the one an ·attribution· of the parent or of an ancestor
+// gives, which the mapping does not compute without running a content model
+// — settle on two ·governing type definitions· for it, and where the mapping
+// bounds no such type, an ancestor a wildcard may ·attribute· to a top-level
+// declaration carrying a {type table}; the engine assesses the XML twin under
+// the type the actual ·attribution· gives. Owned by #2666, the issue
+// filed for this remainder.
+func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeDefinition, parent *object) (xsd.TypeDefinition, error) {
+	if parent == nil {
+		return instance, nil
+	}
+	g, ok := w.schema.(governor)
+	if !ok || parent.governing == nil {
+		return nil, w.declinef(typ.loc, "the \"$type\" member of %s: the mapping bounds no type that may govern %s, so the type governing %s is not settled",
+			e.name, parent.owner, e.name)
+	}
+	var settled xsd.TypeDefinition
+	for _, p := range parent.governing {
+		td, uncharged, err := w.instanceUnder(g, p, e.name, instance)
+		if err != nil {
+			return nil, w.declinef(typ.loc, "the \"$type\" member of %s: whether the type it names ·overrides· the one %s would otherwise take could not be settled: %v",
+				e.name, e.name, err)
+		}
+		if !uncharged {
+			continue
+		}
+		if settled == nil {
+			settled = td
+			continue
+		}
+		if !sameType(settled, td) {
+			return nil, w.declinef(typ.loc, "the \"$type\" member of %s: the types that may govern %s give %s two ·governing type definitions·, as an ·attribution· the mapping does not compute decides (key-governing-type-elem clauses 6 to 8)",
+				e.name, parent.owner, e.name)
+		}
+	}
+	if settled == nil {
+		return instance, nil
+	}
+	return settled, nil
+}
+
+// instanceUnder is the ·governing type definition· an element named name
+// whose xsi:type names instance takes under p, a type that may govern its
+// parent, and true; or false where every ·attribution· p may give it charges
+// it, the element particle's, the ·wildcard particle·'s and the {open
+// content}'s alike:
+//
+//   - with a non-·absent· ·locally declared type· L within p (key-ldt-elem):
+//     instance where it ·overrides· L ·validly substitutable without
+//     limitation· (key-overrides clause 2; no blocking keyword is passed, and
+//     L's own {prohibited substitutions} join inside
+//     xsd.Schema.ValidlySubstitutable), as the engine settles it for an {open
+//     content}'s child (walk.localGovernance). An element particle's
+//     declaration has L's type, and instance ·overrides· it under the
+//     declaration's {disallowed substitutions} too or cvc-elt clause 4 is
+//     charged; a ·wildcard particle·'s top-level declaration is ·overridden·
+//     by instance or clause 4 is charged. Where instance does not ·override·
+//     L: L under a non-skip {open content} (key-governing-ed clause 4.3 leaves
+//     no declaration to charge clause 4 against, key-governing-type-elem
+//     clause 7), and false otherwise — an element particle charges cvc-elt
+//     clause 4, and a ·wildcard particle· clause 4 or, where instance governs,
+//     cvc-complex-type clause 5;
+//   - with L ·absent·: false where the name ·resolves· to a top-level
+//     declaration with no {type table}, whose {type definition} instance does
+//     not ·override· under its {disallowed substitutions} — a wildcard's
+//     ·attribution· makes it the ·governing element declaration·
+//     (key-governing-ed clauses 3 and 4), and cvc-elt clause 4 is charged —
+//     and instance otherwise, which then ·overrides· the type that
+//     declaration selects, or is charged, or governs with no declaration
+//     (key-governing-type-elem clause 8).
+//
+// Under a simple p it is false: the element is charged as its child (cvc-type
+// clause 3.1.2). The error is ValidlySubstitutable's.
+func (w *walker) instanceUnder(g governor, p xsd.TypeDefinition, name xsd.QName, instance xsd.TypeDefinition) (xsd.TypeDefinition, bool, error) {
+	ct, ok := p.(xsd.ComplexType)
+	if !ok {
+		return nil, false, nil
+	}
+	if ldt, local := g.LocallyDeclaredElementType(ct, name); local {
+		overrides, err := g.ValidlySubstitutable(instance, ldt, nil)
+		if err != nil {
+			return nil, false, err
+		}
+		if overrides {
+			return instance, true, nil
+		}
+		if openContent(ct) {
+			return ldt, true, nil
+		}
+		return nil, false, nil
+	}
+	d, ok := w.schema.Element(name)
+	if !ok {
+		return instance, true, nil
+	}
+	if _, table := d.TypeTable(); table {
+		return instance, true, nil
+	}
+	declared, ok := w.schema.ResolvedType(d.TypeDefinition())
+	if !ok {
+		return instance, true, nil
+	}
+	overrides, err := g.ValidlySubstitutable(instance, declared, d.DisallowedSubstitutions())
+	if err != nil {
+		return nil, false, err
+	}
+	if !overrides {
+		return nil, false, nil
+	}
+	return instance, true, nil
 }
 
 // scalarLexical is the lexical form of a scalar token — a string's decoded
@@ -1199,7 +1364,7 @@ func (w *walker) nilled(name xsd.QName, loc, tokLoc xsderr.Loc, sc *scope) *elem
 }
 
 // object is what an object-valued element named owner classifies its members
-// against, from td, the type classifyingType chose: a complex type's
+// against, from td, the type declaredElement.object chose: a complex type's
 // contained declarations, {attribute uses}, element wildcards and {attribute
 // wildcard}; a simple type has none, so every member of its object is a child
 // no wildcard names (wildcardMember) and an empty object is an element with
@@ -1215,9 +1380,6 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 		case xsd.ElementContent:
 			if ct.OpenContent != nil {
 				o.elementWildcards = append(o.elementWildcards, ct.OpenContent.Wildcard())
-				if ct.OpenContent.Wildcard().ProcessContents() != xsd.ProcessSkip {
-					o.open = &t
-				}
 			}
 		}
 		if aw, ok := t.AttributeWildcard(); ok {

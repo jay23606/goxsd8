@@ -290,7 +290,7 @@ This is ordered for a `/develop` session: take the highest row you can start.
      `instance` cluster any single ruling would free, and `vc002.v1`, the last
      assertion decline.
    - #2081, the wild062.n3 loss. Its lift must also re-examine jsonsrc's
-     `walker.governs` and `walker.localType` (its body says so).
+     `walker.governing` and `walker.instanceGoverned` (its body says so).
    - #1885, #1790 and #2022.
    - The branch deletions listed under Branch namespace.
 

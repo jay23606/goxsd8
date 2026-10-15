@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The governed group's schema, for the validate/jsonsrc "$type" arm under
+     an {open content}. x has the ·locally declared type· L, an optional
+     child k and an attribute a, under p's lax {open content}, and under
+     pb's, where the declaration blocks extension; p's and pb's sequences
+     take one x at most, so a second x is the {open content}'s. Xe extends L
+     with the attribute b; Xo restricts L, dropping k; X, unrelated to L, has
+     the attribute k. Local declarations are qualified. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:goxsd8:json:governed" xmlns="urn:goxsd8:json:governed"
+           elementFormDefault="qualified">
+  <xs:complexType name="L">
+    <xs:sequence>
+      <xs:element name="k" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="Xe">
+    <xs:complexContent>
+      <xs:extension base="L">
+        <xs:attribute name="b" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="Xo">
+    <xs:complexContent>
+      <xs:restriction base="L">
+        <xs:sequence/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="X">
+    <xs:attribute name="k" type="xs:string"/>
+  </xs:complexType>
+  <xs:element name="p">
+    <xs:complexType>
+      <xs:openContent mode="interleave">
+        <xs:any processContents="lax"/>
+      </xs:openContent>
+      <xs:sequence>
+        <xs:element name="x" type="L" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pb">
+    <xs:complexType>
+      <xs:openContent mode="interleave">
+        <xs:any processContents="lax"/>
+      </xs:openContent>
+      <xs:sequence>
+        <xs:element name="x" type="L" minOccurs="0" block="extension"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

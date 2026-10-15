@@ -159,7 +159,7 @@
   </testGroup>
   <testGroup name="type">
     <annotation>
-      <documentation>A "$xmlns" member leading an object binds prefixes for the element and its descendants; a "$type" member after it is the element's xsi:type: {"item":{"$xmlns":{"t":"urn:x"},"$type":"t:Derived"}} is &lt;item xmlns:t="urn:x" xsi:type="t:Derived"/&gt;. The members after "$type" are classified under the type it names wherever that resolves.</documentation>
+      <documentation>A "$xmlns" member leading an object binds prefixes for the element and its descendants; a "$type" member after it is the element's xsi:type: {"item":{"$xmlns":{"t":"urn:x"},"$type":"t:Derived"}} is &lt;item xmlns:t="urn:x" xsi:type="t:Derived"/&gt;. The members after "$type" are classified under the type that governs the element: at the root, the type it names wherever that resolves; below it, the "governed" group says.</documentation>
     </annotation>
     <schemaTest name="type">
       <schemaDocument xlink:href="type.xsd"/>
@@ -199,6 +199,43 @@
       </annotation>
       <instanceDocument xlink:href="qname-unbound.i.json"/>
       <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
+  <testGroup name="governed">
+    <annotation>
+      <documentation>The members after a "$type" are classified under the type that governs the element: on an element an {open content} takes, whose name has a locally declared type L, the type "$type" names where it overrides L validly substitutable without limitation, and L where it does not, with no cvc-elt charge (key-governing-type-elem clauses 6 and 7). Each case's x is the second, the open content's.</documentation>
+    </annotation>
+    <schemaTest name="governed">
+      <schemaDocument xlink:href="governed.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
+    <instanceTest name="governed-overriding.v">
+      <annotation>
+        <documentation>Xe overrides L, so b, Xe's own attribute, and k are classified under it.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="governed-overriding.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="governed-local.v">
+      <annotation>
+        <documentation>X does not override L, so L governs x, uncharged, and k is L's child; classified under X, k would be X's attribute, which L does not carry.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="governed-local.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="governed-overriding.i">
+      <annotation>
+        <documentation>expects cvc-complex-type: Xo overrides L and governs x, and k, a child of L that Xo drops, is classified under Xo as a child, which Xo's empty {content type} does not admit (clause 1.1).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="governed-overriding.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+    <instanceTest name="governed-blocked.v">
+      <annotation>
+        <documentation>x's declaration blocks extension, but the open content's x has no governing element declaration, so Xe overrides L without limitation and b is Xe's attribute (key-overrides clause 2).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="governed-blocked.v.json"/>
+      <expected validity="valid"/>
     </instanceTest>
   </testGroup>
   <testGroup name="wildcard">

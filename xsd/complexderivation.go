@@ -1024,7 +1024,9 @@ func sameTypeDefinition(a, b TypeDefinition) bool {
 // type identical to its base true.
 //
 // validate's sameType is its twin across the package boundary, the same two
-// arms under a weaker operand precondition: check the other when editing either.
+// arms under a weaker operand precondition, and validate/jsonsrc's sameType is
+// a third copy under this one's precondition: check the other two when editing
+// any one.
 func sameDeclaredType(a, b TypeDefinition) bool {
 	if sameTypeDefinition(a, b) {
 		return true
