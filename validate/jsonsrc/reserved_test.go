@@ -728,7 +728,7 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // governed through the top-level g's {type table} (walker.resolvedType's
 // marker, #2669). In the second the second yt is governed by the top-level
 // yt's Tt, whose element particle x carries one (walker.declarationType's
-// marker, #2630); its members are classified under Ta, whose x carries none.
+// marker, #2693); its members are classified under Ta, whose x carries none.
 func TestAncestryTypeDeclines(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl

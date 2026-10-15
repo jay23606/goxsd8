@@ -8,6 +8,9 @@ goxsd8-json/child/json/child-content.i pass
 goxsd8-json/child/json/child-stray.i pass
 goxsd8-json/child/json/child.i pass
 goxsd8-json/child/json/child.v pass
+goxsd8-json/cta/json/cta-type.i pass
+goxsd8-json/cta/json/cta.i pass
+goxsd8-json/cta/json/cta.v pass
 goxsd8-json/governed/json/governed-blocked.v pass
 goxsd8-json/governed/json/governed-local.v pass
 goxsd8-json/governed/json/governed-overriding.i pass

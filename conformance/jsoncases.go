@@ -117,38 +117,30 @@ func newJSONExec() laneExecutor {
 //     nillableErrorType, which says why no other route reaches it; the walk
 //     charges cvc-type clause 3.1.3 for an element ·xs:error· governs that is
 //     not ·nilled·;
-//   - type-table-whitespace: unrepresentable while jsonsrc declines a
-//     declaration carrying a {type table} that it classifies an element by,
-//     the top-level one a wildcard's child, or the child of a type with no
-//     wildcard, is named for included. A child jsonsrc matched to a contained
-//     declaration that a top-level declaration governs in its place has none
-//     either: cos-element-consistent's wildcard condition gives the two
-//     equivalent {type table}s. A child either names with no declaration,
-//     ·laxly assessed· or governed by a ·locally declared type·, has no {type
-//     table} to select through. A child classified under the declarations of
-//     the type T jsonsrc settles for its parent's "$type" is governed by them
-//     wherever T governs the parent, and T governs it wherever the parent's
-//     verdict stands uncharged: jsonsrc settles T as the ·governing type
-//     definition· the grandparent's governing type gives the parent, read
-//     off the grandparent's ·attribution·, and as the type the "$type" names
-//     where every reading charges the parent, and declines the "$type" where
-//     the mapping determines no type governing the grandparent
-//     (walker.instanceGoverned, walker.governing);
+//   - type-table-whitespace: unrepresentable, the gate's reading of the
+//     encoding/xml loss that refusal stands for having no counterpart here.
+//     jsonsrc presents each attribute's [[normalized value]] itself, a JSON
+//     string's characters unchanged (walker.attributes), and the walk's
+//     ctaAttributes hands a {test} that value, xsi:type's included, so every
+//     value a {test} reads is the [[normalized value]] whatever it holds;
+//     the json lane never runs subtreeGate;
 //   - strict-attribute-unresolved and attribute-ldt: refused here on a "valid"
 //     reading, through attributeGovernanceDiverges, which says why no other
 //     element reaches them;
 //   - undeclared-root: unrepresentable, jsonsrc naming the root only by a
 //     top-level declaration;
 //   - recorded in Result.Unevaluated by the walk: type-table-undecided
-//     (key-cta-ta-select), type-unresolved (cvc-elt clause 1, charged
-//     instead for an ·absent· substitution group head), attribute-type
-//     (cvc-complex-type clause 4 for a ·defaulted attribute·, the one use
-//     whose absent attribute's type the walk reads, and cvc-attribute clause
-//     3 for a present attribute, validate's walk.declaredAttribute, which no
-//     schema document reaches: §3.2.2.2 types a typeless declaration
-//     xs:anySimpleType, and src-resolve refuses a type= naming a complex
-//     type), and content-matcher (cvc-complex-content, at each unmatched element
-//     [[child]] or, with none, at the element: validate's
+//     (key-cta-ta-select, validate's walk.conditionallySelected, at every
+//     element whose declaration's {type table} jsonsrc maps an object, scalar
+//     or null value under, jsonsrc computing no selection of its own),
+//     type-unresolved (cvc-elt clause 1, charged instead for an ·absent·
+//     substitution group head), attribute-type (cvc-complex-type clause 4 for a
+//     ·defaulted attribute·, the one use whose absent attribute's type the walk
+//     reads, and cvc-attribute clause 3 for a present attribute, validate's
+//     walk.declaredAttribute, which no schema document reaches: §3.2.2.2 types a
+//     typeless declaration xs:anySimpleType, and src-resolve refuses a type=
+//     naming a complex type), and content-matcher (cvc-complex-content, at each
+//     unmatched element [[child]] or, with none, at the element: validate's
 //     contentCheck.sequenceEnd);
 //   - charged by the walk: element-child (cvc-type clause 3.1.2, cvc-complex-type clauses
 //     1.1 and 1.2, a child jsonsrc names under a simple type or simple or empty content
@@ -204,15 +196,21 @@ func execJSONCase(backend value.Backend, c caseSpec) (Status, refusal) {
 
 // nillableErrorType reports whether schema has an element declaration D —
 // one anyDeclaration reaches — whose {nillable} is true and whose {type
-// definition} is ·xs:error·. It is the condition, over the schema alone,
+// definition}, or a type its {type table} can select (typeSlots), is
+// ·xs:error·, which e-props-correct clause 7 admits as a selectable type
+// whatever the declared one is. It is the condition, over the schema alone,
 // without which refuseErrorType cannot arise in an infoset jsonsrc builds:
 // §3.16.7.3 says an item ·xs:error· governs "will be invalid", and the walk
 // charges that as cvc-type clause 3.1.3 only for an element that is not
 // ·nilled·, while a JSON null presents xsi:nil="true" (key-nilled needs
-// D.{nillable} too). The other routes to ·xs:error· stay closed: jsonsrc
-// declines a declaration carrying a {type table}; a wildcard's child, or a
-// wildcard-free type's, governed by a top-level declaration is governed by
-// one of those visited here; one governed by a ·locally declared type· or
+// D.{nillable} too), and a null value under a {type table} maps, the engine
+// selecting the type. The other routes to ·xs:error· stay closed: a child
+// jsonsrc classifies under an element whose type a {type table} selects is
+// governed by a declaration that type contains, which anyDeclaration visits
+// in an anonymous selectable type too, of the one named type jsonsrc's
+// classification read (its walker.classify maps no other); a wildcard's
+// child, or a wildcard-free type's, governed by a top-level declaration is
+// governed by one of those visited here; one governed by a ·locally declared type· or
 // ·laxly assessed· has no declaration, so it is never ·nilled· and the walk
 // charges clause 3.1.3; and an xsi:type naming ·xs:error· is presented only
 // by a "$type" member, which rides an object value and never a null, so its
@@ -232,15 +230,18 @@ func nillableErrorType(schema *xsd.Schema) bool {
 // not know, refusing rather than leaving that arm's declarations unvisited.
 // Those are every declaration jsonsrc can classify an element by: the root's,
 // a contained one, and the top-level one a wildcard's child, or a
-// wildcard-free type's, is named for.
+// wildcard-free type's, is named for; and the one a type a {type table}
+// selects contains, which governs a child jsonsrc classified by another.
 //
 // The types visited are every named one (Schema.Types) and every anonymous
 // one an ownership edge reaches from them, from a top-level declaration, or
 // from a declaration a named model group owns (Schema.ModelGroups): the inline
 // {type definition} of a declaration whose {scope}.{parent} is the type being
-// visited, and an inline {base type definition} (src-expredef clause 1.1).
-// Each anonymous type has one owner, so those edges form a tree rooted at the
-// top-level components and the walk needs no visited set (STYLE D4).
+// visited, an inline Type Alternative {type definition} of a declaration
+// visited (declaresWhere), and an inline {base type definition} (src-expredef
+// clause 1.1). Each anonymous type has one owner, so those edges form a tree
+// rooted at the top-level components and the walk needs no visited set (STYLE
+// D4).
 func anyDeclaration(schema *xsd.Schema, holds func(xsd.ElementDeclaration) bool) bool {
 	for _, d := range schema.Elements() {
 		if declaresWhere(schema, d, holds) {
@@ -261,13 +262,24 @@ func anyDeclaration(schema *xsd.Schema, holds func(xsd.ElementDeclaration) bool)
 }
 
 // declaresWhere reports whether holds answers true for d, or the walk below
-// d's inline Complex Type Definition answers true.
+// an inline Complex Type Definition d owns answers true: its {type
+// definition}'s, or a Type Alternative's of its {type table} (typeSlots).
+//
+// An alternative's anonymous type reports d as its {context}, and a
+// declaration it owns names the alternative's own ownership edge as its
+// {scope}.{parent} (xsd.AnonymousComplexTypeScopeParent), so containsWhere
+// visits each declaration it contains but descends into none of their inline
+// types. jsonsrc classifies no element by such a type: its walker.classify
+// maps a child under a selectable type's declaration only where that
+// declaration's {type definition} names a named type.
 func declaresWhere(schema *xsd.Schema, d xsd.ElementDeclaration, holds func(xsd.ElementDeclaration) bool) bool {
 	if holds(d) {
 		return true
 	}
-	t, ok := ownedComplexType(d.TypeDefinition())
-	return ok && containsWhere(schema, t, holds)
+	return slices.ContainsFunc(typeSlots(d), func(ref xsd.TypeDefinitionOrRef) bool {
+		t, ok := ownedComplexType(ref)
+		return ok && containsWhere(schema, t, holds)
+	})
 }
 
 // groupOwnsWhere is anyDeclaration's walk over the declarations a named model
@@ -337,13 +349,31 @@ func containsWhere(schema *xsd.Schema, t xsd.ComplexType, holds func(xsd.Element
 }
 
 // nilledError reports whether d's {nillable} is true and its {type
-// definition} is ·xs:error·.
+// definition}, or a type its {type table} can select, is ·xs:error·.
 func nilledError(schema *xsd.Schema, d xsd.ElementDeclaration) bool {
 	if !d.Nillable() {
 		return false
 	}
-	td, ok := schema.ResolvedType(d.TypeDefinition())
-	return ok && td.Name() == errorTypeName
+	return slices.ContainsFunc(typeSlots(d), func(ref xsd.TypeDefinitionOrRef) bool {
+		td, ok := schema.ResolvedType(ref)
+		return ok && td.Name() == errorTypeName
+	})
+}
+
+// typeSlots is d's {type definition} slot and, where d carries a {type
+// table}, the {type definition} slot of each type it can select: each
+// {alternatives} member's, then the {default type definition}'s
+// (key-cta-select).
+func typeSlots(d xsd.ElementDeclaration) []xsd.TypeDefinitionOrRef {
+	slots := []xsd.TypeDefinitionOrRef{d.TypeDefinition()}
+	table, ok := d.TypeTable()
+	if !ok {
+		return slots
+	}
+	for _, alt := range append(table.Alternatives(), table.DefaultTypeDefinition()) {
+		slots = append(slots, alt.TypeDefinition())
+	}
+	return slots
 }
 
 // ownedComplexType is the anonymous Complex Type Definition ref owns (its
@@ -359,13 +389,14 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 }
 
 // attributeGovernanceDiverges reports whether schema has an element
-// declaration D — one anyDeclaration reaches — whose {type definition} does
-// not resolve, or a type T — D's {type definition} or a named one
-// (Schema.Types) — that wildcardDiverges holds for. It is the condition, over
-// the schema alone, without which neither refuseStrictAttribute nor
-// refuseAttributeLDT can arise in an infoset jsonsrc builds, both refusals
-// sitting at an attribute that matches none of its element's governing
-// type's {attribute uses} (cvc-complex-type clause 2.2):
+// declaration D — one anyDeclaration reaches — whose {type definition}, or a
+// type its {type table} can select (typeSlots), does not resolve, or a type T
+// — one of those or a named one (Schema.Types) — that wildcardDiverges holds
+// for. It is the condition, over the schema alone, without which neither
+// refuseStrictAttribute nor refuseAttributeLDT can arise in an infoset
+// jsonsrc builds, both refusals sitting at an attribute that matches none of
+// its element's governing type's {attribute uses} (cvc-complex-type clause
+// 2.2):
 //
 //   - jsonsrc presents an attribute under a use of the type its element's
 //     members are classified under — where its "$type" member names a type
@@ -379,7 +410,11 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     and the name ·resolves· to no top-level declaration, and where a base's
 //     use of the name gives it a non-·absent· ·locally declared type·: so the
 //     strict and the lacks conditions bind every D, local ones included, and
-//     every X;
+//     every X. Where D carries a {type table} and no "$type" names a type, the
+//     type the table selects governs instead, and jsonsrc maps a key only
+//     where that type classifies it alike (walker.classify): the attribute is
+//     under its use of the name or the one namespace its {attribute wildcard}
+//     enumerates, so the conditions bind every type a table can select too;
 //   - where a "$type" names X, jsonsrc classifies the element under the type
 //     T walker.instanceGoverned settles: X at the root, which ·overrides· its
 //     declaration's type or is charged cvc-elt clause 4
@@ -402,7 +437,7 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     which anyDeclaration visits. Where the "$type" names none, the walk
 //     charges cvc-attribute or records it unevaluated (execJSONCase's
 //     xsi-type bullet), and the members are classified under D's type, which
-//     governs;
+//     governs, or the type D's {type table} selects does, as below;
 //   - with no "$type", D's type governs the root, a child under an element particle
 //     (cos-element-consistent gives same-named contained declarations one
 //     type), and a child jsonsrc names, under a wildcard or a type with none,
@@ -412,7 +447,19 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     type, and a wildcard-named one by a base's contained declaration's type
 //     where that is non-·absent·: that declaration is visited here too, and
 //     the child carries attributes presented under the top-level D its name
-//     resolves to, or none;
+//     resolves to, or none. Where D carries a {type table}, the type it
+//     selects, visited here, governs in place of D's type wherever D is the
+//     ·governing element declaration·, and a child jsonsrc matched to a
+//     declaration D's type contains is governed, under an element particle,
+//     by the declaration of its name the selected type contains, visited here
+//     (anyDeclaration), whose {type definition} is the named type D's own
+//     declaration of it refers to (jsonsrc's alike); the ·locally declared
+//     type· an {open content} gives is D's {type definition} still;
+//   - which leaves a child with no "$type" that jsonsrc matched to a
+//     contained D carrying a {type table} but ·attributed to· a strict or lax
+//     Wildcard, governed by the top-level G its name ·resolves· to:
+//     cos-element-consistent gives G a {type table} ·equivalent· to D's,
+//     which selects the type D's would, one visited here;
 //   - which leaves a child with no "$type" that jsonsrc matched to a
 //     contained D but ·attributed to· a strict or lax Wildcard, governed by
 //     the top-level G its name ·resolves· to. The walk charges
@@ -427,8 +474,10 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 func attributeGovernanceDiverges(schema *xsd.Schema) bool {
 	g := subtreeGate{schema: schema}
 	declared := anyDeclaration(schema, func(d xsd.ElementDeclaration) bool {
-		td, ok := schema.ResolvedType(d.TypeDefinition())
-		return !ok || wildcardDiverges(g, td)
+		return slices.ContainsFunc(typeSlots(d), func(ref xsd.TypeDefinitionOrRef) bool {
+			td, ok := schema.ResolvedType(ref)
+			return !ok || wildcardDiverges(g, td)
+		})
 	})
 	return declared || slices.ContainsFunc(schema.Types(), func(td xsd.TypeDefinition) bool { return wildcardDiverges(g, td) })
 }

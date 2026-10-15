@@ -165,6 +165,19 @@
 //     "$type" rides an object value only: a scalar or null element carries no
 //     xsi:type. On an element with a declaration it declines where the
 //     mapping determines no type governing the parent (Declines).
+//   - An object value under a declaration carrying a {type table} is
+//     classified under the declaration's {type definition}, and each member
+//     maps only where every type the table can select — each alternative's
+//     {type definition} and the {default type definition}'s — classifies it
+//     alike: an attribute or a declaration-less child of one expanded name, or
+//     a child under declarations of one expanded name, one named type and no
+//     {type table}. The mapping computes no ·selected type definition·
+//     (key-selected-type, key-cta-select): the engine selects it from the
+//     attributes the mapping presents, xsi:type included, and assesses the
+//     element under it, and the infoset is the one the declaration's type
+//     alone gives. Its "$type" arm reads no table, the type it names
+//     ·overriding· the selected one or being charged cvc-elt clause 4. A
+//     scalar or null value classifies no member.
 //   - No DTD-shaped declaration exists in JSON, so the adapter does not
 //     implement [validate.UnparsedEntities] and every ·ENTITY value· fails
 //     cvc-simple-type clause 3, as that interface's doc states.
@@ -200,7 +213,9 @@
 // resolves to, for one, or, under an {open content}, the ·locally declared
 // type· a base's declaration of the name gives it — the type a "$type" below
 // it is settled under — and the engine assesses the infoset built under the
-// type the mapping classified by, attributes included. One with a "$type" is
+// type the mapping classified by, attributes included; where its declaration
+// carries a {type table}, it is governed by the type the table selects, which
+// classifies its members alike ("The mapping"). One with a "$type" is
 // classified under the type that governs it wherever its verdict stands
 // uncharged, as "The mapping" says.
 //
@@ -211,7 +226,7 @@
 // Each entry below whose XML twin the engine assesses is tracked by a
 // GAP(jsonsrc) marker at the function that declines it — rootMember,
 // childNamed, useNamed, wildcardMember, classify, members.key, reserved,
-// typeTable, instanceGoverned, resolvedType, declarationType and declaredType;
+// instanceGoverned, resolvedType, declarationType and declaredType;
 // one more at classify tracks the mapping's own choice of a declaration or use
 // over a wildcard, under "The mapping". A repeated attribute member, an
 // attribute member whose value is null, an object or an array, an array item
@@ -278,21 +293,21 @@
 //     xmlns:prefix attribute declares one), binds a prefix twice, binds "xml"
 //     or "xmlns", or binds a non-empty prefix to "";
 //   - a "$type" naming a type, below the root, whose parent's ·governing type
-//     definition· the mapping does not determine: where the declaration an
-//     ·attribution· of the parent or of an ancestor gives carries a {type
-//     table}, the top-level one a wildcard or an {open content} resolves the
-//     name to (#2669) or an element particle's under a governing type other
-//     than the one the members are classified under (#2630), and where
-//     [xsd.Schema.ContentMatcher] declines the content model the parent is
-//     attributed by, whose engine twin is walked undecided;
+//     definition· the mapping does not determine: where the root's
+//     declaration, or the one an ·attribution· of the parent or of an
+//     ancestor gives, carries a {type table} and no "$type" between it and
+//     the parent names a type — the top-level one a wildcard or an {open
+//     content} resolves the name to (#2669), and the root's or an element
+//     particle's (#2693) — and where [xsd.Schema.ContentMatcher] declines the
+//     content model the parent is attributed by, whose engine twin is walked
+//     undecided;
 //   - any other "$"-prefixed reserved member, "$" being no XML NameStartChar;
 //   - an array item that is itself an array;
-//   - a matched declaration carrying a {type table}, the top-level one of a
-//     child a wildcard or a wildcard-free type names included: members are
-//     classified under the declared type or the one "$type" names, and the
-//     element's ·selected type definition· is neither — it turns on the
-//     element's attributes and is computed only inside validate. Lifting this
-//     is #2630's;
+//   - a member of an object under a declaration carrying a {type table} that
+//     the declaration's {type definition} and a type the table can select
+//     classify differently, or that one of them declines: the mapping
+//     computes no ·selected type definition·, so it maps only what classifies
+//     alike whichever type is selected (#2693);
 //   - a {type definition} that does not resolve, under an object value.
 //
 // # Locations

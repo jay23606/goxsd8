@@ -347,4 +347,34 @@
       <expected validity="invalid"/>
     </instanceTest>
   </testGroup>
+  <testGroup name="cta">
+    <annotation>
+      <documentation>An object value under a declaration carrying a {type table} maps where its declared type and every type the table can select classify each member alike, and the engine assesses the element under the type the table selects (key-selected-type, key-cta-select). Each case reads otherwise under cta.xsd with tt's {type table} removed: the selection, not the mapping, decides it.</documentation>
+    </annotation>
+    <schemaTest name="cta">
+      <schemaDocument xlink:href="cta.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
+    <instanceTest name="cta.v">
+      <annotation>
+        <documentation>kind "note" selects Item, which admits the child note; Plain, the declared type, has empty content and would not.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="cta.v.json"/>
+      <expected validity="valid"/>
+    </instanceTest>
+    <instanceTest name="cta.i">
+      <annotation>
+        <documentation>expects cvc-complex-content: kind "note" selects Item, whose required note is missing (cvc-complex-type clause 1.4); Plain, the declared type, would hold the element.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="cta.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+    <instanceTest name="cta-type.i">
+      <annotation>
+        <documentation>expects cvc-elt: the {test} reads the xsi:type the "$type" member presents, c:Plain, and selects Item, which Plain does not ·override· (clause 4); Plain, the declared type, it would.</documentation>
+      </annotation>
+      <instanceDocument xlink:href="cta-type.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
 </testSet>

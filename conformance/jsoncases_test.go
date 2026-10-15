@@ -414,20 +414,28 @@ const knownError = `<xs:element name="known" type="xs:error" nillable="true"/>`
 // ·nilled· element {"known":null} maps to, which clause 3.1.3 does not reach.
 func TestJSONExecutorDeclinesNilledErrorType(t *testing.T) {
 	exec := newJSONExec()
-	if st, why := exec(jsonFixture(t, knownError, `{"known":""}`, false)); !st.IsPass() {
-		t.Errorf("an empty element ·xs:error· governs: the walk charges cvc-type clause 3.1.3; the executor must agree with an invalid case (refusal %q)", why)
-	}
-	for _, valid := range []bool{true, false} {
-		st, why := exec(jsonFixture(t, knownError, `{"known":null}`, valid))
-		if st.IsPass() || why != refuseJSONNilledErrorType {
-			t.Errorf("a ·nilled· element ·xs:error· governs, expectValid=%v: %v (refusal %q), want a fail refused as %q", valid, st, why, refuseJSONNilledErrorType)
+	for _, schema := range []string{knownError, knownSelectsError} {
+		if st, why := exec(jsonFixture(t, schema, `{"known":""}`, false)); !st.IsPass() {
+			t.Errorf("an empty element ·xs:error· governs: the walk charges cvc-type clause 3.1.3; the executor must agree with an invalid case (refusal %q)", why)
+		}
+		for _, valid := range []bool{true, false} {
+			st, why := exec(jsonFixture(t, schema, `{"known":null}`, valid))
+			if st.IsPass() || why != refuseJSONNilledErrorType {
+				t.Errorf("a ·nilled· element ·xs:error· governs, expectValid=%v: %v (refusal %q), want a fail refused as %q", valid, st, why, refuseJSONNilledErrorType)
+			}
 		}
 	}
 }
 
+// knownSelectsError declares a {nillable} top-level known of xs:string whose
+// {type table}'s {default type definition} is ·xs:error·, which
+// e-props-correct clause 7 admits: the type it selects for every known.
+const knownSelectsError = `<xs:element name="known" type="xs:string" nillable="true"><xs:alternative type="xs:error"/></xs:element>`
+
 // TestNillableErrorType pins where nillableErrorType finds a {nillable}
-// declaration of ·xs:error·: at the top level, below a top-level
-// declaration's anonymous type, in a named type, in a named model group and
+// declaration of ·xs:error·: at the top level, as its {type definition} or a
+// type its {type table} selects, below a top-level declaration's anonymous
+// type or a Type Alternative's, in a named type, in a named model group and
 // its inner model group, below the anonymous type of a group's declaration,
 // and below a redefined type's declaration (its inline {base type
 // definition}); and that it finds none where xs:error or {nillable} is
@@ -453,6 +461,14 @@ func TestNillableErrorType(t *testing.T) {
 	}{
 		{"top level", knownError, true},
 		{"top level, not nillable", `<xs:element name="known" type="xs:error"/>`, false},
+		{"top level, selected by a {type table}", knownSelectsError, true},
+		{"top level, selected by a {type table}, not nillable", `<xs:element name="known" type="xs:string"><xs:alternative type="xs:error"/></xs:element>`, false},
+		{
+			"local, in a Type Alternative's anonymous type",
+			`<xs:element name="known"><xs:alternative test="@a"><xs:complexType><xs:sequence>` + local +
+				`</xs:sequence></xs:complexType></xs:alternative></xs:element>`,
+			true,
+		},
 		{"local, in a top-level declaration's type", root(local), true},
 		{"local, not nillable", root(notNil), false},
 		{"local, nillable but not xs:error", root(stringNil), false},
@@ -659,6 +675,57 @@ func TestJSONExecutorRefusesInstanceTypeWildcard(t *testing.T) {
 		t.Fatalf("jsonsrc.Validate charges %v, want none", charged)
 	}
 	c := caseSpec{id: "instance-type-wildcard", kind: kindJSON, doc: doc, schemaDoc: schemaDoc, expect: expectValid()}
+	if got, why := newJSONExec()(c); got.IsPass() || why != refuseJSONAttributeGovernance {
+		t.Fatalf("execJSONCase = %v (refusal %q), want a fail refused as %q", got, why, refuseJSONAttributeGovernance)
+	}
+}
+
+// tableWildcardSchema declares r of type base, whose {attribute wildcard} is
+// lax and of the target namespace, and whose {type table} selects, where r
+// carries the attribute t:q, an anonymous extension of base whose {attribute
+// wildcard} is strict; no top-level attribute declaration exists.
+const tableWildcardSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="base">
+    <xs:anyAttribute namespace="##targetNamespace" processContents="lax"/>
+  </xs:complexType>
+  <xs:element name="r" type="t:base">
+    <xs:alternative test="@t:q">
+      <xs:complexType>
+        <xs:complexContent>
+          <xs:extension base="t:base">
+            <xs:anyAttribute namespace="##targetNamespace" processContents="strict"/>
+          </xs:extension>
+        </xs:complexContent>
+      </xs:complexType>
+    </xs:alternative>
+  </xs:element>
+</xs:schema>`
+
+// TestJSONExecutorRefusesTypeTableWildcard pins attributeGovernanceDiverges
+// over the types a {type table} can select: jsonsrc names q by base's
+// {attribute wildcard}, as the selected type's names it alike, the selected
+// type governs r, and the walk charges nothing for the
+// strict-attribute-unresolved twin, so the "valid" reading is refused though
+// no declared and no named type has a strict {attribute wildcard}.
+func TestJSONExecutorRefusesTypeTableWildcard(t *testing.T) {
+	backend := strict.New()
+	dir := t.TempDir()
+	schemaDoc, doc, twin := filepath.Join(dir, "s.xsd"), filepath.Join(dir, "i.json"), filepath.Join(dir, "i.xml")
+	writeFixture(t, schemaDoc, tableWildcardSchema)
+	writeFixture(t, doc, `{"r":{"q":"x"}}`)
+	writeFixture(t, twin, `<r xmlns="urn:t" xmlns:t="urn:t" t:q="x"/>`)
+	schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+	if perr != nil {
+		t.Fatalf("assembling tableWildcardSchema: %v", perr)
+	}
+	if why := assessedSubtreeRoot(backend, schema, report, twin); why != refuseStrictAttribute {
+		t.Fatalf("assessedSubtreeRoot = %q, want %q: the twin does not have the shape the test claims", why, refuseStrictAttribute)
+	}
+	if charged := chargedRules(t, schema, backend, doc); charged != nil {
+		t.Fatalf("jsonsrc.Validate charges %v, want none", charged)
+	}
+	c := caseSpec{id: "table-wildcard", kind: kindJSON, doc: doc, schemaDoc: schemaDoc, expect: expectValid()}
 	if got, why := newJSONExec()(c); got.IsPass() || why != refuseJSONAttributeGovernance {
 		t.Fatalf("execJSONCase = %v (refusal %q), want a fail refused as %q", got, why, refuseJSONAttributeGovernance)
 	}

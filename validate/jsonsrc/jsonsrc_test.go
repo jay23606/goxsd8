@@ -189,11 +189,10 @@ func TestArrayMemberIsRepeatedChildren(t *testing.T) {
 	}
 }
 
-// declinesSchema adds to order's shapes the three a key cannot be mapped
+// declinesSchema adds to order's shapes the two a key cannot be mapped
 // through: two child declarations of one local name in two namespaces (an
-// unqualified local a, and a reference to the top-level urn:t a), a lax ##any
-// wildcard, which fixes no namespace for a top-level w it would admit, and a
-// child declaration with a {type table}.
+// unqualified local a, and a reference to the top-level urn:t a), and a lax
+// ##any wildcard, which fixes no namespace for a top-level w it would admit.
 const declinesSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:t" xmlns:t="urn:t">
   <xs:element name="r">
@@ -201,9 +200,6 @@ const declinesSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
       <xs:sequence>
         <xs:element name="a" type="xs:string" minOccurs="0"/>
         <xs:element ref="t:a" minOccurs="0"/>
-        <xs:element name="tt" minOccurs="0" type="xs:anyType">
-          <xs:alternative test="@k" type="xs:string"/>
-        </xs:element>
         <xs:element name="s" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
         <xs:element name="c" minOccurs="0">
           <xs:complexType>
@@ -244,10 +240,6 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:2: ", `root member "$type" is a reserved member`},
 		{"key of two expanded names", `{"r":{"a":"1"}}`,
 			"jsonsrc: instance.json:1:7: ", `member "a" names child element declarations of two expanded names in the type of {urn:t}r (a and {urn:t}a)`},
-		{"declaration with a type table", `{"r":{"tt":"1"}}`,
-			"jsonsrc: instance.json:1:7: ", `element tt carries a {type table}; conditional type assignment is not implemented`},
-		{"declaration with a type table, under a $type", `{"r":{"tt":{"$type":"xs:string","k":"x"}}}`,
-			"jsonsrc: instance.json:1:7: ", `element tt carries a {type table}`},
 		{"nested array", `{"r":{"s":[["x"]]}}`,
 			"jsonsrc: instance.json:1:12: ", `an array is an item of the array of member "s"`},
 		{"decline after a mapped sibling", `{"r":{"s":"1","a":"1"}}`,
@@ -950,6 +942,8 @@ func TestWildcardMember(t *testing.T) {
 			`<ref xmlns="urn:w" xmlns:w="urn:w" w:p="5"/>`, complexType},
 		{"element the wildcard rejects as defined", `{"def":{"w":5}}`,
 			`<def xmlns="urn:w"><w>5</w></def>`, content},
+		{"strict element, a top-level declaration with a type table", `{"box":{"tt":"1"}}`,
+			`<box xmlns="urn:w"><tt>1</tt></box>`, none},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
@@ -1029,17 +1023,17 @@ func TestStrayChildMember(t *testing.T) {
 			`<r xmlns="urn:n"><m><x>1</x></m></r>`, complexType},
 		{"unqualified owner", `{"r":{"u":{"x":1}}}`,
 			`<r xmlns="urn:n"><u xmlns=""><x>1</x></u></r>`, content},
+		{"element-only content, a top-level declaration with a type table", `{"r":{"tt":"1"}}`,
+			`<r xmlns="urn:n"><tt>1</tt></r>`, content},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
 }
 
-// TestStrayChildDeclines pins the no-wildcard arm's declines: a stray child no
+// TestStrayChildDeclines pins the no-wildcard arm's decline: a stray child no
 // top-level declaration carries the name of is a bareElement, whose object
 // value maps only empty, so a member of it declines, as a wildcard's
-// undeclared child's does (RULED permanent by #2634); and a top-level
-// declaration of the child's name carrying a {type table} declines, as under
-// a wildcard, under typeTable's GAP(jsonsrc) marker.
+// undeclared child's does (RULED permanent by #2634).
 func TestStrayChildDeclines(t *testing.T) {
 	v := validatorOver(t, strayChildSchema)
 	for _, tc := range []struct {
@@ -1049,8 +1043,6 @@ func TestStrayChildDeclines(t *testing.T) {
 	}{
 		{"member of an undeclared stray child", `{"r":{"x":{"y":1}}}`,
 			"jsonsrc: instance.json:1:12: ", `member "y" of {urn:n}x, an element no contained and no top-level element declaration names; only an empty object maps under it`},
-		{"top-level declaration with a type table", `{"r":{"tt":"1"}}`,
-			"jsonsrc: instance.json:1:7: ", `element {urn:n}tt carries a {type table}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
@@ -1177,8 +1169,6 @@ func TestWildcardMemberDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:11: ", `member "p" names only the {attribute wildcard} of the type of {urn:w}price, whose {content type} is simple`},
 		{"member of an undeclared wildcard child", `{"box":{"u":{"w":5}}}`,
 			"jsonsrc: instance.json:1:14: ", `member "w" of {urn:w}u, an element no contained and no top-level element declaration names; only an empty object maps under it`},
-		{"top-level declaration with a type table", `{"box":{"tt":"1"}}`,
-			"jsonsrc: instance.json:1:9: ", `element {urn:w}tt carries a {type table}`},
 		{"wildcard attribute after a child", `{"att":{"text":"t","p":5}}`,
 			"jsonsrc: instance.json:1:20: ", `attribute member "p" follows a child member of {urn:w}att`},
 	} {

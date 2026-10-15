@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The cta group's schema, for the validate/jsonsrc {type table} arm.
+     Plain has empty content and the attribute kind; Item extends it with a
+     required reference to the top-level note. tt is of type Plain and
+     selects Item where its kind is "note", or where its xsi:type is
+     spelled "c:Plain". Under Plain a key "note" is the child note, named
+     for the top-level declaration (no wildcard), as it is under Item, a
+     contained reference to it, so every key classifies alike and the
+     mapped infoset is the one Plain alone would give: the engine's
+     selection, which the mapping does not compute, decides each verdict. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           targetNamespace="urn:goxsd8:json:cta" xmlns:c="urn:goxsd8:json:cta"
+           elementFormDefault="qualified">
+  <xs:element name="note" type="xs:string"/>
+  <xs:complexType name="Plain">
+    <xs:attribute name="kind" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="Item">
+    <xs:complexContent>
+      <xs:extension base="c:Plain">
+        <xs:sequence>
+          <xs:element ref="c:note"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="tt" type="c:Plain">
+    <xs:alternative test="@kind = 'note'" type="c:Item"/>
+    <xs:alternative test="@xsi:type = 'c:Plain'" type="c:Item"/>
+  </xs:element>
+</xs:schema>
