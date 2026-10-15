@@ -8,22 +8,24 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// typeTableSchema declares, in urn:c, the top-level m of xs:string; T, empty
-// content with the attribute a; S, which extends T with a required reference
-// to m; and U, which extends T with the attribute m. tt is of type T and
-// selects S where its a is "m", or where its xsi:type is spelled "p:T"; tu is
-// of type T and selects U where its a is "u"; r holds an optional reference to
-// tt. Under T a key "m" is the child m (no wildcard: walker.namedChild), as it
-// is under S (a contained reference), and the attribute m under U. V holds an
-// optional n of xs:string, an optional k of an anonymous type and an optional
-// j of xs:string carrying a {type table}; W restricts V, its n of xs:token
+// typeTableSchema declares, in urn:c, the top-level m of xs:string and k of
+// an anonymous type with the attribute b; T, empty content with the attribute
+// a; S, which extends T with a required reference to m; and U, which extends T
+// with the attribute m. tt is of type T and selects S where its a is "m", or
+// where its xsi:type is spelled "p:T"; tu is of type T and selects U where its
+// a is "u"; r holds an optional reference to tt. Under T a key "m" is the
+// child m (no wildcard: walker.namedChild), as it is under S (a contained
+// reference), and the attribute m under U. V holds an optional, nillable n of
+// xs:string, an optional k of an anonymous type and an optional j of xs:string
+// carrying a {type table}; W restricts V, its n of xs:token and not nillable,
 // and no k or j; X extends V, adding nothing, so it contains V's own n, k and
-// j. tv is of type V and selects W where its a is "w"; tx is of
-// type V and selects X where its a is "x".
+// j. tv is of type V and selects W where its a is "w"; tx is of type V and
+// selects X where its a is "x".
 const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     targetNamespace="urn:c" xmlns:c="urn:c" elementFormDefault="qualified">
   <xs:element name="m" type="xs:string"/>
+  <xs:element name="k"><xs:complexType><xs:attribute name="b"/></xs:complexType></xs:element>
   <xs:complexType name="T"><xs:attribute name="a" type="xs:string"/></xs:complexType>
   <xs:complexType name="S">
     <xs:complexContent><xs:extension base="c:T"><xs:sequence><xs:element ref="c:m"/></xs:sequence></xs:extension></xs:complexContent>
@@ -43,7 +45,7 @@ const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
   <xs:complexType name="V">
     <xs:sequence>
-      <xs:element name="n" type="xs:string" minOccurs="0"/>
+      <xs:element name="n" type="xs:string" minOccurs="0" nillable="true"/>
       <xs:element name="k" minOccurs="0"><xs:complexType><xs:attribute name="b"/></xs:complexType></xs:element>
       <xs:element name="j" type="xs:string" minOccurs="0"><xs:alternative test="@b" type="xs:token"/></xs:element>
     </xs:sequence>
@@ -65,12 +67,14 @@ const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 
 // TestTypeTable pins an element whose declaration carries a {type table}: its
 // members are classified under its declared {type definition}, and alike
-// under every type the table can select (walker.classify), and the engine
-// assesses it under the type the table selects. The rows marked "selected"
-// discriminate the selection: under typeTableSchema with its <xs:alternative>s
-// removed, the first and the particle's first charge cvc-complex-type, and the
-// other three charge nothing. The rest pin behaviour that schema shares. Every
-// row declined before walker.typeTable's decline was lifted.
+// under every type the table can select (walker.alike) — a scalar or null
+// child by its name alone, whatever declarations it is under — a "$type" on
+// its child is settled alike under every one (walker.instanceGoverned), and
+// the engine assesses it under the type the table selects. The rows marked
+// "selected" discriminate the selection: under typeTableSchema with its
+// <xs:alternative>s removed, the first, the particle's first and the "$type"
+// on a child charge cvc-complex-type, and the other four charge nothing. The
+// rest pin behaviour that schema shares.
 func TestTypeTable(t *testing.T) {
 	v := validatorOver(t, typeTableSchema)
 	const c = `xmlns="urn:c" `
@@ -98,20 +102,37 @@ func TestTypeTable(t *testing.T) {
 			`<tu ` + c + `a="u"/>`, none},
 		{"a child whose declaration every selectable type shares, of a named type", `{"tx":{"a":"x","n":"y"}}`,
 			`<tx ` + c + `a="x"><n>y</n></tx>`, none},
+		{"a scalar child under declarations of two types", `{"tv":{"n":"x"}}`,
+			`<tv ` + c + `><n>x</n></tv>`, none},
+		{"a scalar array item under declarations of two types", `{"tv":{"n":["x"]}}`,
+			`<tv ` + c + `><n>x</n></tv>`, none},
+		{"selected: a null child under a declaration the selected type's is not nillable as", `{"tv":{"a":"w","n":null}}`,
+			`<tv ` + c + xsiDecl + ` a="w"><n xsi:nil="true"/></tv>`, []xsderr.Rule{"cvc-elt"}},
+		{"a null child under the declared type's nillable declaration", `{"tv":{"n":null}}`,
+			`<tv ` + c + xsiDecl + `><n xsi:nil="true"/></tv>`, none},
+		{"a child under one declaration of an anonymous type", `{"tx":{"k":{}}}`,
+			`<tx ` + c + `><k/></tx>`, none},
+		{"a child under one declaration of an anonymous type, the extension selected", `{"tx":{"a":"x","k":{"b":"1"}}}`,
+			`<tx ` + c + `a="x"><k b="1"/></tx>`, none},
+		{"a scalar child under one declaration carrying a {type table}", `{"tx":{"j":"y"}}`,
+			`<tx ` + c + `><j>y</j></tx>`, none},
+		{"selected: a \"$type\" on a child of the root", `{"tt":{"a":"m","m":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string"}}}`,
+			`<tt ` + c + `a="m" ` + xsiDecl + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"><m xsi:type="xs:string"/></tt>`, none},
+		{"a \"$type\" on a child of the root, the {default type definition} selected", `{"tt":{"a":"z","m":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string"}}}`,
+			`<tt ` + c + `a="z" ` + xsiDecl + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"><m xsi:type="xs:string"/></tt>`, complexType},
+		{"a \"$type\" on a child of the root overriding under no selectable type", `{"tt":{"m":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:int"}}}`,
+			`<tt ` + c + xsiDecl + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"><m xsi:type="xs:int"/></tt>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
 }
 
-// TestTypeTableDeclines pins the {type table} declines: a member the declared
+// TestTypeTableDeclines pins the {type table} decline of a member the declared
 // type and a selectable type classify differently (walker.classify's
-// GAP(jsonsrc) marker, #2693) — m is the child m under T and the attribute m
-// under U; n is under V's declaration of xs:string and W's of xs:token; and k
-// is under V's one declaration in V and X both, which alike reads no identity
-// of, its type being anonymous, as j is, its declaration carrying a {type
-// table} — and a "$type" on a child of a tabled element, whose ·governing
-// type definition· the mapping does not determine (walker.declarationType's
-// GAP(jsonsrc) marker, #2693), though the engine assesses each XML twin.
+// GAP(jsonsrc) marker, #2696), though the engine assesses each XML twin: m is
+// the child m under T and the attribute m under U; and k, an object, is under
+// V's local declaration of one anonymous type and, W containing no k, under
+// the top-level k of another, whose {context}s differ (oneType).
 func TestTypeTableDeclines(t *testing.T) {
 	v := validatorOver(t, typeTableSchema)
 	for _, tc := range []struct {
@@ -121,18 +142,9 @@ func TestTypeTableDeclines(t *testing.T) {
 		{"a key classified as a child under one type and an attribute under another", `{"tu":{"a":"u","m":"x"}}`,
 			`<tu xmlns="urn:c" a="u" m="x"/>`,
 			`jsonsrc: instance.json:1:16: member "m" of {urn:c}tu is not classified alike under its declaration's {type definition} and every type its {type table} can select`},
-		{"a child under declarations of two types", `{"tv":{"n":"x"}}`,
-			`<tv xmlns="urn:c"><n>x</n></tv>`,
-			`jsonsrc: instance.json:1:8: member "n" of {urn:c}tv is not classified alike`},
-		{"a child under one declaration of an anonymous type", `{"tx":{"k":{}}}`,
-			`<tx xmlns="urn:c"><k/></tx>`,
-			`jsonsrc: instance.json:1:8: member "k" of {urn:c}tx is not classified alike`},
-		{"a child under one declaration carrying a {type table}", `{"tx":{"j":"y"}}`,
-			`<tx xmlns="urn:c"><j>y</j></tx>`,
-			`jsonsrc: instance.json:1:8: member "j" of {urn:c}tx is not classified alike`},
-		{"a \"$type\" on a child of the root", `{"tt":{"a":"m","m":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string"}}}`,
-			`<tt xmlns="urn:c" a="m" ` + xsiDecl + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"><m xsi:type="xs:string"/></tt>`,
-			`jsonsrc: instance.json:1:72: the "$type" member of {urn:c}m: the mapping determines no type that governs {urn:c}tt`},
+		{"a child under declarations of two anonymous types", `{"tv":{"k":{}}}`,
+			`<tv xmlns="urn:c"><k/></tv>`,
+			`jsonsrc: instance.json:1:8: member "k" of {urn:c}tv is not classified alike`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			xres, err := xmlsrc.Validate(v, strings.NewReader(tc.xml), xmlsrc.WithURI("instance.xml"))

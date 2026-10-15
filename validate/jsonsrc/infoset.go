@@ -280,7 +280,7 @@ func (m *members) next() (*element, error) {
 			}
 			if v.tok == json.Delim(']') {
 				if !m.run.items {
-					if _, err := m.w.item(m.object, m.run, m.owner.scope); err != nil {
+					if _, err := m.w.item(m.object, m.run, m.owner.scope, false); err != nil {
 						return nil, err
 					}
 				}
@@ -288,7 +288,7 @@ func (m *members) next() (*element, error) {
 				continue
 			}
 			m.run.items = true
-			child, err := m.w.item(m.object, m.run, v.scope)
+			child, err := m.w.item(m.object, m.run, v.scope, scalarValue(v.tok))
 			if err != nil {
 				return nil, err
 			}
