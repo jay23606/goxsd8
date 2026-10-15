@@ -1888,17 +1888,26 @@ type attributeRun struct {
 }
 
 // runMember is one member walker.attributes reads: its key, read as k, at
-// loc; its value as far as walker.value read it; ms, its classification
+// loc; its value as far as walker.value read it; and ms, its classification
 // under each of the run's live candidates, in their order, nil for an array
-// value, whose items are classified one by one; and name, the attribute it
-// is once the run takes it (walker.extend).
+// value, whose items are classified one by one.
 type runMember struct {
-	key  string
-	k    keyName
-	loc  xsderr.Loc
-	val  value
-	ms   []member
-	name xsd.QName
+	key string
+	k   keyName
+	loc xsderr.Loc
+	val value
+	ms  []member
+}
+
+// attributeName is the expanded name of the attribute m is where the run
+// takes it (walker.extend): the one every candidate that takes it gives it.
+func (m *runMember) attributeName() xsd.QName {
+	for _, x := range m.ms {
+		if a, ok := x.(attributeMember); ok {
+			return a.name
+		}
+	}
+	panic("jsonsrc: attributeName of a member no candidate takes as an attribute")
 }
 
 // child reports whether some live candidate classifies m as no attribute, an
@@ -1922,9 +1931,11 @@ func (m *runMember) attribute() bool {
 // attribute, into the run: the live candidates become those that do, and
 // next the attribute of the name they give it.
 //
-// It DECLINES next where a candidate classifies it as no attribute and r
-// reads no selection (notAlike); where the candidates that take it give it
-// different expanded names; and where its value is not a scalar (notScalar).
+// It DECLINES next where the candidates that take it give it different
+// expanded names (notAlike, where r reads no selection), and where its value
+// is not a scalar (notScalar). One that takes it as no attribute has dropped
+// from the run, where walker.settled let it go on; where r reads no
+// selection, settled declines it first.
 //
 // GAP(jsonsrc): a member of a root whose declaration carries a {type table}
 // declines where the types the table can select take it as attributes of
@@ -1943,14 +1954,14 @@ func (w *walker) extend(r *attributeRun, next *runMember) error {
 		if !ok {
 			continue
 		}
+		if len(live) > 0 && a.name != name && r.table == nil {
+			return w.notAlike(r.owner, next.key, next.loc)
+		}
 		if len(live) > 0 && a.name != name {
 			return w.declinef(next.loc, "member %q of %s is an attribute of the expanded names %s and %s under two types its {type table} can select; the mapping reads one run of attributes",
 				next.key, r.owner.owner, name, a.name)
 		}
 		live, name = append(live, r.live[i]), a.name
-	}
-	if r.table == nil && len(live) < len(r.live) {
-		return w.notAlike(r.owner, next.key, next.loc)
 	}
 	if slices.ContainsFunc(r.attrs, func(a validate.Attribute) bool { return a.Name() == name }) {
 		return w.declinef(next.loc, "attribute member %q repeats in the object of %s; an element carries one attribute of each expanded name", next.key, r.owner.owner)
@@ -1960,7 +1971,6 @@ func (w *walker) extend(r *attributeRun, next *runMember) error {
 		return w.notScalar(r.owner, next.key, next.val.loc)
 	}
 	r.live = live
-	next.name = name
 	r.run = append(r.run, next)
 	r.attrs = append(r.attrs, &attribute{name: name, value: lexical, loc: next.loc})
 	return nil
@@ -2065,7 +2075,8 @@ func (w *walker) agrees(so *object, run []*runMember, next *runMember) (bool, el
 		if err != nil {
 			return false, nil, err
 		}
-		if m != (attributeMember{name: rm.name}) {
+		a, ok := m.(attributeMember)
+		if !ok || a.name != rm.attributeName() {
 			return false, nil, nil
 		}
 	}
