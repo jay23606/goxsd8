@@ -1880,10 +1880,9 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 // before any selection; live, the candidates still reading attributes, owner
 // and each of owner.selectable at the start, less each one that took a member
 // as no attribute (walker.extend) or declined one (walker.candidates); table,
-// the {type table} whose
-// selection settles the run, nil where none does (selection); attrs, the
-// element's attributes so far; and run, the members among them, which the
-// selected type classifies again (walker.agrees).
+// the {type table} whose selection settles the run, nil where none does
+// (selection); attrs, the element's attributes so far; and run, the members
+// among them, which the selected type classifies again (walker.agrees).
 type attributeRun struct {
 	owner *object
 	live  []*object
