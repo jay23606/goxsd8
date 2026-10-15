@@ -565,8 +565,7 @@ func (b bareElement) object(*walker, *element, *attribute, placement, xsderr.Loc
 // table selects: a key that is a child under one type and an attribute under
 // another, and, under an object value, a child under declarations alike does
 // not equate. The mapping computes no [inherited attributes], which a {test}
-// reads beside the element's own (selection). Owned by #TBD-INHERITED
-// (placeholder: owner to be filed), which computes them.
+// reads beside the element's own (selection). Owned by #2699, which computes them.
 //
 // The two-expanded-name decline among the declarations is childNamed's, and
 // the xsi-namespace, two-expanded-name and simple-content declines among the
@@ -1216,7 +1215,7 @@ func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, at plac
 // a "$type" below such an element only where each settles it alike
 // (walker.instanceGoverned); either declines otherwise, where the engine
 // assesses the XML twin under the type the table selects. Owned by
-// #TBD-INHERITED (placeholder: owner to be filed), which computes them.
+// #2699, which computes them.
 func selection(m elementMember, o *object, at placement) *xsd.TypeTable {
 	table, tabled := m.typeTable()
 	if !tabled || len(o.selectable) == 0 || at.parent != nil {
@@ -1598,8 +1597,7 @@ func openContent(t xsd.ComplexType) bool {
 // ancestor's {type table}, below the root, can select settle it on different
 // types, where the engine assesses the XML twin under the one it selects: the
 // mapping computes no [inherited attributes], which a {test} reads beside the
-// element's own (selection). Owned by #TBD-INHERITED (placeholder: owner to be
-// filed), which computes them.
+// element's own (selection). Owned by #2699, which computes them.
 //
 // GAP(jsonsrc): a "$type" declines where the content model of its
 // grandparent's ·governing type definition· is one xsd.Schema.ContentMatcher
@@ -1945,7 +1943,7 @@ func (m *runMember) attribute() bool {
 // those readings may be the only one whose own attributes select a type that
 // classifies the members as it does: the mapping reads one run of attributes
 // and settles it member by member, never reading ahead. Owned by
-// #TBD-READAHEAD (placeholder: owner to be filed).
+// #2700.
 func (w *walker) extend(r *attributeRun, next *runMember) error {
 	var live []*object
 	var name xsd.QName
@@ -2006,7 +2004,7 @@ func (w *walker) extend(r *attributeRun, next *runMember) error {
 // though the engine assesses each XML twin, whichever members it takes as
 // attributes: the mapping names a member an attribute only where the type
 // the root is assessed under classifies it as one, and here none does. Owned
-// by #TBD-NOREADING (placeholder: owner to be filed).
+// by #2701.
 //
 // GAP(jsonsrc): where the engine withholds the type a root's {type table}
 // ·conditionally selects·, a {test} it reaches being outside its §3.12.6
@@ -2014,7 +2012,7 @@ func (w *walker) extend(r *attributeRun, next *runMember) error {
 // Unevaluated under key-cta-ta-select), the members of the root decline
 // unless every type the table can select classifies them alike, where the
 // engine assesses the XML twin under no ·governing type definition·. Owned by
-// #TBD-WITHHELD (placeholder: owner to be filed).
+// #2702.
 func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (*object, elementMember, error) {
 	if r.table == nil {
 		return w.unselected(r, next)
