@@ -18,6 +18,11 @@ type inheritedAttribute struct {
 	value string
 }
 
+// Name and Value are what ctaAttributes reads of the member, as it reads an
+// [Attribute]'s.
+func (a inheritedAttribute) Name() xsd.QName { return a.name }
+func (a inheritedAttribute) Value() string   { return a.value }
+
 // handedDown is the [inherited attributes] of every element [[child]] of e
 // (§3.3.5.6, e-inherited_attributes), where g is e's governance and inherited is
 // e's OWN [inherited attributes]: first e's own attributes that are ·potentially

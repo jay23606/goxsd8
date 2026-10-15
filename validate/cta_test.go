@@ -399,6 +399,57 @@ func TestXSITypeOverridesTheConditionallySelectedType(t *testing.T) {
 	}
 }
 
+// TestConditionallySelectedExport pins [Validator.ConditionallySelected]
+// against the selection the walk makes over the same table: the slot of the
+// first alternative whose {test} is true, the {default type definition}'s
+// where none is or a {test} raises a dynamic error, ok false only where an
+// unevaluable {test} is reached before any success, and the inherited half
+// read behind E's own attributes, shadowed by a same-named one of them.
+func TestConditionallySelectedExport(t *testing.T) {
+	kind := func(v string) Attribute { return &testAttribute{name: local("kind"), value: v} }
+	for _, tc := range []struct {
+		name                  string
+		alts                  []ctaAlt
+		attributes, inherited []Attribute
+		want                  string // the selected slot's type name; "" for ok false
+	}{
+		{"an alternative's {test} true", []ctaAlt{{"@kind = 'book'", "First"}}, []Attribute{kind("book")}, nil, "First"},
+		{"no {test} true", []ctaAlt{{"@kind = 'book'", "First"}}, []Attribute{kind("cd")}, nil, "Fallback"},
+		{"the first true wins", []ctaAlt{{"@kind", "Second"}, {"@kind = 'book'", "First"}}, []Attribute{kind("book")}, nil, "Second"},
+		{"a dynamic error is false", []ctaAlt{{"@kind cast as xs:integer = 3", "First"}}, []Attribute{kind("book")}, nil, "Fallback"},
+		{"an unevaluable {test} before any success", []ctaAlt{{"@kind = 'cd'", "First"}, {"count(@kind) > 0", "Second"}}, []Attribute{kind("book")}, nil, ""},
+		{"an unevaluable {test} behind a success", []ctaAlt{{"@kind = 'book'", "First"}, {"count(@kind) > 0", "Second"}}, []Attribute{kind("book")}, nil, "First"},
+		{"an inherited attribute", []ctaAlt{{"@kind = 'book'", "First"}}, nil, []Attribute{kind("book")}, "First"},
+		{"an inherited attribute shadowed by E's own", []ctaAlt{{"@kind = 'book'", "First"}}, []Attribute{kind("cd")}, []Attribute{kind("book")}, "Fallback"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := ctaSchema(t, tc.alts...)
+			v, err := New(schema, testBackend())
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			d, ok := schema.Element(local("root"))
+			if !ok {
+				t.Fatal("ctaSchema declares no root")
+			}
+			table, _ := d.TypeTable()
+			slot, ok := v.ConditionallySelected(table, tc.attributes, tc.inherited)
+			if tc.want == "" {
+				if ok {
+					t.Fatalf("ConditionallySelected = %v, true; want ok false", slot)
+				}
+				return
+			}
+			if !ok {
+				t.Fatalf("ConditionallySelected = _, false; want the slot naming %s", tc.want)
+			}
+			if ref, isRef := slot.(xsd.TypeDefinitionRef); !isRef || ref.Name != local(tc.want) {
+				t.Errorf("ConditionallySelected = %v, want the slot naming %s", slot, tc.want)
+			}
+		})
+	}
+}
+
 // namedTypeAlternative builds a Type Alternative whose {type definition} is the
 // by-name reference §3.12.2 declare-ta's type= arm yields, failing the test on
 // any rejection. Every fixture in package validate builds that arm; the inline
