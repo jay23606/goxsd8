@@ -171,9 +171,9 @@ func (n ctaNames) resolvesLiteral(lexical string) bool {
 }
 
 // ctaUnresolvedName is the ·expanded name· an UNBOUND prefix resolves to, so
-// that the parse continues far enough to decide whether the rest of the
-// expression is a complete [8] ta-Test — which is the whole of what tells a
-// static error apart from an unsupported construct.
+// that the parse goes on past it as past a resolved one: a static error never
+// fails a parse, and the err:XPST0081 recorded with it is what compileCTATest
+// reports whether or not the rest parses.
 //
 // It never escapes into an evaluable tree: recording the defect and building
 // this name are one step, compileCTATest reports that defect, and
@@ -299,9 +299,11 @@ func (p *ctaParser) recordUnbound(prefix string) {
 // walk reaches first in expression order and not a map's (STYLE D2): `@p:k
 // cast as xs:anyAtomicType` with p unbound is err:XPST0081, not err:XPST0080.
 //
-// The record is PROVISIONAL: compileCTATest keeps it only where the parse then
-// reached the end of a complete [8] ta-Test, because an expression outside the
-// required subset is declined rather than charged, however its names resolve.
+// The record is KEPT whether or not the parse then completes an [8] ta-Test
+// (compileCTATest): §3.12.6 clause 2's Note licenses declining only an
+// expression "containing no static errors", so a later decline does not excuse
+// it (#2631). Only err:XPST0003 for the whole text answers over it
+// ([CTATestStaticError]).
 func (p *ctaParser) record(d ctaDefect) {
 	if p.defect.kind != ctaNoDefect {
 		return
@@ -3098,16 +3100,17 @@ func (p *ctaParser) castableTail(v ctaValue) (ctaValue, bool) {
 // declines the target or castsFrom does not admit the cast.
 //
 // A target castTarget finds to be err:XPST0051 or err:XPST0080 is recorded
-// (ctaParser.record) and the parse goes on, so that [CTATestStaticError] can
-// tell a complete [8] ta-Test carrying that static error from an expression
-// outside the subset, which "unsupported dominates static" declines: §3.12.6
-// clause 2's Note licenses declining only an expression "containing no static
-// errors" (the oracle's #894 ruling). The node built in its place is a
-// STAND-IN, a cast of v to xs:string that castsFrom is not asked about: no
-// façade evaluates a tree whose defect is not ctaNoDefect, so its one job is
-// to let the productions after it parse, and xs:string is a target no
-// comparison over it declines: ctaTypes.comparison declines a pair only over
-// a numeric operand (untypedAgainst, ctaWider, sumCompares).
+// (ctaParser.record) and the parse goes on, as it does past an unbound prefix
+// (ctaUnresolvedName): a static error never fails a parse (compileCTATest),
+// and [CTATestStaticError] reports the record whether or not what follows
+// parses, since §3.12.6 clause 2's Note licenses declining only an expression
+// "containing no static errors" (the oracle's #894 ruling, #2631). The node
+// built in its place is a STAND-IN, a cast of v to xs:string that castsFrom
+// is not asked about: no façade evaluates a tree whose defect is not
+// ctaNoDefect, so its one job is to let the productions after it parse, and
+// xs:string is a target no comparison over it declines: ctaTypes.comparison
+// declines a pair only over a numeric operand (untypedAgainst, ctaWider,
+// sumCompares).
 func (p *ctaParser) singleType(v ctaValue) (ctaCast, bool) {
 	if !p.atName("as") {
 		return ctaCast{}, false

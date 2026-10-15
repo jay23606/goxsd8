@@ -696,6 +696,29 @@ func TestProduceTypeTableCastTargetStaticErrorIsCharged(t *testing.T) {
 	}
 }
 
+// A static error the {test} carries BEFORE a construct this engine declines is
+// charged all the same: §3.12.6 clause 2's Note licenses declining only an
+// expression "containing no static errors", so ta-props-correct clause 2 is
+// charged over the declined text exactly as over a complete ta-Test (#2631).
+func TestProduceTypeTableStaticErrorBeforeADeclineIsCharged(t *testing.T) {
+	for _, tc := range []struct{ test, rule string }{
+		{"count(//p:x) &gt; 1", "err:XPST0081"},
+		{"@k cast as xs:Missing = 't' and count(//x) &gt; 1", "err:XPST0051"},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			_, err := produce(t, wrap("", typeTableTypes+`
+			<xs:element name="e" type="B">
+			  <xs:alternative test="`+tc.test+`" type="T"/>
+			  <xs:alternative type="V"/>
+			</xs:element>`))
+			assertRule(t, err, "ta-props-correct")
+			if rule, ok := xsderr.RuleOf(errors.Unwrap(err)); !ok || string(rule) != tc.rule {
+				t.Errorf("wrapped cause of %v carries rule %q (found %t), want %s", err, rule, ok, tc.rule)
+			}
+		})
+	}
+}
+
 // The CONSTRUCTOR spelling names a function, not a cast target: err:XPST0051
 // and err:XPST0080 are cast-target errors, and a name with no constructor
 // signature is err:XPST0017 at most, which xpath-valid clause 2.2.8 leaves
@@ -725,14 +748,10 @@ func TestProduceTypeTableConstructorTargetIsNotCharged(t *testing.T) {
 // charging one would reject a conforming schema. The withhold that decline
 // costs is validate's, at ·assessment· time, and is not this producer's
 // business.
-//
-// The expression carries an unbound p: too, so this pins the dominance end to
-// end — an unsupported construct is declined and never charged, whatever its
-// names resolve to.
 func TestProduceTypeTableUnsupportedTestIsNotCharged(t *testing.T) {
 	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
 	<xs:element name="e" type="B">
-	  <xs:alternative test="count(//p:x) &gt; 1" type="T"/>
+	  <xs:alternative test="count(//x) &gt; 1" type="T"/>
 	  <xs:alternative type="V"/>
 	</xs:element>`), xsd.QName{Local: "e"})
 	if !present {

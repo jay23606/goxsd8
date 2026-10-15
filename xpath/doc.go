@@ -439,27 +439,28 @@
 // wraps that verdict as its cause so xsderr.RuleOf reads the XPath code
 // off one errors.Unwrap and never off a scraped message.
 //
-// UNSUPPORTED DOMINATES STATIC. An {expression} outside the required
-// subset but inside the full XPath 2.0 grammar is declined and never
-// charged, whatever its names resolve to, because §3.12.6 clause 2's Note
-// lets a processor decline it and never lets one refuse the schema for
-// it. Under-charging is a rejection this engine can take later;
-// over-charging is a false reject now.
+// A DECLINE EXCUSES NO PROVEN STATIC ERROR. §3.12.6 clause 2's Note lets a
+// processor decline only an expression "containing no static errors", so
+// an {expression} outside the required subset is declined uncharged only
+// where the subset parse proved no static error in it; one it proved
+// before the construct it declines at is charged (#2631).
 //
 // The static conditions proven today are err:XPST0003 for a {test} no
 // derivation of the full grammar (xpath20.md A.1) covers, asked of the
-// recognizer only once the subset parser has declined and winning over
-// every static error that parse met; and, in a complete ta-Test, the
-// first in expression order of err:XPST0081 for an unbound prefix and
+// recognizer once the subset parse found anything wrong and winning over
+// every static error that parse met; and otherwise the first in
+// expression order the subset parse reaches, whether or not it then
+// completes a ta-Test, of err:XPST0081 for an unbound prefix and
 // err:XPST0051 or err:XPST0080 for a `cast as` target that is no builtin
 // atomic type, xs:untypedAtomic aside — the schema's own types included,
 // since xpath-valid clause 2.2.5 puts only the built-ins in scope. The
 // parse runs past a failed target on a stand-in cast to xs:string
 // (ctaParser.singleType). Only CTATestStaticError reports any of them:
 // CompileAssertionTest and FacetAssertions decline every one like any
-// other defect. A cast-target err:XPST0051 or err:XPST0080 the parse
-// proved before a later construct declines is withheld with that decline,
-// under the GAP(xpath) at compileCTATest's discard (#2631).
+// other defect. A static error the subset parse never reaches — past the
+// construct it declines at, or in one it never resolves, such as
+// err:XPST0008 for `$value` — is withheld with the decline, under the
+// GAP(xpath) at compileCTATest (#2673).
 //
 // A constructor call naming such a type is withheld, never charged: it
 // names a function, not a cast target. So is err:FONS0004, an unbound
