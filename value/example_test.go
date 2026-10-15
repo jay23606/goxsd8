@@ -2,8 +2,12 @@ package value_test
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 )
 
@@ -62,4 +66,47 @@ func ExampleOverride() {
 	// Output:
 	// decimal -> money(3.14)
 	// string  -> hello
+}
+
+// builtinsOnly is an xsd.TypeResolver that resolves no name: the seeded
+// builtins link their {base type definition} chains by pointer, so a type
+// drawn from builtin.Seed needs no by-name lookup.
+type builtinsOnly struct{}
+
+func (builtinsOnly) Type(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false }
+
+// ExampleValidateLexical reaches the value of a type its backend does not map
+// directly. builtin/strict maps xs:decimal but not xs:integer, so
+// Backend.Mapping answers false for xs:integer; ValidateLexical runs the whole
+// facet pipeline and parses the literal under xs:decimal's mapping, the nearest
+// mapped ancestor. The evaluator is the one package validate passes.
+func ExampleValidateLexical() {
+	backend := strict.New()
+	seeded, err := builtin.Seed(backend)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	var integer *xsd.SimpleType
+	for _, st := range seeded {
+		if st.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "integer"}) {
+			integer = st
+		}
+	}
+
+	_, mapped := backend.Mapping(integer.Name())
+	fmt.Println("mapped directly:", mapped)
+
+	v, err := value.ValidateLexical(backend, builtinsOnly{}, integer, "42", nil, xpath.FacetAssertions(time.Time{}))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	if c, ok := v.(value.Canonical); ok {
+		fmt.Println("value:", c.Canonical())
+	}
+
+	// Output:
+	// mapped directly: false
+	// value: 42
 }

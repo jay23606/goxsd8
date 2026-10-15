@@ -209,17 +209,18 @@ func ChildWithAttributes(name xsd.QName, v TypedValue, attrs TypedAttributes) Ch
 // of the child's string-value (xpath-datamodel §6.2.4), which spans the text
 // of all its descendants and not only its own. Any other type gives [Typed] of
 // a value of EXACTLY the simple type the compile read off it — that type
-// itself, or the {simple type definition} of its simple {content type}. That
-// agreement is the caller's obligation, on the terms [TypedAttributes] states
-// for an attribute's value: validate maps the child's [schema normalized
-// value] under its OWN ·governing type definition· into that simple type,
-// takes a string-value only where that governing type has mixed content too,
-// and withholds the assertion where the child's own type cannot give the arm
-// the compile read or is neither the compiled type nor validly derived from it
-// — which an `instance of` over the child relies on, matching an AtomicType
-// the compiled type derives from without reading the child's own type. A value
-// breaking it — the other arm — is a dynamic error wherever the tree reads it,
-// which [AssertionTest.Evaluate] answers false. The value of a child of a name
+// itself, or the {simple type definition} of its simple {content type} — which
+// [Typed] says how validate maps. That agreement is the caller's obligation,
+// on the terms [TypedAttributes] states for an attribute's value: validate
+// maps the child's [schema normalized value] under its OWN ·governing type
+// definition· into that simple type, takes a string-value only where that
+// governing type has mixed content too, and withholds the assertion where the
+// child's own type cannot give the arm the compile read or is neither the
+// compiled type nor validly derived from it — which an `instance of` over the
+// child relies on, matching an AtomicType the compiled type derives from
+// without reading the child's own type. A value breaking it — the other arm —
+// is a dynamic error wherever the tree reads it, which
+// [AssertionTest.Evaluate] answers false. The value of a child of a name
 // ReadsChild reports false for is never read, so it may be nil whether or not
 // the child is ·nilled·.
 //
@@ -276,6 +277,14 @@ func (tvUntyped) typedValue() {}
 // Typed is the typed value v, an ·actual value· mapped under a type whose
 // typed value is not xs:untypedAtomic. Typed(nil) is nil, so a nil value has
 // one encoding.
+//
+// v is the [value.Value] that [value.ValidateLexical] returns for the [schema
+// normalized value] under the simple type the compile fixed for the node: the
+// type [AttributeTypes] answered for an attribute; for an element below E, the
+// simple type [ElementTypes] answered, or the {simple type definition} of the
+// simple {content type} of the complex type it answered; for `$value`, the
+// {simple type definition} [BindValue] names. That call, with
+// [FacetAssertions](now) as its evaluator, is what package validate passes.
 func Typed(v value.Value) TypedValue {
 	if v == nil {
 		return nil
@@ -302,11 +311,12 @@ func Untyped(lexical string) TypedValue { return tvUntyped{lexical: lexical} }
 // [Untyped] of the attribute's [schema normalized value] exactly when that type
 // is ·special· — xs:anySimpleType or xs:anyAtomicType — and [Typed] of a value
 // of EXACTLY that type otherwise, which the tree holds and converts the value
-// from. That agreement is the caller's obligation, and it is the same one
-// [BindValue] places on `$value`'s value against the {simple type definition}
-// of the content type the test was compiled for. A value breaking it — nil, or
-// the other arm — is a dynamic error wherever the tree reads it, which
-// [AssertionTest.Evaluate] answers false.
+// from, and which [Typed] says how validate maps. That agreement is the
+// caller's obligation, and it is the same one [BindValue] places on `$value`'s
+// value against the {simple type definition} of the content type the test was
+// compiled for. A value breaking it — nil, or the other arm — is a dynamic
+// error wherever the tree reads it, which [AssertionTest.Evaluate] answers
+// false.
 //
 // Unlike [Attributes], it carries no [inherited attributes]: the XDM instance
 // cvc-assertion clause 1.3 builds contains E's own [[attributes]] and nothing
@@ -378,10 +388,10 @@ type ValueBinding struct {
 // normalized value] where it is ·special· — the representation of that value
 // xpath-datamodel §3.3.1.2 fixes, a ·special· type's lexical mapping not being
 // a function (Datatypes §3.2.1.2) — and [Typed] of a value of exactly it
-// otherwise. A list {simple type definition}'s value must carry
-// [value.Listed], whose items are the flattened sequence Datatypes dt-xdmrep
-// makes its XDM representation. A nil v is the empty sequence of clause 2.3.2,
-// so the empty sequence has one encoding.
+// otherwise, which [Typed] says how validate maps. A list {simple type
+// definition}'s value must carry [value.Listed], whose items are the flattened
+// sequence Datatypes dt-xdmrep makes its XDM representation. A nil v is the
+// empty sequence of clause 2.3.2, so the empty sequence has one encoding.
 func BindValue(text string, v TypedValue) ValueBinding { return ValueBinding{text: text, v: v} }
 
 // ContextElement is E, the element information item cvc-xpath makes the
@@ -851,15 +861,16 @@ func (c *Tally) ReadsAttribute(path []xsd.QName, name xsd.QName) bool {
 // name) when the [AssertionTest] being evaluated was compiled, path being the
 // latest report's, on the terms [TypedAttributes] states for an attribute of
 // E — [Untyped] of its [schema normalized value] exactly where that type is
-// ·special·, and [Typed] of a value of EXACTLY that type otherwise. That
-// agreement is the caller's obligation, and a value breaking it — nil, or the
-// other arm — is a dynamic error wherever the tree reads it, which
-// [AssertionTest.Evaluate] answers false. [AttributeTypes] answers statically
-// for a non-empty path, so the attribute's own type can differ from the one
-// compiled: validate maps the attribute's [schema normalized value] under its
-// OWN attribute use's type into the compiled one, and withholds the assertion
-// where its own type is neither the compiled type nor validly derived from
-// it, or, for a ·special· compiled type, is not that type itself.
+// ·special·, and [Typed] of a value of EXACTLY that type otherwise, which
+// [Typed] says how validate maps. That agreement is the caller's obligation,
+// and a value breaking it — nil, or the other arm — is a dynamic error
+// wherever the tree reads it, which [AssertionTest.Evaluate] answers false.
+// [AttributeTypes] answers statically for a non-empty path, so the
+// attribute's own type can differ from the one compiled: validate maps the
+// attribute's [schema normalized value] under its OWN attribute use's type
+// into the compiled one, and withholds the assertion where its own type is
+// neither the compiled type nor validly derived from it, or, for a ·special·
+// compiled type, is not that type itself.
 //
 // A call that breaks the ordering above breaks [Tally]'s obligation, on the
 // terms a report out of pre-order does: one before any report, after E's own
@@ -918,16 +929,17 @@ func (c *Tally) ReadsElementValue(path []xsd.QName) bool {
 // element's path when the [AssertionTest] being evaluated was compiled, on the
 // terms [ChildElements] states for a child's value read TYPED: [Typed] of a
 // value of EXACTLY the simple type the compile read off it — that type, or the
-// {simple type definition} of its simple {content type}. A nil v is a ·nilled·
-// element's empty typed value (xpath-datamodel §6.2.4), as [Child](name, nil)
-// is: it contributes no item, and is no breach. A value of the other arm is a
-// dynamic error wherever the tree reads it, which [AssertionTest.Evaluate]
-// answers false. [ElementTypes] answers statically, so the element's own type
-// can differ from the one compiled: validate maps the element's [schema
-// normalized value] under its OWN ·governing type definition· into the
-// compiled one, and withholds the assertion where its own type is neither the
-// compiled type nor validly derived from it, never testing it against the
-// ·locally declared type· within its parent's own type.
+// {simple type definition} of its simple {content type} — which [Typed] says
+// how validate maps. A nil v is a ·nilled· element's empty typed value
+// (xpath-datamodel §6.2.4), as [Child](name, nil) is: it contributes no item,
+// and is no breach. A value of the other arm is a dynamic error wherever the
+// tree reads it, which [AssertionTest.Evaluate] answers false. [ElementTypes]
+// answers statically, so the element's own type can differ from the one
+// compiled: validate maps the element's [schema normalized value] under its
+// OWN ·governing type definition· into the compiled one, and withholds the
+// assertion where its own type is neither the compiled type nor validly
+// derived from it, never testing it against the ·locally declared type· within
+// its parent's own type.
 //
 // A call while nothing is owed — before any report, after a report of E or
 // of a child of E that nothing below owes, or a second value for one element —

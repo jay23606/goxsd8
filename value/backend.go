@@ -77,7 +77,15 @@ type Mapping struct {
 // produces (see [Ordered], [DigitCounted], …).
 type Backend interface {
 	// Mapping returns the mapping for typ; ok is false when this backend does
-	// not map typ.
+	// not map typ. That is the expected answer for a type the backend does not
+	// map directly, not a fault: package builtin/strict maps only the types its
+	// "Current coverage" section names, so it answers false for xs:integer. The
+	// zero Mapping returned beside ok == false has a nil Parse.
+	//
+	// [ValidateLexical] reaches the value of such a type that is not ·special·
+	// (§4.1): an atomic type's through the governing mapping the [Backend] doc
+	// names, a list's through its {item type definition}, and a union's through
+	// its {member type definitions}.
 	Mapping(typ xsd.QName) (Mapping, bool)
 }
 
