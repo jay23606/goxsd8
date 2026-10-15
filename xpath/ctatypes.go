@@ -210,17 +210,17 @@ func (t ctaTypes) qnameTarget(target *xsd.SimpleType) bool {
 // against — reporting ok false where it decides nothing, which declines an
 // `instance of` over v ([CompileAssertionTest]'s withhold). It is each item's
 // DYNAMIC type, and derived false, for an untyped read (xs:untypedAtomic: an
-// attribute or `$value` whose type is ·special·, a mixed child, `.`), a typed
-// attribute (its type annotation: no xsi:type reaches an attribute, so its
-// {attribute use}'s type is its own), `$value` (Datatypes dt-xdmrep clause 2
-// makes its dynamic type the ·nearest built-in datatype· T2, and every
-// AtomicType itemMatches admits is builtin, so T2 and the {simple type
-// definition} derive from it alike), a cast (its target), fn:count, an F&O
-// function result and a castable or instance-of expression (each its result
-// type), a StringLiteral, and the statically empty `$value`; and for a read of
-// an absent context item or a rooted path, which raises before any item
-// exists. An fn:distinct-values call answers as its operand does, each item
-// keeping its own type (xpath-functions.md §15.1.6).
+// attribute annotated ·special·, a ·special· `$value`, a mixed child, `.`), a
+// typed attribute (its type annotation: no xsi:type reaches an attribute, so
+// the type [AttributeTypes] answered is its own), `$value` (Datatypes
+// dt-xdmrep clause 2 makes its dynamic type the ·nearest built-in datatype·
+// T2, and every AtomicType itemMatches admits is builtin, so T2 and the
+// {simple type definition} derive from it alike), a cast (its target),
+// fn:count, an F&O function result and a castable or instance-of expression
+// (each its result type), a StringLiteral, and the statically empty `$value`;
+// and for a read of an absent context item or a rooted path, which raises
+// before any item exists. An fn:distinct-values call answers as its operand
+// does, each item keeping its own type (xpath-functions.md §15.1.6).
 //
 // For a typed child, through fn:distinct-values too, and for the k-th of them
 // (ctaChildAt), derived is true: each item's dynamic type is item's or derived
@@ -317,17 +317,18 @@ func (t ctaTypes) itemMatches(item ctaStatic, name xsd.QName) (matches, admitted
 // annotationDerives reports derives-from(AT, name) (xpath20.md §2.5.4) for AT
 // the type annotation of the attribute node v, which an [60] AttributeTest's
 // TypeName asks (§2.5.4.5). v is an attribute of E's typed instance
-// (ctaParser.attributeInstanceOf), whose annotation is its {attribute use}'s
-// type, no xsi:type reaching an attribute: a ctaTypedAttr's st, or for a
-// ctaAttr the ·special· type itself, xs:anySimpleType or xs:anyAtomicType —
-// only its typed value is xs:untypedAtomic (xpath-datamodel §3.3.1.2). So no
-// such attribute is annotated xs:untypedAtomic, the annotation of a
-// skip-assessed one: [TypedAttributes] carries only attributes that matched an
-// {attribute use}. derives-from walks AT's {base type definition} chain
-// (ancestor), a user-defined AT's too, which is §2.5.4's
-// implementation-dependent mechanism for an AT outside the in-scope schema
-// definitions; neither ·special· type derives from any name but
-// xs:anySimpleType and, for xs:anyAtomicType, itself.
+// (ctaParser.attributeInstanceOf), whose annotation is the type attrs answered
+// for it ([AttributeTypes]), no xsi:type reaching an attribute: a
+// ctaTypedAttr's st, or for a ctaAttr the ·special· type itself,
+// xs:anySimpleType or xs:anyAtomicType — xs:anySimpleType for one invalid in
+// the partial ·PSVI· (xpath-datamodel §3.3.1.1) — only its typed value is
+// xs:untypedAtomic (§3.3.1.2). So no such attribute is annotated
+// xs:untypedAtomic, the annotation of a skip-assessed one: [TypedAttributes]
+// carries only attributes that matched an {attribute use}. derives-from walks
+// AT's {base type definition} chain (ancestor), a user-defined AT's too, which
+// is §2.5.4's implementation-dependent mechanism for an AT outside the
+// in-scope schema definitions; neither ·special· type derives from any name
+// but xs:anySimpleType and, for xs:anyAtomicType, itself.
 //
 // decided is false where name is neither xs:untypedAtomic nor a simple type in
 // the XSD namespace — a user-defined type, which xpath-valid clause 2.2.5 keeps
@@ -988,7 +989,7 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 //
 // Only the two façades whose ctaFacade.comparesValues is true reach here, the
 // assertion façade (ctaAssertionFacade) and the facet façade (ctaFacetFacade).
-// The untyped operands they build are an attribute whose type is ·special·
+// The untyped operands they build are an attribute annotated ·special·
 // (ctaAssertionFacade.attribute), `$value` over a ·special· type
 // (ctaUntypedValue), a child of mixed content (ctaUntypedChild), `.`
 // (ctaContextAtom), and three that raise before they are compared: the rooted

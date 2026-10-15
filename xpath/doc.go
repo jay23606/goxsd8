@@ -317,8 +317,9 @@
 //	no   yes    no     `instance of` with an AttributeTest over one attribute
 //	                   step of E, `@d` or `./@d`, true where the attribute
 //	                   count is one the indicator admits and the attribute's
-//	                   name and type annotation, its {attribute use}'s type,
-//	                   match it (§2.5.4.5)
+//	                   name and type annotation, the type AttributeTypes
+//	                   answers — xs:anySimpleType for one invalid in the
+//	                   partial PSVI — match it (§2.5.4.5)
 //	no   no     no     an `instance of` whose SequenceType is a KindTest but
 //	                   that AttributeTest; an AttributeTest whose TypeName is
 //	                   user-defined or xs:anyType; `item()`,

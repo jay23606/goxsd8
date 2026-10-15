@@ -49,34 +49,65 @@ const ruleCvcAttribute xsderr.Rule = "cvc-attribute"
 // assembly rather than making either instance check redundant.
 const ruleCvcAu xsderr.Rule = "cvc-au"
 
+// attributeValidity is the [validity] of an attribute information item
+// (Structures §3.2.5.1, sic-a-outcome) as this package settles it: valid where
+// it is locally ·valid· by cvc-attribute (§3.2.4.1), invalid where cvc-attribute
+// clause 3 or 4 was charged, and notKnown where this package declined either
+// clause and so did not decide it. The closed set is named after the PSVI's
+// three values, but its notKnown is this package's withheld verdict and not
+// the PSVI's unassessed one. cvc-au (§3.5.4) never sets it: that rule makes
+// the ELEMENT invalid through cvc-complex-type clause 2.1 and leaves the
+// attribute's [validity] to cvc-attribute alone.
+type attributeValidity uint8
+
+const (
+	// attributeValid is an attribute cvc-attribute holds of.
+	attributeValid attributeValidity = iota
+	// attributeInvalid is an attribute cvc-attribute clause 3 or 4 charged.
+	attributeInvalid
+	// attributeNotKnown is an attribute cvc-attribute clause 3 or 4 declined.
+	attributeNotKnown
+)
+
+// attributeVerdict is one attribute information item E carries that matched an
+// {attribute use} of E's ·governing type definition· (cvc-complex-type clause
+// 2.1), with its [validity] ([walk.matchedAttribute]).
+type attributeVerdict struct {
+	a        Attribute
+	validity attributeValidity
+}
+
 // matchedAttribute settles clause 2.1 for an attribute information item that
 // matched an attribute use, which is where cvc-complex-type sends it: to
 // cvc-attribute against the use's {attribute declaration}
 // ([walk.declaredAttribute]) and to cvc-au against the use itself. Both are
 // charged here, in that order, and both can fire for one attribute — they read
-// two different {value constraint}s.
+// two different {value constraint}s. It reports the attribute's [validity],
+// which cvc-attribute alone decides ([attributeValidity]): a cvc-au charge
+// leaves it valid.
 //
-// A use whose {attribute declaration} does not resolve is declined. It is
-// unreachable on a *xsd.Schema that exists (Phase A charges src-resolve for a
+// A use whose {attribute declaration} does not resolve is declined, notKnown. It
+// is unreachable on a *xsd.Schema that exists (Phase A charges src-resolve for a
 // dangling Ref), and a decline rather than a charge because a resolution that
 // failed says nothing about the attribute. It logs alone: no schema produces it.
 // cvc-au is asked only where cvc-attribute clause 3 was satisfied, the ·actual
 // value· it compares existing only then.
-func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
+func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) attributeValidity {
 	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 	if !resolved {
 		// Unreachable on a *xsd.Schema that exists (see the doc above), so it
 		// logs alone rather than recording an [Unevaluated] no schema can produce.
 		w.logAttribute(a, ruleCvcAttribute, "3", "declined")
-		return
+		return attributeNotKnown
 	}
-	st, valid := w.declaredAttribute(a, e, d)
-	if !valid {
-		return
+	st, validity := w.declaredAttribute(a, e, d)
+	if st == nil {
+		return validity
 	}
 	if f, fixed := useFixed(u); fixed {
 		w.fixedAgreement(a, e, st, f)
 	}
+	return validity
 }
 
 // wildcardAttribute settles key-sva (§3.3.4.6) clause 2 for an
@@ -108,11 +139,13 @@ func (w *walk) wildcardAttribute(a Attribute, e Element, pc xsd.ProcessContents)
 
 // declaredAttribute charges cvc-attribute (§3.2.4.1) clauses 3 and 4 for the
 // attribute information item a against its ·governing attribute declaration·
-// d, and reports the {type definition} clause 3 was satisfied against — false
+// d, and reports the {type definition} clause 3 was satisfied against — nil
 // where clause 3 was charged or declined, leaving no ·actual value· for a later
-// fixed-value agreement to read. It is the one encoding of that assessment,
-// reached from both arms of cvc-complex-type clause 2 ([walk.matchedAttribute]
-// for 2.1, [walk.wildcardAttribute] for 2.2).
+// fixed-value agreement to read — and the attribute's [validity]
+// ([attributeValidity]): invalid where clause 3 or 4 was charged, notKnown
+// where either was declined, valid otherwise. It is the one encoding of that
+// assessment, reached from both arms of cvc-complex-type clause 2
+// ([walk.matchedAttribute] for 2.1, [walk.wildcardAttribute] for 2.2).
 //
 // The assertions facets clause 3's String Valid reaches on the declaration's
 // {type definition} are evaluated inside it, so a failed {test} is part of the
@@ -148,36 +181,37 @@ func (w *walk) wildcardAttribute(a Attribute, e Element, pc xsd.ProcessContents)
 //     tier types as xs:anySimpleType is satisfied, not declined.
 //   - an ·ENTITY value· candidate whose ·validating type· this package cannot
 //     decide, on [walk.entitiesDeclared]'s terms.
-func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclaration) (*xsd.SimpleType, bool) {
+func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclaration) (*xsd.SimpleType, attributeValidity) {
 	st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
 	if !simple {
 		w.declineAttribute(a, ruleCvcAttribute, "3",
 			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition}, which is absent or not a simple type definition, so cvc-attribute clause 3 is undecided",
 			a.Name())
-		return nil, false
+		return nil, attributeNotKnown
 	}
 	decided, verdict := w.stringValid(st, a.Value(), elementContext{owner: e}, a.Loc())
 	if !decided {
 		if w.declineAssertions(verdict, "assessing attribute", a.Name(), a.Loc(), "cvc-attribute clause 3") {
-			return nil, false
+			return nil, attributeNotKnown
 		}
 		w.declineAttribute(a, ruleCvcAttribute, "3",
 			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition} %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-attribute clause 3 is undecided",
 			a.Name(), st.Name())
-		return nil, false
+		return nil, attributeNotKnown
 	}
 	if verdict != nil {
 		w.res.violations = append(w.res.violations, causedBy(ruleCvcAttribute, a.Loc(), verdict,
 			"the ·initial value· of the attribute %s is not ·valid· with respect to its declaration's {type definition} %s, which cvc-attribute clause 3 requires as per String Valid (§3.16.4)",
 			a.Name(), st.Name()))
 		w.logAttribute(a, ruleCvcAttribute, "3", "charged")
-		return nil, false
+		return nil, attributeInvalid
 	}
 	w.logAttribute(a, ruleCvcAttribute, "3", "satisfied")
-	if f, fixed := declarationFixed(d); fixed {
-		w.fixedAgreement(a, e, st, f)
+	f, fixed := declarationFixed(d)
+	if !fixed {
+		return st, attributeValid
 	}
-	return st, true
+	return st, w.fixedAgreement(a, e, st, f)
 }
 
 // instanceTypeResolves charges cvc-attribute (§3.2.4.1) against e's xsi:type
@@ -359,6 +393,11 @@ type fixedConstraint struct {
 // constraint} demands of a present attribute — cvc-attribute clause 4 for the
 // declaration's, cvc-au for the use's — or nothing at all where there is no
 // fixed constraint to agree with, which is the vacuous case both rules state.
+// It reports its outcome as the [attributeValidity] it gives where f is the
+// declaration's: valid where the values agree, invalid where it charges, and
+// notKnown where it declines. Only [walk.declaredAttribute] reads it; the
+// cvc-au call from [walk.matchedAttribute] discards it, since cvc-au never
+// decides the attribute's [validity].
 //
 // The comparison is in the VALUE space and never over lexicals:
 // [value.ConstraintMatches] maps both sides through st's pipeline, the
@@ -406,22 +445,23 @@ type fixedConstraint struct {
 // NOTATION-governed default at its gate 1 (needsContext), even under
 // FinalizeWith, so cos-valid-simple-default never charges it. The comparison
 // declines here until #667 routes those defaults through ValidDefault.
-func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixedConstraint) {
+func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixedConstraint) attributeValidity {
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc, xpath.FacetAssertions(w.now))
 	if !decided {
 		w.declineAttribute(a, f.rule, f.clause,
 			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",
 			a.Name(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause))
-		return
+		return attributeNotKnown
 	}
 	if same {
 		w.logAttribute(a, f.rule, f.clause, "satisfied")
-		return
+		return attributeValid
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(f.rule, a.Loc(),
 		"the ·actual value· of the attribute %s is neither equal nor identical to the {value} of the fixed {value constraint} %q on its %s, which %s requires",
 		a.Name(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause)))
 	w.logAttribute(a, f.rule, f.clause, "charged")
+	return attributeInvalid
 }
 
 // declarationFixed reports D.{value constraint} where its {variety} is fixed —

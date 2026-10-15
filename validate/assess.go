@@ -1052,10 +1052,10 @@ func (w *walk) element(e Element, g governance, mark resultMark, parent *icCheck
 	isNilled := w.nilCheck(e, g)
 	id := w.identityCheck(e, g, parent)
 	w.idAttributes(id)
-	w.attributes(e, g)
+	verdicts := w.attributes(e, g)
 	content := w.contentCheck(e, g, isNilled)
-	asserts := w.compileAssertions(g)
-	w.tallyElement(e, g, up, asserts)
+	asserts := w.compileAssertions(g, verdicts)
+	w.tallyElement(e, g, verdicts, up, asserts)
 	up.collectElement(e, g, isNilled)
 	frame := w.stringValue(e, g, content, up)
 	inner := up.collecting
@@ -1082,7 +1082,7 @@ func (w *walk) element(e Element, g governance, mark resultMark, parent *icCheck
 	w.idElement(id)
 	w.identityExit(id)
 	recorded := w.res.recordedSince(mark)
-	w.keepChild(up.parent, e, g, content, frame, recorded)
+	w.keepChild(up.parent, e, g, verdicts, content, frame, recorded)
 	w.tallyValue(e, g, content, up, recorded)
 }
 
@@ -1184,23 +1184,35 @@ func (w *walk) abstractType(e Element, g governance) {
 // has no ·governing element declaration· ([walk.instanceNilLexical]). Neither
 // charges an undecided e ([governance]), whose governance this package could
 // not decide and whose attributes the true schema may ·skip·.
-func (w *walk) attributes(e Element, g governance) {
+//
+// It returns, in document order, each attribute e carries that matched an
+// {attribute use} (clause 2.1) and whose [validity] cvc-attribute did not
+// settle as valid ([attributeVerdict]): the [validity] of e's attributes in the
+// partial ·PSVI· cvc-assertion clause 1.2 builds, which e's assertions and
+// those of its ancestors read ([walk.compileAssertions],
+// [walk.attributesRead]). An attribute matching no use is not among them: no
+// {test} reads one by its type.
+func (w *walk) attributes(e Element, g governance) []attributeVerdict {
 	w.instanceTypeResolves(e, g)
 	w.instanceNilLexical(e, g)
 	if st := g.simpleType(); st != nil {
 		w.simpleTypeAttributes(e, st)
-		return
+		return nil
 	}
 	ct := g.complexType()
 	attrs := e.Attributes()
+	var verdicts []attributeVerdict
 	for _, a := range attrs {
-		w.attribute(a, e, g)
+		if v, kept := w.attribute(a, e, g); kept {
+			verdicts = append(verdicts, v)
+		}
 	}
 	if ct == nil {
-		return
+		return verdicts
 	}
 	w.requiredAttributeUses(e, attrs, *ct)
 	w.defaultedAttributes(e, attrs, *ct)
+	return verdicts
 }
 
 // simpleTypeAttributes settles cvc-type clause 3.1.1: E.[[attributes]] is
@@ -1249,30 +1261,35 @@ func (w *walk) simpleTypeAttributes(e Element, st *xsd.SimpleType) {
 //
 // e is the attribute's owner, carried for the namespace bindings a QName- or
 // NOTATION-valued lexical resolves against (elementContext).
-func (w *walk) attribute(a Attribute, e Element, g governance) {
+//
+// It reports a's [attributeVerdict] where a matched an {attribute use} (clause
+// 2.1) and cvc-attribute did not settle it valid ([walk.matchedAttribute]), and
+// false for every other a.
+func (w *walk) attribute(a Attribute, e Element, g governance) (attributeVerdict, bool) {
 	governing := g.complexType()
 	if governing == nil && !g.laxlyAssessed() {
 		w.logAttribute(a, "", "", "")
-		return
+		return attributeVerdict{}, false
 	}
 	if isInstanceAttribute(a.Name()) {
 		// Clause 2 excepts xsi:type, xsi:nil, xsi:schemaLocation and
 		// xsi:noNamespaceSchemaLocation (§3.2.7) from its quantifier by name,
 		// so no arm of it applies to one: it is neither charged nor passed.
 		w.logAttribute(a, ruleCvcComplexType, "2", "exempt")
-		return
+		return attributeVerdict{}, false
 	}
 	if governing == nil {
 		w.logAttribute(a, ruleCvcComplexType, "2.2", "satisfied")
 		w.wildcardAttribute(a, e, xsd.ProcessLax)
-		return
+		return attributeVerdict{}, false
 	}
 	u, matched := attributeUseNamed(governing.AttributeUses(), a.Name())
 	if !matched {
 		w.unmatchedAttribute(a, e, *governing)
-		return
+		return attributeVerdict{}, false
 	}
-	w.matchedAttribute(a, e, u)
+	validity := w.matchedAttribute(a, e, u)
+	return attributeVerdict{a: a, validity: validity}, validity != attributeValid
 }
 
 // unmatchedAttribute settles clause 2 for an attribute matching no attribute

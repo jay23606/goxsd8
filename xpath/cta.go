@@ -562,10 +562,11 @@ func (b ctaChildBinding) next(name xsd.QName) []ChildElement {
 // Each façade pairs its own tree with its own input: [CTATest.Evaluate] builds
 // ctaLexicalInput over a tree of ctaAttr nodes, and [AssertionTest.Evaluate]
 // builds ctaTypedInput over a tree of ctaTypedAttr nodes and of ctaAttr nodes
-// for the attributes whose type is ·special·, so a ctaTypedAttr never meets a
-// lexical input. A ctaAttr reads either: every lexical a ctaLexicalInput
-// yields, or each [Untyped] value a ctaTypedInput yields, whose other arm is a
-// breach of [TypedAttributes]' obligation that the node raises on
+// for the attributes annotated ·special·, which an attribute invalid in the
+// partial ·PSVI· is, so a ctaTypedAttr never meets a lexical input. A ctaAttr
+// reads either: every lexical a ctaLexicalInput yields, or each [Untyped]
+// value a ctaTypedInput yields, whose other arm is a breach of
+// [TypedAttributes]' obligation that the node raises on
 // (ctaMatchedAttributes).
 //
 // Each arm answers facets, the [value.AssertionEvaluator] a cast it makes
@@ -853,7 +854,7 @@ type ctaValue interface {
 // ctaAttr is [17] ta-AttrName over an UNTYPED attribute: the attribute step
 // whose NameTest selects a SEQUENCE of E's attributes, in document order, out
 // of what [Attributes] yields — or, in an assertion, the one attribute an exact
-// NameTest names whose type is ·special·, whose typed value is xs:untypedAtomic
+// NameTest names annotated ·special·, whose typed value is xs:untypedAtomic
 // (ctaAssertionFacade.attribute), out of what [TypedAttributes] yields.
 //
 // The NameTest is settled at compile time, so evaluation carries no axis and no
@@ -3656,7 +3657,7 @@ func ctaValueItem(n ctaValueVar, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // because no element carries two of one ·expanded name·, and a [37] Wildcard
 // arm has no such bound.
 //
-// Over a ctaTypedInput — an assertion's attribute whose type is ·special· — the
+// Over a ctaTypedInput — an assertion's attribute annotated ·special· — the
 // matched values are the [Untyped] arms' [schema normalized value]s, and ok is
 // false where a matched value is not [Untyped], which breaks the obligation
 // [TypedAttributes] states and which every reader raises on (ctaInput). The

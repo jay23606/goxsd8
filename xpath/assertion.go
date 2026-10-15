@@ -17,16 +17,19 @@ import (
 // instance is TYPED.
 //
 // cvc-assertion clause 1 builds the XDM instance from the partial ·PSVI· of E,
-// so each attribute carries the type its ·governing attribute declaration·
-// gave it, and §3.13.2's own example relies on that: in `@min le @max` over
-// two xs:int attributes "the typed values of the attributes are available for
-// comparison; it is not necessary to cast". A Type Alternative's instance is
-// untyped instead (key-cta-ta-select clause 1's Note), which is why the two
-// façades build different nodes for one [17] ta-AttrName over a typed
-// attribute and take different attribute inputs, and why neither tree can be
-// fed the other's input. An attribute whose type is ·special· is the one an
-// assertion reads untyped too: its typed value is xs:untypedAtomic
-// (xpath-datamodel §3.3.1.2), so both façades build the same node for it.
+// so each attribute carries the type annotation that ·PSVI· gives it
+// (xpath-datamodel §3.3.1.1): the type its ·governing attribute declaration·
+// gave it where it is ·valid· there, and §3.13.2's own example relies on that:
+// in `@min le @max` over two xs:int attributes "the typed values of the
+// attributes are available for comparison; it is not necessary to cast". A
+// Type Alternative's instance is untyped instead (key-cta-ta-select clause 1's
+// Note), which is why the two façades build different nodes for one [17]
+// ta-AttrName over a typed attribute and take different attribute inputs, and
+// why neither tree can be fed the other's input. An attribute annotated
+// ·special· is the one an assertion reads untyped too — one whose type is
+// ·special·, or one invalid in the partial ·PSVI·, which is annotated
+// xs:anySimpleType: its typed value is xs:untypedAtomic (xpath-datamodel
+// §3.3.1.2), so both façades build the same node for it.
 //
 // The assertion façade widens the grammar by NINE productions the Type
 // Alternative façade declines: the eq/ne/lt/le/gt/ge value comparisons
@@ -87,9 +90,12 @@ import (
 // names· of the elements from E's child down to the one that owns the
 // attribute, and is read during the call and never kept.
 //
-// For the empty path the element is E, and the answer is the type of the
-// {attribute declaration} of the {attribute use} of E's ·governing type
-// definition· matching that name. For a non-empty path it is the type of the
+// For the empty path the element is E, and the answer is the type annotation
+// E's attribute so named carries in the partial ·PSVI· cvc-assertion clause
+// 1.2 builds (xpath-datamodel §3.3.1.1), its {attribute use} being the one of
+// E's ·governing type definition· matching that name: the type of that use's
+// {attribute declaration} where the attribute is ·valid· there, and
+// xs:anySimpleType where it is invalid. For a non-empty path it is the type of the
 // {attribute use} named name of that element's STATIC type: the ·locally
 // declared type· (key-ldt-elem) of path[0] within E's ·governing type
 // definition·, then of each later step within the type found for the step
@@ -98,16 +104,19 @@ import (
 // an {attribute wildcard} can admit, or a use whose declaration or type does
 // not resolve — and [CompileAssertionTest] declines a {test} naming it.
 //
-// It is STATIC in the sense the compile needs: the answer does not depend on
-// whether the element carries the attribute, or a ·defaulted attribute·
-// (key-dflt-att) stands in for it, both of which [TypedAttributes] yields for
-// E and [Tally.Attribute] takes below it, nor, below E, on the instance, a
-// {type table}'s selection or an xsi:type. So the ·governing type definition·
-// of an element below E can differ from the type the compile read, and
-// [Tally.Attribute] states which values agree with the answer. Its one
-// consumer is validate's cvc-assertion site (validate/cvcassertion.go), which
-// builds it, [TypedAttributes] and what it reports to [Tally.Attribute] from
-// one lookup so they cannot disagree.
+// The answer for the empty path is per E: it depends on the [validity] of the
+// attribute E carries, so its caller compiles per E. It does not depend on
+// whether E carries the attribute, or a ·defaulted attribute· (key-dflt-att)
+// stands in for it, both of which [TypedAttributes] yields. The answer for a
+// non-empty path is STATIC in the sense the compile needs: it does not depend
+// on the instance — whether the element carries the attribute or a
+// ·defaulted attribute· stands in for it, both of which [Tally.Attribute]
+// takes, a {type table}'s selection, an xsi:type, or the attribute's
+// [validity]. So the ·governing type definition· of an element below E can
+// differ from the type the compile read, and [Tally.Attribute] states which
+// values agree with the answer. Its one consumer is validate's cvc-assertion
+// site (validate/cvcassertion.go), which builds it, [TypedAttributes] and what
+// it reports to [Tally.Attribute] from one lookup so they cannot disagree.
 type AttributeTypes func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, bool)
 
 // ElementTypes answers, for the element information item E whose assertions are
@@ -126,14 +135,15 @@ type AttributeTypes func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, boo
 // itself, whose value is `$value`'s and `.`'s ([BindValue]) and never this
 // lookup's: it answers false.
 //
-// It is STATIC, on [AttributeTypes]' terms: the answer does not depend on
-// which elements E's subtree carries, on a {type table}'s selection, or on the
-// type an xsi:type gives one, so the ·governing type definition· of an
-// element below E can differ from the type the compile reads, below a child
-// even without being substitutable for it, and [ChildElements] and
-// [Tally.ElementValue] state which values agree with it. Its one consumer is
-// validate's cvc-assertion site (validate/cvcassertion.go), which builds it
-// and maps the values it reports from one lookup, so they cannot disagree.
+// It is STATIC, on the terms [AttributeTypes] states for a non-empty path: the
+// answer does not depend on which elements E's subtree carries, on a {type
+// table}'s selection, or on the type an xsi:type gives one, so the ·governing
+// type definition· of an element below E can differ from the type the compile
+// reads, below a child even without being substitutable for it, and
+// [ChildElements] and [Tally.ElementValue] state which values agree with it.
+// Its one consumer is validate's cvc-assertion site
+// (validate/cvcassertion.go), which builds it and maps the values it reports
+// from one lookup, so they cannot disagree.
 type ElementTypes func(path []xsd.QName) (xsd.TypeDefinition, bool)
 
 // ChildElement is one element [[child]] of E as an assertion {test} reads it:
@@ -844,12 +854,12 @@ func (c *Tally) ReadsAttribute(path []xsd.QName, name xsd.QName) bool {
 // ·special·, and [Typed] of a value of EXACTLY that type otherwise. That
 // agreement is the caller's obligation, and a value breaking it — nil, or the
 // other arm — is a dynamic error wherever the tree reads it, which
-// [AssertionTest.Evaluate] answers false. [AttributeTypes] answers statically,
-// so the attribute's own type can differ from the one compiled: validate maps
-// the attribute's [schema normalized value] under its OWN attribute use's
-// type into the compiled one, and withholds the assertion where its own type
-// is neither the compiled type nor validly derived from it, or, for a
-// ·special· compiled type, is not that type itself.
+// [AssertionTest.Evaluate] answers false. [AttributeTypes] answers statically
+// for a non-empty path, so the attribute's own type can differ from the one
+// compiled: validate maps the attribute's [schema normalized value] under its
+// OWN attribute use's type into the compiled one, and withholds the assertion
+// where its own type is neither the compiled type nor validly derived from
+// it, or, for a ·special· compiled type, is not that type itself.
 //
 // A call that breaks the ordering above breaks [Tally]'s obligation, on the
 // terms a report out of pre-order does: one before any report, after E's own
@@ -1174,42 +1184,42 @@ type AssertionTest struct {
 // `attribute()`, `attribute(N)`, `attribute(*, T)` or `attribute(N, T)` for T a builtin
 // simple type or xs:untypedAtomic, over one attribute step of E, `@d`, `attribute::d` or
 // `./@d`, true where the count of attributes it selects is one the indicator admits and the
-// attribute is named N and annotated with its {attribute use}'s type, deriving from T
-// (§2.5.4.5), so assert013's `./@event instance of attribute(*, xs:dateTime)` holds over an
-// xs:dateTime @event; [6] QuantifiedExpr (xpath20.md §3.9) wherever the conditional stands,
-// `some` or `every` over one in-clause binding a range variable `$v` to each child of E a
-// step `N` or `./N` with a QName NameTest selects, whose body is `$v/@A`, a conjunction
-// `$v/@A and $v/@B …`, or `$v/following-sibling::*[1][self::M]` — the next sibling element
-// of `$v` where it is named M, empty after E's last child element (§3.2.1.1, §3.2.2) — or
-// one of those inside fn:not, or binding `$v` to each child such a step selects whose type
-// elems answers is one a child read for its value is admitted under as a TYPED value, or to
-// each but the last of them under the one predicate `[position() lt last()]` (§3.2.2),
-// whose body is any one ExprSingle this function admits, `$v` in scope in it alone as a
-// node, ·nilled· or not, whose typed value is that child's, and
-// `$v/following-sibling::M[1]` the first later child named M however many of other names
-// lie between, or none (§3.2.1.1), typed on the same terms, and `$v/@A` and
-// `$v/following-sibling::M[1]/@A` the attribute A of that child, or none where it has no A,
-// typed as attrs answers for A at the one-step path of the child's name — never ·special· —
-// either one ending in a function call, `$v/@A/F(…)`, evaluated once with the attribute
-// node as its context item `.`, or the empty sequence where there is no such node
-// (xpath20.md §3.2, [27] StepExpr's FilterExpr arm), or binding a range variable `$x` to
-// each item of a typed `$value`, atomic or list, written `data($value)` or `$value`
-// (xpath-functions.md §2.4), whose body is any one ExprSingle this function admits, the
-// range variable in scope in it alone as an atomic value of `$value`'s item type, `some`
-// true where a binding satisfies the body and `every` where all do, so over no binding — an
-// empty list, or the nil `$value` clause 2.3.2 binds — `some` is false and `every` true,
-// and over `$value` or a typed child step a binding whose body raises is the answer unless
-// another binding decides the quantifier (§3.6's tables); and, as an operand of a general
-// comparison, an integer sequence: [11] RangeExpr `I to J` over two IntegerLiterals, bare
-// or parenthesized, or a parenthesized comma sequence of IntegerLiterals and such ranges,
-// `(1 to 10, 20, 30)` (§3.3.1), or a string sequence, a parenthesized comma sequence of
-// StringLiterals, `('a', 'b')`. A string sequence's items are xs:string. Against a typed
-// operand outside the xs:string family, an xs:integer `$value` or child among them,
-// xpath20.md §B.2 defines no comparison and it raises err:XPTY0004, while `.`, which is not
-// typed, casts to xs:string (§3.5.2 rule 2.4) — added, and every decline [CompileCTATest]
-// states is this one's too, under the same static context (xpath-valid clause 2.2)
-// augmented with `$value` (cvc-assertion clause 2.2), plus these, each of which is the same
-// withhold:
+// attribute is named N and annotated with the type attrs answers for it at the empty
+// path, deriving from T (§2.5.4.5), so assert013's `./@event instance of attribute(*,
+// xs:dateTime)` holds over an xs:dateTime @event; [6] QuantifiedExpr (xpath20.md §3.9)
+// wherever the conditional stands, `some` or `every` over one in-clause binding a range
+// variable `$v` to each child of E a step `N` or `./N` with a QName NameTest selects, whose
+// body is `$v/@A`, a conjunction `$v/@A and $v/@B …`, or
+// `$v/following-sibling::*[1][self::M]` — the next sibling element of `$v` where it is
+// named M, empty after E's last child element (§3.2.1.1, §3.2.2) — or one of those inside
+// fn:not, or binding `$v` to each child such a step selects whose type elems answers is one
+// a child read for its value is admitted under as a TYPED value, or to each but the last of
+// them under the one predicate `[position() lt last()]` (§3.2.2), whose body is any one
+// ExprSingle this function admits, `$v` in scope in it alone as a node, ·nilled· or not,
+// whose typed value is that child's, and `$v/following-sibling::M[1]` the first later child
+// named M however many of other names lie between, or none (§3.2.1.1), typed on the same
+// terms, and `$v/@A` and `$v/following-sibling::M[1]/@A` the attribute A of that child, or
+// none where it has no A, typed as attrs answers for A at the one-step path of the child's
+// name — never ·special· — either one ending in a function call, `$v/@A/F(…)`, evaluated
+// once with the attribute node as its context item `.`, or the empty sequence where there
+// is no such node (xpath20.md §3.2, [27] StepExpr's FilterExpr arm), or binding a range
+// variable `$x` to each item of a typed `$value`, atomic or list, written `data($value)` or
+// `$value` (xpath-functions.md §2.4), whose body is any one ExprSingle this function
+// admits, the range variable in scope in it alone as an atomic value of `$value`'s item
+// type, `some` true where a binding satisfies the body and `every` where all do, so over no
+// binding — an empty list, or the nil `$value` clause 2.3.2 binds — `some` is false and
+// `every` true, and over `$value` or a typed child step a binding whose body raises is the
+// answer unless another binding decides the quantifier (§3.6's tables); and, as an operand
+// of a general comparison, an integer sequence: [11] RangeExpr `I to J` over two
+// IntegerLiterals, bare or parenthesized, or a parenthesized comma sequence of
+// IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1), or a string sequence, a
+// parenthesized comma sequence of StringLiterals, `('a', 'b')`. A string sequence's items
+// are xs:string. Against a typed operand outside the xs:string family, an xs:integer
+// `$value` or child among them, xpath20.md §B.2 defines no comparison and it raises
+// err:XPTY0004, while `.`, which is not typed, casts to xs:string (§3.5.2 rule 2.4) —
+// added, and every decline [CompileCTATest] states is this one's too, under the same static
+// context (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion clause 2.2), plus
+// these, each of which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -1219,8 +1229,8 @@ type AssertionTest struct {
 //     atomic value of a type known at compile time — a list or union {variety}
 //     — or whose {primitive type definition} is xs:NOTATION
 //     (ctaTypes.typedAtomic). The variety is classified here, not trusted to
-//     attrs. An attribute whose type is ·special· is read as xs:untypedAtomic
-//     and is admitted;
+//     attrs. An attribute attrs annotates ·special· is read as
+//     xs:untypedAtomic and is admitted;
 //   - a `$value` over an [xsd.SimpleContent] whose {simple type definition} the
 //     bullet above declines as an attribute's type, unless it is a list whose
 //     {item type definition} that bullet admits — so a union, a list of a
@@ -1648,7 +1658,7 @@ func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 // fn:in-scope-prefixes, over `.` as an operand of `=`
 // ([CompileAssertionTest]), asks e.LookupPrefix about each prefix the other
 // operand names. The compiled tree holds no element, so one [AssertionTest]
-// serves every E its governing type governs.
+// serves every E for which attrs gave the same answers.
 func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e ContextElement, attrs TypedAttributes, children ChildElements, counts *Tally, v ValueBinding, now time.Time) bool {
 	if e == nil {
 		panic("xpath: AssertionTest.Evaluate: nil ContextElement")
