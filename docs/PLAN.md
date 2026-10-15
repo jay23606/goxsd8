@@ -17,22 +17,22 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-15 (#2577's post-land pass, on `main` at `e5c08ba`)
+## Status — 2026-10-15 (#2673's post-land pass, on `main` at `c1c75ea`)
 
-**North star: grow the `json` lane, M8, at 38.** #2577 (`e5c08ba`) documented
-why `Backend.Mapping` answers false for xs:integer and where `xpath.Typed`'s
-value comes from, and added a runnable `ValidateLexical` example.
-`Ratchet: unchanged`. **No M8 lift is startable.** #2630 (the `{type table}`
+**North star: grow the `json` lane, M8, at 38.** #2673 (`c1c75ea`) charges a
+Type Alternative `{test}`'s static errors wherever they sit, by a static pass
+over the full-grammar recognizer, and left the KindTest TypeName residual to
+#2681. `Ratchet: unchanged`. **No M8 lift is startable.** #2630 (the `{type table}`
 lift) waits on a `RULING:` comment picking its Surface arm. #2669 (a tabled
 top-level declaration reached through a lax wildcard) needs that lift's
 selected type. #2670 is a limitation tracker that retires with #1601's ruling.
 #2655, the one `ready` M8 issue, is `Ratchet: unchanged` and waits on the
 cliuser round. So Tier A is empty, and the next M8 step is #2630's ruling.
-**Lean: product.** Tier B's first row is #2631's residual wrong verdict.
+**Lean: product.** Tier B's first row is #2673's residual under-charge, #2681.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `e5c08ba`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `c1c75ea`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -56,8 +56,8 @@ are active. `json` is M8 and the north star. Its cases are curated in
 
 **Measured on `b79687d`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
 conformance run fed to `go tool lanepartition`, and not re-run here: #2615's,
-#2555's, #2616's, #2623's, #2561's, #2647's, #2666's, #2631's and #2577's
-arbiters each measured their change as moving no W3C case. #2631's arbiter's
+#2555's, #2616's, #2623's, #2561's, #2647's, #2666's, #2631's, #2577's and
+#2673's arbiters each measured their change as moving no W3C case. #2631's arbiter's
 own `GOXSD_DECLINES=1` run on its branch printed the same decline counts as the
 column below (`instance` 61, `schema` 1, `datatypes` 6).
 It stands less four banked flips: #2608's three and #894's one, all `schema`
@@ -100,8 +100,8 @@ partition.
 ### Branch namespace, `origin` (report-only; containers cannot delete a ref)
 
 **`go tool wipsurvey` was not re-fed this pass.** These states are the
-`666c953` stamp's, checked against `git ls-remote origin` at `e5c08ba`:
-`wip/issue-2577` is gone, and no other `wip/*` or `meta/backlog-*` ref was
+`666c953` stamp's, checked against `git ls-remote origin` at `c1c75ea`:
+`wip/issue-2673` is gone, and no other `wip/*` or `meta/backlog-*` ref was
 added or removed.
 
 - **`wip/issue-2630` is EXPIRED:** #2630's stood-down grounding, no code, on an
@@ -127,15 +127,17 @@ added or removed.
 
 ### Marker census
 
-`go tool gapaudit`, fed, at `666c953`, not re-run: **172 markers across 11
-areas** (xpath 64, xsd 32, validate 23, jsonsrc 19, value 11, parser 8,
-conformance 7, xml 3, landcheck 2, regex 2, cmd 1). Group 1 has 11 rows and
-Group 2 has 21. Neither group was reconciled this pass. #2577 added and retired
-no marker.
+`go tool gapaudit`'s census at `c1c75ea`: **172 markers across 11 areas**
+(xpath 64, xsd 32, validate 23, jsonsrc 19, value 11, parser 8, conformance 7,
+xml 3, landcheck 2, regex 2, cmd 1), unchanged in every area. Its groups carry
+the fed `666c953` run's 11 and 21 rows: this pass fed it un-reshaped REST
+JSON, which reconciles nothing, and quotes no group figure from it. #2673
+repointed its residual markers (`ctaFullStaticError`, `xpath/cta_test.go`) at
+#2681.
 
 ### Milestones and queue
 
-**Read from GitHub after this pass's filing: 336 open issues.**
+**Read from GitHub after this pass's filing: 337 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -151,22 +153,22 @@ no marker.
 
 M3's one open issue is #2566, a `value.Context` doc defect. It is follow-up,
 not milestone scope. M8's four are #2630, #2669 and #2670 (all `blocked`) and
-#2655 (`ready`). #2577, #2673, #2675, #2676 and #2679 carry no milestone.
+#2655 (`ready`). #2675, #2676, #2679, #2681 and #2683 carry no milestone.
 
-The open issues are **317 `ready`, 17 `blocked`, 0 `needs-replan` and 2
-`epic`**, which sums to 336 (#2577 closed, #2679 filed this pass). Open
-`kind/process` is 7: #1880 and #1885, both `blocked` on the owner, and #2610,
-#2637, #2650, #2664 and #2676, `ready`.
+The open issues are **318 `ready`, 17 `blocked`, 0 `needs-replan` and 2
+`epic`**, which sums to 337 (#2673 closed; #2681 labelled `ready` and #2683
+filed this pass). Open `kind/process` is 8: #1880 and #1885, both `blocked` on
+the owner, and #2610, #2637, #2650, #2664, #2676 and #2683, `ready`.
 
 - **`blocked` is 17:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
   #1880, #1885, #2022, #2081, #2376, #2533, #2630, #2669 and #2670. None names
-  #2577 in its `## Depends on`, no dependency closed and no trigger fired:
+  #2673 in its `## Depends on`, no dependency closed and no trigger fired:
   - #2630 waits on a `RULING:` comment picking its Surface arm (A, B or
     surface-free). #2669 waits on #2630's lift; #2081 closes only its pinned
     row, and is not a dependency.
   - #2670 waits on #1601's ruling reopening on one of its marker's two findings.
-  - #2533 waits on an evaluation-time CTA decline landing. #2577 changed docs
-    and an Example only.
+  - #2533 waits on an evaluation-time CTA decline landing. #2673 added static
+    charges only.
   - #1042 waits on `vc002.v1` (#1002, #1880) and on the slices its body lists as
     not yet filed.
   - #1609 has not fired. Arm 1 (`schema` Fail 0) reads 98, arm 2's Total is
@@ -175,9 +177,9 @@ The open issues are **317 `ready`, 17 `blocked`, 0 `needs-replan` and 2
   - #2376 waits on #2370, and #1051 on #1183 and #1196. All three are open.
   - #1374 and #555 wait on written triggers, and #16 on M9.
   - No human ruling is recorded on #1880, #1885, #1790, #2022 or #2081.
-- **Measured refactors were not re-run this pass, except one; each other
-  carries its last run.** On `e5c08ba`: #2663 (4, flat). On `666c953`: #2595
-  (1 and 1) and #2675 (5 `stand-in` lines). #2237 (24) on `7139873`. On
+- **Measured refactors were not re-run this pass, except two; each other
+  carries its last run.** On `c1c75ea`: #2595 (1 and 1, flat) and #2675 (5
+  `stand-in` lines, flat). On `e5c08ba`: #2663 (4, flat). #2237 (24) on `7139873`. On
   `207d52c`: #848 (2 stale "future consumer" lines, 0 outside consumers). On
   `4914723`: #2599 (186 methods), #2601 (0 outside consumers), #2239 (2), #2372
   (27), #1080 (8) and #2375 (1 and 1). On `46bda66`: #2600 (2 copies), #2373
@@ -189,8 +191,8 @@ The open issues are **317 `ready`, 17 `blocked`, 0 `needs-replan` and 2
 **No persona round belongs to a post-land pass.** cliuser is now owed: #2616
 changed the CLI contract (`-format json`, jsonsrc's exit-4 error channel), and
 #1571 was re-scoped against the same `usage` text. The libuser findings #2566
-and #2315 are still open and unconsumed, and are banded below; #2577 has
-landed. No persona report was folded in.
+and #2315 are still open and unconsumed, and are banded below. No persona
+report was folded in.
 
 ### Working band
 
@@ -205,7 +207,7 @@ Tier B.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2673 | **#2631's residual, a schema accepted that should be rejected:** a Type Alternative `{test}`'s static error past the subset parse's decline point, err:XPST0008 for `$value`, or err:XPST0051 in `instance of`. `Ratchet: unchanged` expected (0 candidates on #2631's join). Its grounding picks the route, likely #2608's full-grammar recognizer. It edits `xpath/cta.go` and `xpath/ctaparser.go`, so it absorbs #2675 when it can. |
+| 1 | #2681 | **#2673's residual, a schema accepted that may be rejectable:** err:XPST0008 for a KindTest TypeName outside the in-scope types and for a schema-element/schema-attribute name, withheld under `ctaFullStaticError`'s GAP(xpath). Its first step is an oracle ruling: the suite declares `element(*, xs:untyped)` valid though clause 2.2.5 omits xs:untyped. `Ratchet: unchanged` expected (cta0018, cta0019 and cta0022 are WITHHELD). It edits `xpath/syntax.go` and `xpath/cta_test.go`. |
 | 2 | #2566 | **A persona finding, doc only.** `value.Context.LookupNamespace`'s empty-prefix `ok`, with libuser's nil finding folded in. |
 | 3 | #2315 | **A persona finding, doc only.** `xsd.TypeResolver`'s doc. It shares `xsd/schema.go`'s resolver block with #848, so the session absorbs #848 when it can. |
 
@@ -219,12 +221,14 @@ Tier B.
 | 7 | #841 | **A refactor ruled three times and never landed.** Two verbatim comment paragraphs, `Ratchet: unchanged`. Startable now. |
 
 **Named below the band, on purpose.**
-- **`xpath/cta.go` and `xpath/ctaparser.go`, beside row 1:** #2675 (drop
-  `singleType`'s stand-in cast, which #2631 left changing no answer; measured 5
-  lines) rides row 1 when it can. #2416 (a pinning row or a deletion) and #2595
-  (two doc corrections) were not absorbed by #2631 and stay separate
-  neighbours: #2595 needs a grounding for its wording choice first, and #2416
-  a reachability read. A session taking either absorbs the other.
+- **`xpath/cta.go` and `xpath/ctaparser.go`, startable now:** #2675 (drop
+  `singleType`'s stand-in cast, which #2631 left changing no answer; flat at 5
+  lines) no longer has a row to ride, since #2673 landed without it and row 1
+  edits `xpath/syntax.go`. It is the first refactor to take in `xpath`. #2416 (a
+  pinning row or a deletion) and #2595 (two doc corrections) were absorbed by
+  neither #2631 nor #2673: #2595 needs a grounding for its wording choice
+  first, and #2416 a reachability read. A session taking one of the three
+  reads the others.
 - **M8, `Ratchet: unchanged`:** #2655 (#2616's follow-up: jsonsrc reports a
   reader I/O fault as "malformed JSON", so it exits 4 where XML's exits 1). It
   is M8's one `ready` issue. It waits on the cliuser round (Next planning
@@ -256,8 +260,8 @@ Tier B.
 - **M7, `Ratchet: unchanged`:** #2619 charges `as-props-correct` clause 2
   through #2608's recognizer. Its bound is 2 suite-valid cases that cannot flip,
   so it is correctness debt and not a lane slice. It needs a warden ruling on
-  its one new `xpath` export. It and row 1 both lean on #2608's recognizer; a
-  session taking either reads the other.
+  its one new `xpath` export. It and row 1 both lean on #2608's recognizer
+  and #2673's static pass; a session taking either reads the other.
 - **`xpath/assertion.go`, one at a time:** #2663, #2437, #2394, #2370, #2314 and
   #2313, and the CTA residue #889.
 - **STYLE E5 sweeps,** measured flat: #2372, #2373, #2374 and #2375. #2376 waits
@@ -278,13 +282,15 @@ Tier B.
 - **Process:** #2610, one paragraph of `.claude/commands/backlog.md`, and #2637,
   one paragraph of `.claude/commands/develop.md` step 3. Each is a first
   sighting that cost one landing or round, and enters the band at a second.
+  #2683 (a placeholder brief recurred after #2513's remedy, costing one
+  stopped oracle delegation) is for the next `/retro`.
   #2650 (briefs condense the GROUNDING) is a second sighting that has cost no
   round. #2676 rides row 4. #1880 and #1885 wait on the owner.
 - **Tooling, after rows 5 and 6:** #2542, then #2203 and #2539, then #2605,
   #1897, #2541, #1935, #2070, #2066, #678, #1464, #1838 and #1794.
 - **Refactors:** #2599 (186 methods) and #2601, no longer held by an
-  `xpath/assertion.go` row. #848 is measured flat and rides row 3. #2675 rides
-  row 1. Also measured flat: #2329, #1958, #1865, #1757, #363, #2101, #2205,
+  `xpath/assertion.go` row. #848 is measured flat and rides row 3. #2675 is
+  named with its `xpath` neighbours above. Also measured flat: #2329, #1958, #1865, #1757, #363, #2101, #2205,
   #2237, #2239, #1080, #2359, #2370 and #2663. #989, #1735, #1736, #1701, #845,
   #755, #1825, #2416, #2419 and #2437 are unmeasured.
 
@@ -300,7 +306,7 @@ Tier B.
 3. **After #2566 and #2315 land,** the same or a later `/backlog` runs the
    deferred libuser round. It reads #2622's `xsd.(*Schema).ContainedWildcards`,
    #2577's new `Backend.Mapping` doc and `ExampleValidateLexical`, and any
-   surface #2630 adds; #2647, #2666, #2631 and #2577 added none.
+   surface #2630 adds; #2647, #2666, #2631, #2577 and #2673 added none.
 4. **The next `/backlog` reconciles `gapaudit`'s groups** (11 and 21 rows),
    which these post-land passes carried, and re-feeds `wipsurvey`.
 5. **Owner decisions outstanding:**
