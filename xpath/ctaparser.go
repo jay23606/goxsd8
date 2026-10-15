@@ -125,6 +125,20 @@ type ctaNames struct {
 	defaultNamespace string
 }
 
+// ctaNamesOf indexes the {namespace bindings} of expr by prefix and reads its
+// {default namespace}, which it consults only where
+// [xsd.XPathExpression.DefaultNamespace] reports one present.
+func ctaNamesOf(expr xsd.XPathExpression) ctaNames {
+	names := ctaNames{prefixes: make(map[string]string)}
+	for _, b := range expr.NamespaceBindings() {
+		names.prefixes[b.Prefix()] = b.Namespace()
+	}
+	if defaultNS, present := expr.DefaultNamespace(); present {
+		names.defaultNamespace = defaultNS
+	}
+	return names
+}
+
 // ctaXMLNamespace is the namespace the reserved prefix `xml` is bound to by
 // definition, with no declaration (Namespaces in XML §3).
 const ctaXMLNamespace = "http://www.w3.org/XML/1998/namespace"
@@ -288,7 +302,14 @@ func (p *ctaParser) prefixedSpace(prefix string) (string, bool) {
 // namespace prefix that cannot be expanded into a namespace URI") on record's
 // terms. The code is the recorded verdict's own rule (ruleXPST0081).
 func (p *ctaParser) recordUnbound(prefix string) {
-	p.record(ctaStaticDefect(ruleXPST0081, "no statically-known namespace binding for prefix %q, which err:XPST0081 forbids", prefix))
+	p.record(ctaUnboundPrefix(prefix))
+}
+
+// ctaUnboundPrefix is the err:XPST0081 defect an unbound prefix is, the one
+// verdict the subset parse (recordUnbound) and the full-grammar static pass
+// (syntaxStatic) both report for it.
+func ctaUnboundPrefix(prefix string) ctaDefect {
+	return ctaStaticDefect(ruleXPST0081, "no statically-known namespace binding for prefix %q, which err:XPST0081 forbids", prefix)
 }
 
 // record records the ctaStaticError defect d and lets the parse go on: an

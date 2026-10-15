@@ -311,13 +311,30 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 		{"self::message", "an axis step the grammar has no production for"},
 		{"@kind = 'book'", "a complete Test whose every name resolved"},
 		{"@a:kind = 'book'", "a complete Test whose prefix is bound"},
-		// GAP(xpath): a static error PAST the construct the subset parse
-		// declines at is never reached, so this err:XPST0051 is under-charged:
-		// §3.12.6 clause 2's Note licenses declining only an expression
-		// "containing no static errors", and the parse stops at count(//a:x)
-		// before it reads the cast target. compileCTATest's GAP(xpath) states
-		// the direction. (#2673)
-		{"count(//a:x) > 1 and @kind cast as xs:Missing = 'x'", "err:XPST0051 past the construct the parse declines at"},
+		// The full-grammar static pass binds a ForExpr's or QuantifiedExpr's own
+		// variables, and resolves an AtomicType or SingleType that names a
+		// builtin atomic type.
+		{"some $x in @a satisfies $x = 'x'", "a range variable referenced inside its own binding"},
+		{"for $x in @a, $y in $x return $y = 'x'", "a range variable referenced by the binding after it"},
+		{"@kind instance of xs:string", "a builtin atomic AtomicType"},
+		{"@kind instance of xs:anyAtomicType", "err:XPST0080 is a cast-target rule, not an AtomicType one"},
+		{"@kind instance of xs:NOTATION", "the same for xs:NOTATION"},
+		{"@kind instance of xs:untypedAtomic", "xs:untypedAtomic is held to no static error, as a cast target is"},
+		{"@kind castable as xs:string", "a builtin atomic SingleType"},
+		{"xs:QName('p:ppp') = @kind", "err:FONS0004 in a StringLiteral is withheld under ctaParser.cast's marker"},
+		{"a:f(.) = node-name(.)", "a function under a bound prefix: err:XPST0017 at most, withheld (#894)"},
+		// A KindTest's TypeName is resolved for its prefix alone:
+		// xs:untyped and xs:untypedAtomic are XPath's predefined types and
+		// not in xpath-valid clause 2.2.5's list (the suite's cta0018,
+		// cta0019, cta0022).
+		{". instance of element(*, xs:untyped)", "a KindTest TypeName outside clause 2.2.5's list"},
+		{"@kind instance of attribute(*, xs:untypedAtomic)", "the same in an AttributeTest"},
+		// GAP(xpath): a KindTest TypeName no in-scope schema type holds, and a
+		// schema-element name no in-scope declaration holds, are err:XPST0008
+		// (xpath20.md §2.5.4.3–§2.5.4.6), withheld: ctaFullStaticError's
+		// GAP(xpath) states the direction (#2681).
+		{"@kind instance of attribute(*, xs:Missing)", "err:XPST0008 for an undefined KindTest TypeName, withheld"},
+		{". instance of schema-element(a:x)", "err:XPST0008 for an undeclared schema-element name, withheld"},
 		// The constructor spelling names a FUNCTION: err:XPST0051 and
 		// err:XPST0080 are cast-target errors, and a name with no constructor
 		// is err:XPST0017 at most, whose signatures xpath-valid clause 2.2.8
@@ -372,6 +389,81 @@ func TestCTATestStaticErrorBeforeADeclineIsCharged(t *testing.T) {
 		}
 		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, record, fcValue(t, str, "x")); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions.Evaluate(%q) = %d, want AssertionDeclined", tc.expr, got)
+		}
+	}
+}
+
+// TestCTATestStaticErrorTheSubsetNeverReachesIsCharged pins the static errors
+// of a {test} the subset parse declines with none proved, which the
+// full-grammar static pass (ctaFullStaticError) proves wherever in the text
+// they sit: past the construct the parse declines at, in a text ctaTokenize
+// never reads (`..`), err:XPST0008 for a VarRef no range variable binds —
+// xpath-valid clause 2.2.6 leaves the in-scope variables empty, `$value`
+// included — and err:XPST0051 for the AtomicType of an `instance of` or
+// `treat as` and err:XPST0051 or err:XPST0080 for the SingleType of a
+// `castable as`. The first in expression order wins, err:XPST0081 included,
+// and CompileCTATest still declines every row.
+func TestCTATestStaticErrorTheSubsetNeverReachesIsCharged(t *testing.T) {
+	const (
+		missingTarget = `the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`
+		missingAtomic = `the AtomicType "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`
+	)
+	for _, tc := range []struct{ expr, rule, msg string }{
+		{"count(//a:x) > 1 and @kind cast as xs:Missing = 'x'", "err:XPST0051", missingTarget},
+		{".. and @kind cast as xs:Missing = 'x'", "err:XPST0051", missingTarget},
+		{"$value = 1", "err:XPST0008", `the variable reference $value names no in-scope variable, which err:XPST0008 forbids`},
+		{"@kind = $value", "err:XPST0008", `the variable reference $value names no in-scope variable, which err:XPST0008 forbids`},
+		{"some $x in @a satisfies $x = $y", "err:XPST0008", `the variable reference $y names no in-scope variable, which err:XPST0008 forbids`},
+		{"(some $x in @a satisfies $x = 'x') and $x = 'y'", "err:XPST0008", `the variable reference $x names no in-scope variable, which err:XPST0008 forbids`},
+		{"for $x in $x return $x = 'x'", "err:XPST0008", `the variable reference $x names no in-scope variable, which err:XPST0008 forbids`},
+		{"@kind instance of xs:Missing", "err:XPST0051", missingAtomic},
+		{"@kind treat as xs:Missing = 'x'", "err:XPST0051", missingAtomic},
+		{"@kind instance of a:Kind", "err:XPST0051", `the AtomicType "{http://example.com/a}Kind" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
+		{"@kind instance of xs:NMTOKENS+", "err:XPST0051", `the AtomicType "{http://www.w3.org/2001/XMLSchema}NMTOKENS" is no atomic type, which err:XPST0051 forbids`},
+		{"@kind castable as xs:Missing", "err:XPST0051", missingTarget},
+		{"@kind castable as xs:anyAtomicType", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
+		// The first static error in expression order wins.
+		{"$value = 1 and @kind instance of xs:Missing", "err:XPST0008", `the variable reference $value names no in-scope variable, which err:XPST0008 forbids`},
+		{"@kind instance of xs:Missing and $value = 1", "err:XPST0051", missingAtomic},
+		{"@kind instance of q:Missing", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+		{"$q:v = 1", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+		{". instance of element(*, q:T)", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+		{"self::q:* and $value", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+		{".. and q:f(.)", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+	} {
+		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
+		var verdict *xsderr.Error
+		if err := CTATestStaticError(record, seededTypes); !errors.As(err, &verdict) {
+			t.Errorf("CTATestStaticError(%q) = %v, want an *xsderr.Error carrying %s", tc.expr, err, tc.rule)
+			continue
+		}
+		if string(verdict.Rule) != tc.rule {
+			t.Errorf("CTATestStaticError(%q) reports rule %q, want %q", tc.expr, verdict.Rule, tc.rule)
+		}
+		if verdict.Msg != tc.msg {
+			t.Errorf("CTATestStaticError(%q).Msg = %q, want %q", tc.expr, verdict.Msg, tc.msg)
+		}
+		if _, ok := CompileCTATest(record, seededTypes); ok {
+			t.Errorf("CompileCTATest(%q) compiled, want declined", tc.expr)
+		}
+	}
+}
+
+// TestCTATestStaticErrorTypeNameTakesTheDefaultNamespace pins that the
+// full-grammar static pass resolves an unprefixed AtomicType or SingleType in
+// the {default namespace} (xpath-valid clause 2.2.3): `string` is xs:string
+// under an XSD default and err:XPST0051 under none.
+func TestCTATestStaticErrorTypeNameTakesTheDefaultNamespace(t *testing.T) {
+	for _, expr := range []string{
+		"@kind instance of string",
+		"@kind castable as string",
+		"count(//x) > 1 and @kind cast as string = 'x'",
+	} {
+		if err := CTATestStaticError(ctaExprRecord(expr, xsd.XMLSchemaNS), seededTypes); err != nil {
+			t.Errorf("CTATestStaticError(%q) under an XSD default namespace = %v, want nil", expr, err)
+		}
+		if rule, ok := xsderr.RuleOf(CTATestStaticError(ctaExprRecord(expr, ""), seededTypes)); !ok || rule != ruleXPST0051 {
+			t.Errorf("CTATestStaticError(%q) under no default namespace carries rule %q (found %t), want %s", expr, rule, ok, ruleXPST0051)
 		}
 	}
 }

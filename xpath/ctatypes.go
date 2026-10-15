@@ -178,9 +178,37 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, ctaDefect) {
 	if name == ctaBuiltin("anyAtomicType") || name == ctaBuiltin("NOTATION") {
 		return nil, ctaStaticDefect(ruleXPST0080, "the cast target %q is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids", name)
 	}
+	return t.atomicType("the cast target", name)
+}
+
+// sequenceAtomicType reports the static error the AtomicType name of an
+// `instance of` or `treat as` SequenceType is, or the zero ctaDefect: "If a
+// QName that is used as an AtomicType is not defined as an atomic type in the
+// in-scope schema types, a static error is raised [err:XPST0051]" (xpath20.md
+// §2.5.4.2). It reads the in-scope schema types on castTarget's terms, but
+// excludes no type by name: §3.10.2's err:XPST0080 is a cast-target rule, so
+// xs:anyAtomicType and xs:NOTATION are AtomicTypes like any other, and
+// xs:untypedAtomic is held to no static error, as castTarget holds it.
+//
+// Only the full-grammar static pass asks it (syntaxStatic): the subset parse
+// resolves no SequenceType of a Type Alternative's {test}.
+func (t ctaTypes) sequenceAtomicType(name xsd.QName) ctaDefect {
+	if name == ctaBuiltin("untypedAtomic") || name == ctaBuiltin("anyAtomicType") {
+		return ctaDefect{}
+	}
+	_, defect := t.atomicType("the AtomicType", name)
+	return defect
+}
+
+// atomicType resolves name to a builtin ATOMIC simple type in the in-scope
+// schema types, or reports err:XPST0051 for a name that is none, naming it as
+// role in the message — castTarget's err:XPST0051 arm, which
+// sequenceAtomicType shares. A base chain this resolver cannot walk declines,
+// a ctaUnsupported defect.
+func (t ctaTypes) atomicType(role string, name xsd.QName) (*xsd.SimpleType, ctaDefect) {
 	st, declared := t.simple(name)
 	if !declared || name.Space != xsd.XMLSchemaNS {
-		return nil, ctaStaticDefect(ruleXPST0051, "the cast target %q is no simple type in the in-scope schema types, which err:XPST0051 forbids", name)
+		return nil, ctaStaticDefect(ruleXPST0051, "%s %q is no simple type in the in-scope schema types, which err:XPST0051 forbids", role, name)
 	}
 	// §3.10.2's "the target type must be an atomic type" is decided on the
 	// {primitive type definition} and not on the {variety}, because the
@@ -192,7 +220,7 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, ctaDefect) {
 		return nil, ctaDefect{kind: ctaUnsupported}
 	}
 	if p == nil {
-		return nil, ctaStaticDefect(ruleXPST0051, "the cast target %q is no atomic type, which err:XPST0051 forbids", name)
+		return nil, ctaStaticDefect(ruleXPST0051, "%s %q is no atomic type, which err:XPST0051 forbids", role, name)
 	}
 	return st, ctaDefect{}
 }

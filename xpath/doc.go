@@ -26,7 +26,8 @@
 //     CTATest.Evaluate decides it against an element's attributes.
 //     CTATestStaticError reports the XPath STATIC errors of the same grammar
 //     over the same traversal, and err:XPST0003 for a {test} outside the full
-//     XPath 2.0 grammar, which is a different question with a different owner
+//     XPath 2.0 grammar and the static errors of one inside it the traversal
+//     never reaches, which are a different question with a different owner
 //     — see below.
 //  2. Assertion essentials: axes, predicates, quantified expressions, typed
 //     comparisons, the F&O function core — M6. FIRST SLICES SHIPPED: the
@@ -396,11 +397,12 @@
 // and evaluation (instance-time). There is never a second, lenient
 // parser (STYLE T4). Beside it stands one RECOGNIZER for the full
 // xpath20.md Appendix A grammar, which builds no tree and answers only
-// whether a text the parser declined is XPath 2.0 at all (err:XPST0003).
-// It accepts exactly A.1's language, a superset of what the parser
-// admits, and is no T4 lenient parser: it is consulted only on a
-// decline, and its acceptance compiles nothing. It shares the parser's
-// lexical scanners.
+// whether a text the parser declined is XPath 2.0 at all (err:XPST0003)
+// and, for a Type Alternative {test}, which static error its names carry
+// where the parser proved none (ctaFullStaticError). It accepts exactly
+// A.1's language, a superset of what the parser admits, and is no T4
+// lenient parser: it is consulted only on a decline, and its acceptance
+// compiles nothing. It shares the parser's lexical scanners.
 //
 // # The fail-open contract (PRINCIPLES 20)
 //
@@ -442,8 +444,9 @@
 // A DECLINE EXCUSES NO PROVEN STATIC ERROR. §3.12.6 clause 2's Note lets a
 // processor decline only an expression "containing no static errors", so
 // an {expression} outside the required subset is declined uncharged only
-// where the subset parse proved no static error in it; one it proved
-// before the construct it declines at is charged (#2631).
+// where no static error is proved in it, wherever in the text one sits:
+// before the construct the subset parse declines at (#2631), past it, or
+// in a construct the subset never resolves.
 //
 // The static conditions proven today are err:XPST0003 for a {test} no
 // derivation of the full grammar (xpath20.md A.1) covers, asked of the
@@ -455,12 +458,18 @@
 // atomic type, xs:untypedAtomic aside — the schema's own types included,
 // since xpath-valid clause 2.2.5 puts only the built-ins in scope. The
 // parse runs past a failed target on a stand-in cast to xs:string
-// (ctaParser.singleType). Only CTATestStaticError reports any of them:
-// CompileAssertionTest and FacetAssertions decline every one like any
-// other defect. A static error the subset parse never reaches — past the
-// construct it declines at, or in one it never resolves, such as
-// err:XPST0008 for `$value` — is withheld with the decline, under the
-// GAP(xpath) at compileCTATest (#2673).
+// (ctaParser.singleType). Where the subset parse proves none, a static
+// pass over the full-grammar recognizer (ctaFullStaticError) proves the
+// first of err:XPST0081, err:XPST0008 for a variable reference no
+// ForExpr or QuantifiedExpr binds — `$value` among them, since clause
+// 2.2.6 leaves the in-scope variables empty — err:XPST0051 for an
+// `instance of` or `treat as` AtomicType, and err:XPST0051 or
+// err:XPST0080 for a `cast as` or `castable as` target, in a text
+// ctaTokenize never reads too. Only CTATestStaticError reports any of
+// them: CompileAssertionTest and FacetAssertions decline every one like
+// any other defect. An err:XPST0008 for a KindTest TypeName or a
+// schema-element or schema-attribute name is withheld with the decline,
+// under the GAP(xpath) at ctaFullStaticError.
 //
 // A constructor call naming such a type is withheld, never charged: it
 // names a function, not a cast target. So is err:FONS0004, an unbound

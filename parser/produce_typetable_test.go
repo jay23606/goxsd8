@@ -696,14 +696,25 @@ func TestProduceTypeTableCastTargetStaticErrorIsCharged(t *testing.T) {
 	}
 }
 
-// A static error the {test} carries BEFORE a construct this engine declines is
-// charged all the same: §3.12.6 clause 2's Note licenses declining only an
-// expression "containing no static errors", so ta-props-correct clause 2 is
-// charged over the declined text exactly as over a complete ta-Test (#2631).
+// A static error a {test} this engine declines carries is charged all the
+// same, wherever in the text it sits: §3.12.6 clause 2's Note licenses
+// declining only an expression "containing no static errors", so
+// ta-props-correct clause 2 is charged over the declined text exactly as over
+// a complete ta-Test (#2631) — before the construct the decline is at, past
+// it, in a text the subset's tokenizer never reads (`..`), err:XPST0008 for
+// `$value` (xpath-valid clause 2.2.6 leaves the in-scope variables empty), and
+// err:XPST0051 for the AtomicType of an `instance of` or `treat as` and the
+// SingleType of a `castable as`.
 func TestProduceTypeTableStaticErrorBeforeADeclineIsCharged(t *testing.T) {
 	for _, tc := range []struct{ test, rule string }{
 		{"count(//p:x) &gt; 1", "err:XPST0081"},
 		{"@k cast as xs:Missing = 't' and count(//x) &gt; 1", "err:XPST0051"},
+		{"count(//x) &gt; 1 and @k cast as xs:Missing = 't'", "err:XPST0051"},
+		{".. and @k cast as xs:Missing = 't'", "err:XPST0051"},
+		{"$value = 't'", "err:XPST0008"},
+		{"@k instance of xs:Missing", "err:XPST0051"},
+		{"@k treat as xs:Missing = 't'", "err:XPST0051"},
+		{"@k castable as xs:Missing", "err:XPST0051"},
 	} {
 		t.Run(tc.test, func(t *testing.T) {
 			_, err := produce(t, wrap("", typeTableTypes+`

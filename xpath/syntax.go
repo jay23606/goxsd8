@@ -2,20 +2,25 @@ package xpath
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
+	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
 // This file is the RECOGNIZER for the full XPath 2.0 grammar, xpath20.md
 // Appendix A: A.1's productions [1] XPath through [70] TypeName, under A.1.2's
 // extra-grammatical constraints (leading-lone-slash, reserved-function-names,
-// occurrence-indicators) and A.2's lexical structure. It answers one question
-// — whether a string is an XPath 2.0 Expr at all — and builds nothing: no
-// tree, no resolved name, no static type. A failure is err:XPST0003 (xpath20.md
-// §2.2.3.1: "an expression is not a valid instance of the grammar defined in
-// A.1 EBNF"), which [CTATestStaticError] reports for a Type Alternative {test}
-// the subset parser (ctaparser.go) declined.
+// occurrence-indicators) and A.2's lexical structure. It answers two questions
+// and builds nothing: no tree, no static type. The first is whether a string
+// is an XPath 2.0 Expr at all; a failure is err:XPST0003 (xpath20.md §2.2.3.1:
+// "an expression is not a valid instance of the grammar defined in A.1 EBNF"),
+// which [CTATestStaticError] reports for a Type Alternative {test} the subset
+// parser (ctaparser.go) declined. The second, asked only with a static context
+// (syntaxStatic), is the first static error in expression order the names of
+// such a {test} carry, which [CTATestStaticError] reports where the subset
+// parser declined the text with none proved (ctaFullStaticError).
 //
 // It is not the subset parser's rival: that parser builds the one tree the
 // engine evaluates and admits a strict SUBSET of what this recognizer accepts,
@@ -70,10 +75,12 @@ const (
 	syntaxComp
 )
 
-// syntaxToken is one terminal: its kind, its source spelling for a name, and
-// the byte offset it starts at, which is what a failure reports. A name is
-// prefixed exactly when its text holds a ':', so no keyword list below — none
-// of whose words holds one — ever matches a prefixed name.
+// syntaxToken is one terminal: its kind, its source spelling for a name and for
+// an `NCName ':' '*'` wildcard — the one wildcard spelling whose prefix the
+// static pass resolves — and the byte offset it starts at, which is what a
+// failure reports. A name is prefixed exactly when its text holds a ':', so no
+// keyword list below — none of whose words holds one — ever matches a prefixed
+// name.
 type syntaxToken struct {
 	kind syntaxKind
 	text string
@@ -200,7 +207,7 @@ func syntaxTokenize(s string) ([]syntaxToken, int, bool) {
 			}
 			tok := syntaxToken{kind: syntaxName, text: s[i:j], at: i}
 			if nameKind == ctaWildcardTok {
-				tok = syntaxToken{kind: syntaxWildcard, at: i}
+				tok.kind = syntaxWildcard
 			}
 			toks = append(toks, tok)
 			i = j
@@ -266,6 +273,134 @@ func syntaxComparatorLen(s string) int {
 type syntaxRecognizer struct {
 	toks []syntaxToken
 	pos  int
+	// static is the static context the names are resolved against, or nil for
+	// the recognizer syntaxError runs, which resolves nothing.
+	static *syntaxStatic
+}
+
+// syntaxStatic is the static context of a Type Alternative {test}, xpath-valid
+// clause 2.2's, as the full-grammar static pass reads it, and what that pass
+// found.
+type syntaxStatic struct {
+	// names are the statically known namespaces (2.2.2) and the default
+	// element/type namespace (2.2.3), read exactly as the subset parser reads
+	// them.
+	names ctaNames
+	// types are the in-scope schema definitions (2.2.5).
+	types ctaTypes
+	// vars are the range variables in scope at the recognizer's position,
+	// innermost last. A ForExpr or QuantifiedExpr binds every one of them: the
+	// in-scope variables of the static context are the empty set (2.2.6).
+	vars []xsd.QName
+	// first is the first static error in expression order, or nil.
+	first *xsderr.Error
+}
+
+// ctaFullStaticError is the first static error, in expression order, that a
+// Type Alternative {test} inside the full XPath 2.0 grammar carries, or nil:
+// the static pass of [CTATestStaticError] for a text the subset parser
+// declined with no static error proved, wherever in the text the error sits
+// and whether or not ctaTokenize reads the text at all. It answers nil for a
+// text outside the grammar, whose err:XPST0003 is syntaxError's, and for
+// types that hold no builtins (ctaResolveTypes), against which no name
+// resolves.
+//
+// The static errors it proves are:
+//
+//   - err:XPST0081 for a QName — a NameTest, a wildcard's NCName prefix, a
+//     function name, a VarName, a SingleType or AtomicType, and a name or a
+//     TypeName inside a KindTest — whose prefix the {namespace bindings} do not
+//     bind (xpath20.md Appendix G);
+//   - err:XPST0008 for a VarRef naming no variable a ForExpr or QuantifiedExpr
+//     around it bound (xpath20.md §3.1.2: "It is a static error [err:XPST0008]
+//     to reference a variable that is not in scope"), `$value` included, since
+//     xpath-valid clause 2.2.6 leaves the in-scope variables empty;
+//   - err:XPST0051 or err:XPST0080 for the SingleType of a `cast as` or a
+//     `castable as` (ctaTypes.castTarget, xpath20.md §3.10.2 and §3.10.3);
+//   - err:XPST0051 for the AtomicType of an `instance of` or `treat as`
+//     SequenceType (ctaTypes.sequenceAtomicType, xpath20.md §2.5.4.2).
+//
+// GAP(xpath): a KindTest's TypeName outside the in-scope schema types
+// (`attribute(*, xs:Missing)`) and a schema-element or schema-attribute test,
+// whose name is in no in-scope declaration because clause 2.2.5 puts none
+// there, are err:XPST0008 (xpath20.md §2.5.4.3, §2.5.4.4, §2.5.4.5, §2.5.4.6)
+// and are not charged: XPath's predefined xs:untyped and xs:untypedAtomic are
+// not in clause 2.2.5's list, so the TypeName check as written would charge
+// the suite's `element(*, xs:untyped)` (#2681). The direction is the withhold:
+// [CTATestStaticError] answers nil for a text carrying nothing else. An
+// unknown function name, err:XPST0017, is withheld on the #894 ruling.
+func ctaFullStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) *xsderr.Error {
+	toks, _, ok := syntaxTokenize(expr.Expression())
+	if !ok {
+		return nil
+	}
+	known, ok := ctaResolveTypes(types)
+	if !ok {
+		return nil
+	}
+	static := &syntaxStatic{names: ctaNamesOf(expr), types: known}
+	r := syntaxRecognizer{toks: toks, static: static}
+	if !r.expr() || r.peek().kind != syntaxEOF {
+		return nil
+	}
+	return static.first
+}
+
+// record keeps d where it is the first static error the static pass found;
+// it keeps nothing for the recognizer syntaxError runs, nor for a defect of
+// another kind.
+func (r *syntaxRecognizer) record(d ctaDefect) {
+	if r.static == nil || r.static.first != nil || d.kind != ctaStaticError {
+		return
+	}
+	r.static.first = d.static
+}
+
+// qname resolves the QName or `NCName ':' '*'` wildcard t spells, an
+// unprefixed one into the namespace unprefixed, recording err:XPST0081 for an
+// unbound prefix. It reports false for an unbound prefix and for the
+// recognizer syntaxError runs, which resolves nothing; t's spelling is empty
+// for `*` and `'*' ':' NCName`, which name no prefix and resolve trivially.
+func (r *syntaxRecognizer) qname(t syntaxToken, unprefixed string) (xsd.QName, bool) {
+	if r.static == nil {
+		return xsd.QName{}, false
+	}
+	prefix, local, prefixed := strings.Cut(t.text, ":")
+	if !prefixed {
+		return xsd.QName{Space: unprefixed, Local: t.text}, true
+	}
+	space, bound := r.static.names.prefixes[prefix]
+	if !bound {
+		r.record(ctaUnboundPrefix(prefix))
+		return xsd.QName{}, false
+	}
+	return xsd.QName{Space: space, Local: local}, true
+}
+
+// typeName resolves the QName t spells on qname's terms as a type name, an
+// unprefixed one into the default element/type namespace (xpath-valid clause
+// 2.2.3).
+func (r *syntaxRecognizer) typeName(t syntaxToken) (xsd.QName, bool) {
+	if r.static == nil {
+		return xsd.QName{}, false
+	}
+	return r.qname(t, r.static.names.defaultNamespace)
+}
+
+// scope is the number of range variables in scope, which restoreScope takes
+// back to once the ForExpr or QuantifiedExpr that bound more ends.
+func (r *syntaxRecognizer) scope() int {
+	if r.static == nil {
+		return 0
+	}
+	return len(r.static.vars)
+}
+
+func (r *syntaxRecognizer) restoreScope(n int) {
+	if r.static == nil {
+		return
+	}
+	r.static.vars = r.static.vars[:n]
 }
 
 func (r *syntaxRecognizer) peek() syntaxToken { return r.toks[r.pos] }
@@ -332,13 +467,14 @@ func (r *syntaxRecognizer) exprSingle() bool {
 	switch {
 	case (isKeyword(t, "for") || isKeyword(t, "some") || isKeyword(t, "every")) && next.kind == syntaxDollar:
 		r.pos++
-		if !r.bindings() {
-			return false
-		}
+		body := "satisfies"
 		if isKeyword(t, "for") {
-			return r.acceptKeyword("return") && r.exprSingle()
+			body = "return"
 		}
-		return r.acceptKeyword("satisfies") && r.exprSingle()
+		outer := r.scope()
+		ok := r.bindings() && r.acceptKeyword(body) && r.exprSingle()
+		r.restoreScope(outer)
+		return ok
 	case isKeyword(t, "if") && next.kind == syntaxLParen:
 		r.pos += 2
 		return r.expr() && r.accept(syntaxRParen) &&
@@ -349,11 +485,22 @@ func (r *syntaxRecognizer) exprSingle() bool {
 }
 
 // bindings is the `"$" VarName "in" ExprSingle ("," ...)*` [5]
-// SimpleForClause and [6] QuantifiedExpr share.
+// SimpleForClause and [6] QuantifiedExpr share. Each variable comes into
+// scope after its own `in` ExprSingle, for the bindings after it and the
+// `return` or `satisfies` body (xpath20.md §3.7, §3.9); exprSingle takes them
+// out of scope again.
 func (r *syntaxRecognizer) bindings() bool {
 	for {
-		if !r.varRef() || !r.acceptKeyword("in") || !r.exprSingle() {
+		if !r.accept(syntaxDollar) || r.peek().kind != syntaxName {
 			return false
+		}
+		name, resolved := r.qname(r.peek(), "")
+		r.pos++
+		if !r.acceptKeyword("in") || !r.exprSingle() {
+			return false
+		}
+		if resolved {
+			r.static.vars = append(r.static.vars, name)
 		}
 		if !r.accept(syntaxComma) {
 			return true
@@ -361,9 +508,20 @@ func (r *syntaxRecognizer) bindings() bool {
 	}
 }
 
-// varRef is [44] VarRef.
+// varRef is [44] VarRef as a PrimaryExpr, a reference to a variable: one no
+// enclosing binding put in scope is err:XPST0008. An unprefixed VarName is in
+// no namespace (xpath20.md §3.1.2).
 func (r *syntaxRecognizer) varRef() bool {
-	return r.accept(syntaxDollar) && r.accept(syntaxName)
+	if !r.accept(syntaxDollar) || r.peek().kind != syntaxName {
+		return false
+	}
+	t := r.peek()
+	r.pos++
+	name, resolved := r.qname(t, "")
+	if resolved && !slices.Contains(r.static.vars, name) {
+		r.record(ctaStaticDefect(ruleXPST0008, "the variable reference $%s names no in-scope variable, which err:XPST0008 forbids", t.text))
+	}
+	return true
 }
 
 // orExpr through intersectExcept are [8] OrExpr through [15]
@@ -551,8 +709,7 @@ func (r *syntaxRecognizer) stepExpr() bool {
 	case t.kind == syntaxName && next.kind == syntaxLParen:
 		ok = !isReservedFunctionName(t) && r.functionCall()
 	case t.kind == syntaxName || t.kind == syntaxWildcard || t.kind == syntaxStar:
-		r.pos++
-		ok = true
+		ok = r.nodeTest()
 	default:
 		ok = r.primaryExpr()
 	}
@@ -598,13 +755,19 @@ func isReservedFunctionName(t syntaxToken) bool {
 	return isKindTestName(t)
 }
 
-// nodeTest is [35] NodeTest.
+// nodeTest is [35] NodeTest. A NameTest's namespace is no static error's
+// concern beyond its prefix, so qname resolves it with no default namespace.
 func (r *syntaxRecognizer) nodeTest() bool {
 	t := r.peek()
 	if t.kind == syntaxName && r.peekAfter().kind == syntaxLParen && isKindTestName(t) {
 		return r.kindTest()
 	}
-	return r.accept(syntaxName) || r.accept(syntaxWildcard) || r.accept(syntaxStar)
+	if t.kind != syntaxName && t.kind != syntaxWildcard && t.kind != syntaxStar {
+		return false
+	}
+	r.qname(t, "")
+	r.pos++
+	return true
 }
 
 // predicateList is [39] PredicateList.
@@ -637,8 +800,11 @@ func (r *syntaxRecognizer) primaryExpr() bool {
 	}
 }
 
-// functionCall is [48] FunctionCall.
+// functionCall is [48] FunctionCall. Its name is resolved for its prefix
+// alone: whether a function of that name and arity exists is err:XPST0017,
+// withheld (ctaFullStaticError).
 func (r *syntaxRecognizer) functionCall() bool {
+	r.qname(r.peek(), ctaFunctionNS)
 	r.pos += 2 // the QName and '('
 	if r.accept(syntaxRParen) {
 		return true
@@ -654,10 +820,18 @@ func (r *syntaxRecognizer) functionCall() bool {
 	return r.accept(syntaxRParen)
 }
 
-// singleType is [49] SingleType: one QName, then '?' or nothing.
+// singleType is [49] SingleType: one QName, then '?' or nothing. The QName is
+// the target of a `cast as` or `castable as`, in the default element/type
+// namespace when unprefixed (xpath20.md §3.10.2), and castTarget decides its
+// static error.
 func (r *syntaxRecognizer) singleType() bool {
+	t := r.peek()
 	if !r.accept(syntaxName) {
 		return false
+	}
+	if name, resolved := r.typeName(t); resolved {
+		_, defect := r.static.types.castTarget(name)
+		r.record(defect)
 	}
 	r.accept(syntaxQuestion)
 	return true
@@ -678,7 +852,9 @@ func (r *syntaxRecognizer) sequenceType() bool {
 	return true
 }
 
-// itemType is [52] ItemType.
+// itemType is [52] ItemType. A bare QName is an [53] AtomicType, in the
+// default element/type namespace when unprefixed, and sequenceAtomicType
+// decides its static error.
 func (r *syntaxRecognizer) itemType() bool {
 	t := r.peek()
 	if t.kind == syntaxName && r.peekAfter().kind == syntaxLParen && isKindTestName(t) {
@@ -688,7 +864,27 @@ func (r *syntaxRecognizer) itemType() bool {
 		r.pos += 2
 		return r.accept(syntaxRParen)
 	}
-	return r.accept(syntaxName)
+	if !r.accept(syntaxName) {
+		return false
+	}
+	if name, resolved := r.typeName(t); resolved {
+		r.record(r.static.types.sequenceAtomicType(name))
+	}
+	return true
+}
+
+// acceptName consumes a QName and resolves it for its prefix on qname's
+// terms, reporting whether one was there. It reads every QName a KindTest
+// carries; whether the TypeName among them is in the in-scope schema types,
+// or a schema-element or schema-attribute name is declared, is withheld
+// (ctaFullStaticError).
+func (r *syntaxRecognizer) acceptName() bool {
+	t := r.peek()
+	if !r.accept(syntaxName) {
+		return false
+	}
+	r.qname(t, "")
+	return true
 }
 
 // kindTest is [54] KindTest, entered on its keyword with '(' next.
@@ -706,9 +902,9 @@ func (r *syntaxRecognizer) kindTest() bool {
 		}
 	case "element":
 		// [64]: (ElementNameOrWildcard ("," TypeName "?"?)?)?
-		if r.accept(syntaxName) || r.accept(syntaxStar) {
+		if r.acceptName() || r.accept(syntaxStar) {
 			if r.accept(syntaxComma) {
-				if !r.accept(syntaxName) {
+				if !r.acceptName() {
 					return false
 				}
 				r.accept(syntaxQuestion)
@@ -716,14 +912,14 @@ func (r *syntaxRecognizer) kindTest() bool {
 		}
 	case "attribute":
 		// [60]: (AttribNameOrWildcard ("," TypeName)?)?
-		if r.accept(syntaxName) || r.accept(syntaxStar) {
-			if r.accept(syntaxComma) && !r.accept(syntaxName) {
+		if r.acceptName() || r.accept(syntaxStar) {
+			if r.accept(syntaxComma) && !r.acceptName() {
 				return false
 			}
 		}
 	case "schema-element", "schema-attribute":
 		// [66], [62]: exactly one QName.
-		if !r.accept(syntaxName) {
+		if !r.acceptName() {
 			return false
 		}
 	case "processing-instruction":
