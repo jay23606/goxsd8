@@ -43,10 +43,11 @@ const ruleTAPropsCorrect xsderr.Rule = "ta-props-correct"
 // Declarations §3.2.7, the Built-in Complex Type Definition §3.4.7, and the
 // Built-in Simple Type Definitions §3.16.7) — and NOT this schema's own {type
 // definitions}, which clause 2.2.5 does not put in scope. No schema is
-// finalized at production time to hold those anyway. A CTA cast target is
-// always a simple type (§3.12.6 clause 4), so only §3.16.7's Simple Type
-// Definitions are ever read here — §3.2.7 and §3.4.7 name no site this
-// package resolves against.
+// finalized at production time to hold those anyway. Only §3.16.7's Simple
+// Type Definitions are ever read here, by two readers in xpath: a cast target,
+// always a simple type (§3.12.6 clause 4), and a KindTest TypeName in the XSD
+// namespace. xpath admits §3.4.7's xs:anyType and §3.2.7's four declarations
+// by name, so neither is asked of this resolver.
 //
 // It answers from symbols.builtins, the fixed [builtin.Seed] set newSymbols
 // indexes once — NOT from the build-once memo symbols.built, which starts as a
@@ -115,14 +116,15 @@ func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
 // is decided at construction and independent of whether any instance is ever
 // ·assessed·; xpath.CTATestStaticError proves the static error and this charges
 // it, wrapping that verdict as the charge's cause so the XPath code it carries
-// (err:XPST0003, err:XPST0081, err:XPST0008 for a variable reference, or
-// err:XPST0051 or err:XPST0080 for a cast target or an AtomicType outside
-// ctaStaticTypes' builtin atomic types) stays readable with xsderr.RuleOf — the
-// engine mints XPath's code, never this schema rule. An {expression} that
-// engine merely cannot EVALUATE, and in which it proves no static error, is
-// charged nothing and passes straight through, on the terms xpath/cta.go argues
-// (PRINCIPLES 20). The type knowledge it is asked against is ctaStaticTypes,
-// clause 2.2.5's set and not this schema's.
+// (err:XPST0003, err:XPST0081, err:XPST0008 for a variable reference or a
+// KindTest name outside the static context, or err:XPST0051 or err:XPST0080
+// for a cast target or an AtomicType outside ctaStaticTypes' builtin atomic
+// types) stays readable with xsderr.RuleOf — the engine mints XPath's code,
+// never this schema rule. An {expression} that engine merely cannot EVALUATE,
+// and in which it proves no static error, is charged nothing and passes
+// straight through, on the terms xpath/cta.go argues (PRINCIPLES 20). The type
+// knowledge it is asked against is ctaStaticTypes, clause 2.2.5's set and not
+// this schema's.
 func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType xsd.TypeDefinitionOrRef) (*xsd.TypeTable, error) {
 	alternatives := childElements(el, xsd.XMLSchemaNS, "alternative")
 	if len(alternatives) == 0 {

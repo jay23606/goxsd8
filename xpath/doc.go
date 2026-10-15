@@ -462,14 +462,17 @@
 // pass over the full-grammar recognizer (ctaFullStaticError) proves the
 // first of err:XPST0081, err:XPST0008 for a variable reference no
 // ForExpr or QuantifiedExpr binds — `$value` among them, since clause
-// 2.2.6 leaves the in-scope variables empty — err:XPST0051 for an
-// `instance of` or `treat as` AtomicType, and err:XPST0051 or
-// err:XPST0080 for a `cast as` or `castable as` target, in a text
-// ctaTokenize never reads too. Only CTATestStaticError reports any of
-// them: CompileAssertionTest and FacetAssertions decline every one like
-// any other defect. An err:XPST0008 for a KindTest TypeName or a
-// schema-element or schema-attribute name is withheld with the decline,
-// under the GAP(xpath) at ctaFullStaticError.
+// 2.2.6 leaves the in-scope variables empty — err:XPST0008 for a
+// KindTest TypeName outside the in-scope schema types (xs:anyType,
+// xs:untyped and xs:untypedAtomic are in scope by name), for every
+// schema-element name and for a schema-attribute name other than the four
+// §3.2.7 xsi declarations, err:XPST0051 for an `instance of` or `treat as`
+// AtomicType, and err:XPST0051 or err:XPST0080 for a `cast as` or
+// `castable as` target, in a text ctaTokenize never reads too. Only
+// CTATestStaticError reports any of them: CompileAssertionTest and
+// FacetAssertions decline every one like any other defect. An unknown
+// function name, err:XPST0017, is withheld under the GAP(xpath) at
+// ctaFullStaticError.
 //
 // A constructor call naming such a type is withheld, never charged: it
 // names a function, not a cast target. So is err:FONS0004, an unbound

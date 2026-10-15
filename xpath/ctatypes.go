@@ -200,6 +200,28 @@ func (t ctaTypes) sequenceAtomicType(name xsd.QName) ctaDefect {
 	return defect
 }
 
+// inScopeType reports whether name, the TypeName of an ElementTest or an
+// AttributeTest, is in the in-scope schema types, whose absence is
+// err:XPST0008 (xpath20.md §2.5.4.3, §2.5.4.5). It holds xs:anyType — §3.4.7's
+// Built-in Complex Type Definition, which xpath-valid clause 2.2.5 puts in
+// scope and builtin.Seed does not produce — and XPath's predefined
+// xs:untyped and xs:untypedAtomic (xpath20.md §2.5.1) by name, and asks the
+// resolver for every other name in the XSD namespace only, on atomicType's
+// namespace guard: a schema's own types are never in scope (the oracle's #894
+// ruling). Unlike an AtomicType, a TypeName may be any type, so xs:anySimpleType,
+// a list builtin and xs:NOTATION are all in scope.
+func (t ctaTypes) inScopeType(name xsd.QName) bool {
+	switch name {
+	case ctaBuiltin("anyType"), ctaBuiltin("untyped"), ctaBuiltin("untypedAtomic"):
+		return true
+	}
+	if name.Space != xsd.XMLSchemaNS {
+		return false
+	}
+	_, declared := t.resolver.Type(name)
+	return declared
+}
+
 // atomicType resolves name to a builtin ATOMIC simple type in the in-scope
 // schema types, or reports err:XPST0051 for a name that is none, naming it as
 // role in the message — castTarget's err:XPST0051 arm, which

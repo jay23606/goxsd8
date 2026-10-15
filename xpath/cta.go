@@ -263,10 +263,12 @@ const ruleXPST0051 xsderr.Rule = "err:XPST0051"
 // xs:anyAtomicType"), carried on ruleXPST0081's terms (ctaTypes.castTarget).
 const ruleXPST0080 xsderr.Rule = "err:XPST0080"
 
-// ruleXPST0008 is the XPath static error a reference to a variable not in
-// scope is (xpath20.md §3.1.2: "It is a static error [err:XPST0008] to
-// reference a variable that is not in scope"), carried on ruleXPST0081's terms
-// (ctaFullStaticError).
+// ruleXPST0008 is the XPath static error a reference to a name the static
+// context does not define is: a variable not in scope (xpath20.md §3.1.2: "It
+// is a static error [err:XPST0008] to reference a variable that is not in
+// scope"), and a KindTest TypeName outside the in-scope schema types or a
+// schema-element or schema-attribute name outside the in-scope declarations
+// (§2.5.4.3–§2.5.4.6), carried on ruleXPST0081's terms (ctaFullStaticError).
 const ruleXPST0008 xsderr.Rule = "err:XPST0008"
 
 // CTATestStaticError reports the XPath STATIC error the {test} of a Type
@@ -304,6 +306,9 @@ const ruleXPST0008 xsderr.Rule = "err:XPST0008"
 //     none, the one the full-grammar static pass proves wherever in the text it
 //     sits (ctaFullStaticError): err:XPST0081 again, err:XPST0008 for a
 //     variable reference no ForExpr or QuantifiedExpr binds, `$value` included,
+//     err:XPST0008 for a KindTest TypeName outside the in-scope schema types,
+//     for every schema-element name, and for a schema-attribute name other than
+//     the four xsi declarations of §3.2.7 (xpath20.md §2.5.4.3–§2.5.4.6),
 //     err:XPST0051 for an `instance of` or `treat as` AtomicType, and
 //     err:XPST0051 or err:XPST0080 for a `cast as` or `castable as` target. A
 //     constructor call naming such a type is no cast target and is not charged
@@ -317,16 +322,20 @@ const ruleXPST0008 xsderr.Rule = "err:XPST0008"
 // the construct the subset parse declines at. Text the full grammar accepts
 // and neither proves a static error in answers nil: the Note lets this engine
 // decline it, and charging what it cannot prove would reject a conforming
-// schema. ctaFullStaticError's GAP(xpath) names the static errors neither
+// schema. ctaFullStaticError's GAP(xpath) names the static error neither
 // proves.
 //
 // types is the IN-SCOPE SCHEMA DEFINITIONS of the static context this question
 // is asked in, which xpath-valid clause 2.2.5 fixes as "those components that
 // are present in every schema by definition" — the built-ins of §3.2.7, §3.4.7
 // and §3.16.7, and NOT the schema's own {type definitions}, which that clause
-// does not put in scope. It is read exactly as [CompileCTATest] reads it and
-// stored nowhere, and a cast target it does not hold as a builtin atomic type
-// is err:XPST0051.
+// does not put in scope. It need answer only for §3.16.7's simple types: a cast
+// target it does not hold as a builtin atomic type is err:XPST0051, and a
+// KindTest TypeName in the XSD namespace it does not hold is err:XPST0008.
+// xs:anyType (§3.4.7), XPath's predefined xs:untyped and xs:untypedAtomic
+// (xpath20.md §2.5.1), and the four xsi attribute declarations of §3.2.7 are in
+// scope by definition, and this package admits them by name whatever types
+// holds. It is read exactly as [CompileCTATest] reads it and stored nowhere.
 //
 // The rule is the XPath error code and the message is the fact, so the result
 // renders as

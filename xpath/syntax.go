@@ -318,17 +318,20 @@ type syntaxStatic struct {
 //   - err:XPST0051 or err:XPST0080 for the SingleType of a `cast as` or a
 //     `castable as` (ctaTypes.castTarget, xpath20.md §3.10.2 and §3.10.3);
 //   - err:XPST0051 for the AtomicType of an `instance of` or `treat as`
-//     SequenceType (ctaTypes.sequenceAtomicType, xpath20.md §2.5.4.2).
+//     SequenceType (ctaTypes.sequenceAtomicType, xpath20.md §2.5.4.2);
+//   - err:XPST0008 for the TypeName of an ElementTest or an AttributeTest
+//     outside the in-scope schema types (kindTypeName, ctaTypes.inScopeType),
+//     for every schema-element name (schemaElementName), and for a
+//     schema-attribute name other than the four §3.2.7 xsi declarations
+//     (schemaAttributeName), xpath20.md §2.5.4.3–§2.5.4.6. An ElementName or
+//     AttributeName in an ElementTest or AttributeTest is exempt (testName).
 //
-// GAP(xpath): a KindTest's TypeName outside the in-scope schema types
-// (`attribute(*, xs:Missing)`) and a schema-element or schema-attribute test,
-// whose name is in no in-scope declaration because clause 2.2.5 puts none
-// there, are err:XPST0008 (xpath20.md §2.5.4.3, §2.5.4.4, §2.5.4.5, §2.5.4.6)
-// and are not charged: XPath's predefined xs:untyped and xs:untypedAtomic are
-// not in clause 2.2.5's list, so the TypeName check as written would charge
-// the suite's `element(*, xs:untyped)` (#2681). The direction is the withhold:
-// [CTATestStaticError] answers nil for a text carrying nothing else. An
-// unknown function name, err:XPST0017, is withheld on the #894 ruling.
+// GAP(xpath): a function name or arity no signature has, err:XPST0017, is not
+// charged; [CTATestStaticError] answers nil for a text carrying nothing else.
+// xpath-valid clause 2.2.8 leaves the function signatures
+// ·implementation-defined·, and #2690 decides whether that charges or
+// permanently withholds it. The oracle's #894 ruling, on clause 2.2.5's
+// in-scope schema types, states that it does not extend to 2.2.8.
 func ctaFullStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) *xsderr.Error {
 	toks, _, ok := syntaxTokenize(expr.Expression())
 	if !ok {
@@ -873,18 +876,82 @@ func (r *syntaxRecognizer) itemType() bool {
 	return true
 }
 
-// acceptName consumes a QName and resolves it for its prefix on qname's
-// terms, reporting whether one was there. It reads every QName a KindTest
-// carries; whether the TypeName among them is in the in-scope schema types,
-// or a schema-element or schema-attribute name is declared, is withheld
-// (ctaFullStaticError).
-func (r *syntaxRecognizer) acceptName() bool {
+// acceptName consumes a QName a KindTest carries and hands it to resolve,
+// which decides its static error for the role it plays, reporting whether one
+// was there.
+func (r *syntaxRecognizer) acceptName(resolve func(syntaxToken)) bool {
 	t := r.peek()
 	if !r.accept(syntaxName) {
 		return false
 	}
-	r.qname(t, "")
+	resolve(t)
 	return true
+}
+
+// testName resolves the ElementName of an ElementTest or the AttributeName of
+// an AttributeTest for its prefix alone: neither need be declared, which the
+// err:XPST0008 entry of xpath20.md Appendix G exempts by name.
+func (r *syntaxRecognizer) testName(t syntaxToken) {
+	r.qname(t, "")
+}
+
+// kindTypeName resolves the TypeName of an ElementTest or an AttributeTest in
+// the default element/type namespace (typeName) and records err:XPST0008 where
+// it is no type in the in-scope schema types (ctaTypes.inScopeType): "TypeName
+// must be present in the in-scope schema types [err:XPST0008]" (xpath20.md
+// §2.5.4.3, §2.5.4.5).
+func (r *syntaxRecognizer) kindTypeName(t syntaxToken) {
+	name, resolved := r.typeName(t)
+	if !resolved || r.static.types.inScopeType(name) {
+		return
+	}
+	r.record(ctaStaticDefect(ruleXPST0008, "the KindTest TypeName %q is no type in the in-scope schema types, which err:XPST0008 forbids", name))
+}
+
+// schemaElementName resolves the name of a SchemaElementTest in the default
+// element/type namespace, an element name's position (xpath20.md §2.5.4), and
+// records err:XPST0008 for every name it resolves: "If the ElementName
+// specified in the SchemaElementTest is not found in the in-scope element
+// declarations, a static error is raised [err:XPST0008]" (§2.5.4.4), and
+// xpath-valid clause 2.2.5 puts no element declaration in scope — §3.2.7,
+// §3.4.7 and §3.16.7 hold none.
+func (r *syntaxRecognizer) schemaElementName(t syntaxToken) {
+	name, resolved := r.typeName(t)
+	if !resolved {
+		return
+	}
+	r.record(ctaStaticDefect(ruleXPST0008, "the schema-element name %q is no in-scope element declaration, which err:XPST0008 forbids", name))
+}
+
+// schemaAttributeName resolves the name of a SchemaAttributeTest, an
+// unprefixed one into no namespace (xpath20.md §2.5.4: "An unprefixed
+// attribute QName is in no namespace"), and records err:XPST0008 where it is
+// none of the in-scope attribute declarations (ctaInScopeAttribute, §2.5.4.6).
+func (r *syntaxRecognizer) schemaAttributeName(t syntaxToken) {
+	name, resolved := r.qname(t, "")
+	if !resolved || ctaInScopeAttribute(name) {
+		return
+	}
+	r.record(ctaStaticDefect(ruleXPST0008, "the schema-attribute name %q is no in-scope attribute declaration, which err:XPST0008 forbids", name))
+}
+
+// ctaInScopeAttribute reports whether name is one of the in-scope attribute
+// declarations xpath-valid clause 2.2.5 fixes: the four Built-in Attribute
+// Declarations of Structures §3.2.7, xsi:type, xsi:nil, xsi:schemaLocation and
+// xsi:noNamespaceSchemaLocation. The parser's seedInstanceAttributes builds
+// the same four as components and validate's isInstanceAttribute excepts them
+// by name. Both packages import this one, so neither encoding is reachable
+// from here, and the set is fixed by the spec (STYLE T4's accepted third
+// encoding).
+func ctaInScopeAttribute(name xsd.QName) bool {
+	if name.Space != xsd.XMLSchemaInstanceNS {
+		return false
+	}
+	switch name.Local {
+	case "type", "nil", "schemaLocation", "noNamespaceSchemaLocation":
+		return true
+	}
+	return false
 }
 
 // kindTest is [54] KindTest, entered on its keyword with '(' next.
@@ -902,9 +969,9 @@ func (r *syntaxRecognizer) kindTest() bool {
 		}
 	case "element":
 		// [64]: (ElementNameOrWildcard ("," TypeName "?"?)?)?
-		if r.acceptName() || r.accept(syntaxStar) {
+		if r.acceptName(r.testName) || r.accept(syntaxStar) {
 			if r.accept(syntaxComma) {
-				if !r.acceptName() {
+				if !r.acceptName(r.kindTypeName) {
 					return false
 				}
 				r.accept(syntaxQuestion)
@@ -912,14 +979,19 @@ func (r *syntaxRecognizer) kindTest() bool {
 		}
 	case "attribute":
 		// [60]: (AttribNameOrWildcard ("," TypeName)?)?
-		if r.acceptName() || r.accept(syntaxStar) {
-			if r.accept(syntaxComma) && !r.acceptName() {
+		if r.acceptName(r.testName) || r.accept(syntaxStar) {
+			if r.accept(syntaxComma) && !r.acceptName(r.kindTypeName) {
 				return false
 			}
 		}
-	case "schema-element", "schema-attribute":
-		// [66], [62]: exactly one QName.
-		if !r.acceptName() {
+	case "schema-element":
+		// [66]: exactly one QName.
+		if !r.acceptName(r.schemaElementName) {
+			return false
+		}
+	case "schema-attribute":
+		// [62]: exactly one QName.
+		if !r.acceptName(r.schemaAttributeName) {
 			return false
 		}
 	case "processing-instruction":
