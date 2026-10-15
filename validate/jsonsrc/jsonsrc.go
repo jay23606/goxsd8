@@ -63,11 +63,13 @@ func WithURI(uri string) Option {
 // an attribute member whose value is null, an object or an array, a "$type"
 // or "$xmlns" member out of its leading place or of the wrong shape, a
 // "$type" whose parent's ·governing type definition· the mapping does not
-// determine or that the types a {type table} can select for it settle
-// differently, any other "$"-prefixed reserved member, a nested
-// array, a member of an element whose declaration carries a {type table} that
-// its declared {type definition} and a type the table can select classify
-// differently; the package doc lists them all). A decline names the arm it is
+// determine or that the types a {type table} below the root can select for it
+// settle differently, any other "$"-prefixed reserved member, a nested array,
+// a member of an element below the root whose declaration carries a {type
+// table} that its declared {type definition} and a type the table can select
+// classify differently, and, at such a root, the leading attribute members no
+// run settles by the type the table ·conditionally selects· for them; the
+// package doc lists them all). A decline names the arm it is
 // not, and is never a silent drop or a guessed mapping: a member the mapping
 // cannot name is not part of the document the assessment saw, so its result is
 // discarded rather than returned. The whole document is read either way, so a
@@ -301,12 +303,14 @@ func (w *walker) keyName(key string, sc *scope, loc xsderr.Loc) (keyName, error)
 // object is what an object-valued element's members are classified against,
 // read once per element from the type declaredElement.object chose — its
 // declaration's {type definition}, or, under a "$type", the type
-// walker.instanceGoverned settles: the owner's expanded name, the child
-// element declarations the type contains, the type's {attribute uses}, its
-// element wildcards and {attribute wildcard}, whether its {content type} is
-// simple, the objects of the types the declaration's {type table} can select,
-// and the type that governs the owner, with the matcher its children are
-// ·attributed· by. A simple type contains none and has none.
+// walker.instanceGoverned settles — or, at a root whose declaration carries a
+// {type table}, from the type walker.settled reads the table to select: the
+// owner's expanded name, the child element declarations the type contains,
+// the type's {attribute uses}, its element wildcards and {attribute
+// wildcard}, whether its {content type} is simple, the objects of the types
+// the declaration's {type table} can select, and the type that governs the
+// owner, with the matcher its children are ·attributed· by. A simple type
+// contains none and has none.
 type object struct {
 	owner     xsd.QName
 	contained []xsd.ElementDeclaration
@@ -325,8 +329,9 @@ type object struct {
 	// table} can select — each alternative's {type definition}, then the
 	// {default type definition}'s — where the members are classified under the
 	// declaration's {type definition} (declaredElement.object), and nil
-	// otherwise: a key maps only where each classifies it as the declaration's
-	// type does (walker.classify).
+	// otherwise: each is a candidate for the root's attribute run
+	// (walker.attributes), and below the root a key maps only where each
+	// classifies it as the declaration's type does (walker.classify).
 	selectable []*object
 	// undeclared is the owner having no declaration: a child wildcardMember
 	// names whose expanded name no top-level declaration carries (bareElement),
@@ -336,13 +341,15 @@ type object struct {
 	// definition·, as the engine determines it from the owner's ·attribution·
 	// (walker.governing) or its "$type" (walker.instanceGoverned), which need
 	// not be the type the members are classified under: one where the mapping
-	// determines it; each type a {type table} can select where the declaration
-	// that governs the owner, or one an ancestor's, carries one whose types
-	// differ (walker.declarationType), the engine selecting among them by a
-	// test the mapping does not evaluate; and none where the mapping does not
-	// determine it, or the owner has no declaration. A child's "$type" is
-	// settled under each (walker.instanceGoverned), and the children are
-	// ·attributed· under each one's content model (object.attribute).
+	// determines it, the type a root's {type table} selects included
+	// (walker.settled); each type a {type table} can select where the
+	// declaration that governs the owner below the root, or one an ancestor's,
+	// carries one whose types differ (walker.declarationType), the engine
+	// selecting among them by a {test} the mapping does not evaluate there
+	// (selection); and none where the mapping does not determine it, or the
+	// owner has no declaration. A child's "$type" is settled under each
+	// (walker.instanceGoverned), and the children are ·attributed· under each
+	// one's content model (object.attribute).
 	governing []governingType
 	// unattributed is the mapping attributing none of the owner's children
 	// under governing: the element content of one of them is one
@@ -458,7 +465,8 @@ func (bareElement) typeTable() (xsd.TypeTable, bool)       { return xsd.TypeTabl
 // governs e; and otherwise under d's {type definition} (declaredType), whatever
 // types walker.governing finds may govern e from its ·attribution·, and, where d
 // carries a {type table}, under every type the table can select as well
-// (walker.selectable, walker.classify).
+// (walker.selectable, walker.classify), until walker.attributes reads, at the
+// root, the one the table selects (selection).
 //
 // The "$type" arm reads no {type table}: an xsi:type naming a type T
 // ·overrides· e's ·selected type definition· or is charged cvc-elt clause 4
@@ -537,24 +545,28 @@ func (b bareElement) object(*walker, *element, *attribute, placement, xsderr.Loc
 // expanded name. A prefixed key spells (N,key) itself, which a declaration or
 // use of another namespace does not carry.
 //
-// Under an owner whose declaration carries a {type table}, the key is
+// Under an owner whose declaration carries a {type table} and whose
+// ·selected type definition· the mapping does not read (selection), the key is
 // classified under the declaration's {type definition}, o, and again under
 // each of o.selectable, and maps only where every one classifies it alike
 // (walker.alike), scalar saying whether the member's value is a scalar or
 // null (scalarValue). The element is assessed under its ·selected type
-// definition· (key-selected-type clause 1, key-cta-select), which the
-// mapping does not compute, so it maps only a key that classifies the same
-// whichever type the table selects, and the infoset is the one the
-// declaration's type alone would give. It DECLINES a key any one of them
-// declines or classifies otherwise.
+// definition· (key-selected-type clause 1, key-cta-select), so it maps only a
+// key that classifies the same whichever type the table selects, and the
+// infoset is the one any of them would give. It DECLINES a key any one of
+// them declines or classifies otherwise. At the root, walker.attributes reads
+// the selection instead, and the members after the attribute run are
+// classified here under the selected type alone, o.selectable being nil.
 //
-// GAP(jsonsrc): a member of an element whose declaration carries a {type
-// table} declines where the declaration's {type definition} and a type the
-// table can select classify it differently, or one of them declines it alone,
-// where the engine assesses the XML twin under the type the table selects: a
-// key that is a child under one type and an attribute under another, and,
-// under an object value, a child under declarations alike does not equate.
-// Owned by #2696, which computes the selection.
+// GAP(jsonsrc): a member of an element below the root whose declaration
+// carries a {type table} declines where the declaration's {type definition}
+// and a type the table can select classify it differently, or one of them
+// declines it alone, where the engine assesses the XML twin under the type the
+// table selects: a key that is a child under one type and an attribute under
+// another, and, under an object value, a child under declarations alike does
+// not equate. The mapping computes no [inherited attributes], which a {test}
+// reads beside the element's own (selection). Owned by #TBD-INHERITED
+// (placeholder: owner to be filed), which computes them.
 //
 // The two-expanded-name decline among the declarations is childNamed's, and
 // the xsi-namespace, two-expanded-name and simple-content declines among the
@@ -1398,9 +1410,11 @@ func (w *walker) govern(o *object, ts []xsd.TypeDefinition) {
 // are classified by, named as the element is, declared, d's {type
 // definition}, and at, where it stands among its parent's members. The
 // root's is d's, walker.declarationType: d is its ·governing element
-// declaration·. Below the root it is, for each type P that may govern the
-// parent, what governingUnder reads off what P ·attributes· it to (at.a,
-// object.attribute), each type once (appendTypes).
+// declaration·; where d carries a {type table}, walker.settled replaces it with
+// the one type the table selects once the root's attributes are read. Below
+// the root it is, for each type P that may govern the parent, what
+// governingUnder reads off what P ·attributes· it to (at.a, object.attribute),
+// each type once (appendTypes).
 //
 // The ·attribution· is cvc-accept's, unique for each child sequence (the Note
 // under cos-nonambig, key-vpath), so under one P one declaration or none
@@ -1502,9 +1516,10 @@ func (w *walker) resolvedType(name xsd.QName) []xsd.TypeDefinition {
 // the engine selects, and empty where a type does not resolve, which
 // declaredType's marker rules unreachable.
 //
-// The mapping evaluates no {test}: where the table can select several types,
-// a child's "$type" is settled under each (walker.instanceGoverned), and the
-// children are ·attributed· under each (object.attribute).
+// The mapping evaluates no {test} here: where the table can select several
+// types, a child's "$type" is settled under each (walker.instanceGoverned),
+// and the children are ·attributed· under each (object.attribute), but at the
+// root, whose selection walker.settled reads.
 func (w *walker) declarationType(d xsd.ElementDeclaration) []xsd.TypeDefinition {
 	table, ok := d.TypeTable()
 	if !ok {
@@ -1567,7 +1582,9 @@ func openContent(t xsd.ComplexType) bool {
 //
 // It DECLINES typ where parent.governing is empty, the mapping determining no
 // type that governs the parent, and where two of parent.governing settle on
-// different types. It declines too where ·override· is not decided, an error
+// different types, which a {type table} below the root makes several
+// (walker.declarationType); a root's is the one type it selects
+// (walker.settled). It declines too where ·override· is not decided, an error
 // of xsd.Schema.ValidlySubstitutable unreachable for a finalized Schema, which
 // the engine declines for the XML twin as well (walk.instanceOverride,
 // walk.localGovernance), so no marker tracks it.
@@ -1578,9 +1595,11 @@ func openContent(t xsd.ComplexType) bool {
 // may govern the grandparent (object.unattributed).
 //
 // GAP(jsonsrc): a "$type" declines where the types its parent's or an
-// ancestor's {type table} can select settle it on different types, where the
-// engine assesses the XML twin under the one it selects. Owned by #2696, which
-// computes the selection.
+// ancestor's {type table}, below the root, can select settle it on different
+// types, where the engine assesses the XML twin under the one it selects: the
+// mapping computes no [inherited attributes], which a {test} reads beside the
+// element's own (selection). Owned by #TBD-INHERITED (placeholder: owner to be
+// filed), which computes them.
 //
 // GAP(jsonsrc): a "$type" declines where the content model of its
 // grandparent's ·governing type definition· is one xsd.Schema.ContentMatcher
@@ -1609,7 +1628,7 @@ func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeD
 			td = instance
 		}
 		if i > 0 && !oneType(td, settled) {
-			return nil, w.declinef(typ.loc, "the \"$type\" member of %s: the types the {type table} of %s or of an ancestor can select settle the type governing %s differently; the mapping does not compute the ·selected type definition·",
+			return nil, w.declinef(typ.loc, "the \"$type\" member of %s: the types the {type table} of %s or of an ancestor can select settle the type governing %s differently; the mapping reads no ·selected type definition· below the root",
 				e.name, parent.owner, e.name)
 		}
 		settled = td

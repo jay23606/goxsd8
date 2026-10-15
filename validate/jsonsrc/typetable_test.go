@@ -66,11 +66,13 @@ const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
 </xs:schema>`
 
-// TestTypeTable pins an element whose declaration carries a {type table}: its
-// members are classified under its declared {type definition}, and alike
-// under every type the table can select (walker.alike) — a scalar or null
-// child by its name alone, whatever declarations it is under — a "$type" on
-// its child is settled alike under every one (walker.instanceGoverned), and
+// TestTypeTable pins an element whose declaration carries a {type table},
+// each of whose members every type the table can select classifies alike
+// (walker.alike) — a scalar or null child by its name alone, whatever
+// declarations it is under: at the root the mapping classifies them under the
+// type the table selects (walker.settled), below it under its declared {type
+// definition}, a "$type" on its child is settled under the selected type at
+// the root and alike under every one below it (walker.instanceGoverned), and
 // the engine assesses it under the type the table selects. The rows marked
 // "selected" discriminate the selection: under typeTableSchema with its
 // <xs:alternative>s removed, the first, the particle's first and the "$type"

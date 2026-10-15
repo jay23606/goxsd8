@@ -349,7 +349,7 @@
   </testGroup>
   <testGroup name="cta">
     <annotation>
-      <documentation>An object value under a declaration carrying a {type table} maps where its declared type and every type the table can select classify each member alike, and the engine assesses the element under the type the table selects (key-selected-type, key-cta-select). Each case reads otherwise under cta.xsd with tt's {type table} removed: the selection, not the mapping, decides it.</documentation>
+      <documentation>An object value under a root declaration carrying a {type table} maps under the type the table selects for its leading attribute members (key-selected-type, key-cta-select), which the mapping reads through the engine's own selection, and the engine assesses the element under that type. Every key here classifies alike under the declared type and every type the table can select, so the selection decides each verdict and not the infoset: each case reads otherwise under cta.xsd with tt's {type table} removed.</documentation>
     </annotation>
     <schemaTest name="cta">
       <schemaDocument xlink:href="cta.xsd"/>

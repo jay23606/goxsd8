@@ -842,10 +842,10 @@ func TestUnattributedParentTypeDeclines(t *testing.T) {
 // content} the second x takes L, of which k is a child (walker.resolvedType);
 // the second yt of wt is governed by the top-level yt's Tt, whose x selects
 // Lr either way, of which k is a child, where its members are classified under
-// Ta's x of type L (walker.declarationType). gd may be governed by Ta or Tn,
-// and each ·attributes· its one x to the element particle of type L, so L
-// governs x and k's "$type" is settled under it (walker.governing). Each row
-// agrees with its XML twin.
+// Ta's x of type L (walker.declarationType). gd has no a, so its table selects
+// Ta (walker.settled), which, as Tn would, ·attributes· its one x to the
+// element particle of type L, so L governs x and k's "$type" is settled under
+// it (walker.governing). Each row agrees with its XML twin.
 func TestAncestryTypeMaps(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl

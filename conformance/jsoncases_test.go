@@ -435,14 +435,14 @@ const knownSelectsError = `<xs:element name="known" type="xs:string" nillable="t
 // TestNillableErrorType pins where nillableErrorType finds a {nillable}
 // declaration of ·xs:error·: at the top level, as its {type definition} or a
 // type its {type table} selects, below a top-level declaration's anonymous
-// type or a Type Alternative's, in a named type, in a named model group and
+// type or a Type Alternative's, below the anonymous type of a declaration a
+// Type Alternative's anonymous type owns, in a named type, in a named model group and
 // its inner model group, below the anonymous type of a group's declaration,
-// and below a redefined type's declaration (its inline {base type
-// definition}); and that it finds none where xs:error or {nillable} is
-// missing. The two recursive rows end without a visited set: a named type
-// reached again by reference, and a group reached again by <group ref>, are no
-// ownership edge. Each row writes base.xsd beside its schema document;
-// only the redefine row reads it.
+// and below a redefined type's declaration (its inline {base type definition}); and
+// that it finds none where xs:error or {nillable} is missing. The two recursive rows
+// end without a visited set: a named type reached again by reference, and a group
+// reached again by <group ref>, are no ownership edge. Each row writes base.xsd
+// beside its schema document; only the redefine row reads it.
 func TestNillableErrorType(t *testing.T) {
 	const (
 		local     = `<xs:element name="k" type="xs:error" nillable="true" minOccurs="0"/>`
@@ -466,6 +466,12 @@ func TestNillableErrorType(t *testing.T) {
 		{
 			"local, in a Type Alternative's anonymous type",
 			`<xs:element name="known"><xs:alternative test="@a"><xs:complexType><xs:sequence>` + local +
+				`</xs:sequence></xs:complexType></xs:alternative></xs:element>`,
+			true,
+		},
+		{
+			"below a Type Alternative's anonymous type's declaration",
+			`<xs:element name="known"><xs:alternative test="@a"><xs:complexType><xs:sequence>` + inner("x", local) +
 				`</xs:sequence></xs:complexType></xs:alternative></xs:element>`,
 			true,
 		},
