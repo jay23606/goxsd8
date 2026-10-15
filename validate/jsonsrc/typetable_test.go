@@ -139,7 +139,9 @@ func TestTypeTable(t *testing.T) {
 // select U again, so m is U's attribute. k, an object, is under V's local
 // declaration of one anonymous type and, W containing no k, under the
 // top-level k of another, whose {context}s differ (oneType); no a selects V,
-// which classifies k as its own.
+// which classifies k as its own, as the member that ends the attribute run
+// (walker.agrees) and as a later one (walker.classify, under V's object
+// alone).
 func TestTypeTableSelected(t *testing.T) {
 	v := validatorOver(t, typeTableSchema)
 	for _, tc := range []struct {
@@ -150,6 +152,8 @@ func TestTypeTableSelected(t *testing.T) {
 			`<tu xmlns="urn:c" a="u" m="x"/>`, none},
 		{"a child under declarations of two anonymous types", `{"tv":{"k":{}}}`,
 			`<tv xmlns="urn:c"><k/></tv>`, none},
+		{"a later child under declarations of two anonymous types", `{"tv":{"n":"x","k":{}}}`,
+			`<tv xmlns="urn:c"><n>x</n><k/></tv>`, none},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
