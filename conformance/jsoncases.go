@@ -129,10 +129,11 @@ func newJSONExec() laneExecutor {
 //     the type T jsonsrc settles for its parent's "$type" is governed by them
 //     wherever T governs the parent, and T governs it wherever the parent's
 //     verdict stands uncharged: jsonsrc settles T as the ·governing type
-//     definition· every type that may govern the grandparent gives the
-//     parent, and as the type the "$type" names where every one charges the
-//     parent, and declines the "$type" where those types settle on two or the
-//     mapping bounds none (walker.instanceGoverned, walker.governing);
+//     definition· the grandparent's governing type gives the parent, read
+//     off the grandparent's ·attribution·, and as the type the "$type" names
+//     where every reading charges the parent, and declines the "$type" where
+//     the mapping determines no type governing the grandparent
+//     (walker.instanceGoverned, walker.governing);
 //   - strict-attribute-unresolved and attribute-ldt: refused here on a "valid"
 //     reading, through attributeGovernanceDiverges, which says why no other
 //     element reaches them;
@@ -383,8 +384,9 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     T walker.instanceGoverned settles: X at the root, which ·overrides· its
 //     declaration's type or is charged cvc-elt clause 4
 //     (walk.instanceOverride); below it, the ·governing type definition·
-//     every type that may govern the parent gives the element wherever its
-//     verdict stands uncharged — X where it ·overrides· the ·locally declared
+//     the parent's governing type, read off the parent's ·attribution·
+//     (walker.governing), gives the element wherever its verdict stands
+//     uncharged — X where it ·overrides· the ·locally declared
 //     type· L ·without limitation·, or where L is ·absent· and no top-level
 //     declaration X fails to ·override· is there (key-governing-type-elem
 //     clauses 6 and 8), and L where X does not ·override· L and an {open
@@ -392,8 +394,8 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     charges the element, under cvc-elt clause 4 or cvc-complex-type clause
 //     5 (walk.instanceOverride, walk.locallyDeclaredType), so no "valid"
 //     reading stands, whatever the element's descendants are classified
-//     under. jsonsrc declines the "$type" where those types settle on two or
-//     the mapping bounds none. So T governs wherever the verdict stands
+//     under. jsonsrc declines the "$type" where the mapping determines no type
+//     governing the parent. So T governs wherever the verdict stands
 //     uncharged, and T is X, a named type visited here, or L, the {type
 //     definition} of a declaration the content model of a type on the
 //     parent's type's {base type definition} chain contains (key-ldt-elem),

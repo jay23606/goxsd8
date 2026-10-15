@@ -416,7 +416,7 @@ func TestTypeWithoutGovernor(t *testing.T) {
 		t.Fatalf("root: %v", err)
 	}
 	v.Assess(root)
-	const want = `jsonsrc: instance.json:1:39: the "$type" member of {urn:t}x: the mapping bounds no type that may govern {urn:t}p`
+	const want = `jsonsrc: instance.json:1:39: the "$type" member of {urn:t}x: the mapping determines no type that governs {urn:t}p`
 	if w.err == nil || !strings.HasPrefix(w.err.Error(), want) {
 		t.Fatalf("walking %s latched %v, want it to open %q", doc, w.err, want)
 	}
@@ -553,24 +553,23 @@ const governanceSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 </xs:schema>`
 
 // TestUngovernedParentType pins walker.governing and walker.instanceGoverned
-// under a parent whose classifying type may not govern it: the "$type" on x
-// is settled under every type that may govern the parent, and each row's
-// types settle on dt, which governs the second x where other does not
-// ·override· it. The first row is #2615's round-3 reproduction: the second y
-// is matched to w's declaration of type Td but may be governed by the
-// top-level y's Tg, whose lax {open content} leaves the second x to dt,
-// uncharged; under Td, with no {open content}, other is charged. The third
-// carries the doubt one level down, to v, where Tg2's vr declares x and Td2's
-// vt does not: under vt the name ·resolves· to the top-level x of type dt,
-// which other does not ·override·, so cvc-elt clause 4 is charged there. The
-// fourth row's u is named by r's {open content} and governed by its ·locally
-// declared type· ub, not by the top-level u's ug. The fifth reaches mt
-// through the substitution group of h. Each row agrees with its XML twin.
+// under a parent whose classifying type is not the one that governs it: the
+// "$type" on x is settled under the type the parent's ·attribution· gives it,
+// on which dt governs the second x, other not ·overriding· it. The first row
+// is #2615's round-3 reproduction: the second y is matched to w's declaration
+// of type Td but ·attributed to· the lax wildcard and governed by the
+// top-level y's Tg (key-governing-ed clause 3), whose lax {open content}
+// leaves the second x to dt, uncharged. The third carries it one level down:
+// under Tg2, v is governed by vr, which declares x, where Td2's vt does not.
+// The fourth row's u is taken by r's {open content} and governed by its
+// ·locally declared type· ub, not by the top-level u's ug. The fifth reaches
+// mt through the substitution group of h (cvc-accept clause 2.3.2). Each row
+// agrees with its XML twin.
 func TestUngovernedParentType(t *testing.T) {
 	v := validatorOver(t, governanceSchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
 	for _, tc := range []struct{ name, json, xml string }{
-		{"a wildcard's top-level declaration may govern the parent", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}]}}`,
+		{"a wildcard's top-level declaration governs the parent", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}]}}`,
 			`<w ` + x + `><y/><y><x/><x xsi:type="t:other"><k>zz</k></x></y></w>`},
 		{"prefixed keys", `{"t:w":{"$xmlns":{"t":"urn:t"},"t:y":[{},{"t:x":[{},{"$type":"t:other","t:k":"zz"}]}]}}`,
 			`<t:w xmlns:t="urn:t" ` + xsiDecl + `><t:y/><t:y><t:x/><t:x xsi:type="t:other"><t:k>zz</t:k></t:x></t:y></t:w>`},
@@ -585,19 +584,24 @@ func TestUngovernedParentType(t *testing.T) {
 	}
 }
 
-// ancestrySchema builds the shapes walker.instanceGoverned declines and the
-// two arms of walker.governing that only add types. w takes one optional y of
-// type Ta and then a lax wildcard, and the top-level y is of type Tb, which
-// restricts Ta, narrowing x's type from L to Lr; both have a lax {open
-// content}. w6 takes one optional u of type A, which declares e of type Ta,
-// and then a lax wildcard, and the top-level u is of type B, which has a lax
-// {open content} and declares nothing. zw takes one optional z of type zt and
-// then a lax wildcard, with no top-level z, so a second z is ·laxly
-// assessed·; zt declares g, and the top-level g carries a {type table}. pp is
-// of the empty type D, which Q extends with a lax {open content} and x. ws
-// takes one optional v of type Ta and then a skip wildcard, and the top-level
-// v is of the empty type Tz. X, unrelated to L, has the attribute k; there is
-// no top-level x.
+// ancestrySchema builds parents whose members are classified under one type
+// and governed by another, for walker.governing and walker.instanceGoverned. w
+// takes one optional y of type Ta and then a lax wildcard, and the top-level y
+// is of type Tb, which restricts Ta, narrowing x's type from L to Lr; both
+// have a lax {open content}. w6 takes one optional u of type A, which declares
+// e of type Ta, and then a lax wildcard, and the top-level u is of type B,
+// which has a lax {open content} and declares nothing. zw takes one optional z
+// of type zt and then a lax wildcard, with no top-level z, so a second z is
+// ·laxly assessed·; zt declares g, and the top-level g carries a {type table}.
+// pp is of the empty type D, which Q extends with a lax {open content} and x.
+// ws takes one optional v of type Ta and then a skip wildcard, and the
+// top-level v is of the empty type Tz; wo takes one optional v of type Ta
+// and has a skip suffix {open content}; nb takes one optional v of type Ta, a
+// required b and then a lax wildcard. wt takes a yt as w takes a y, and the
+// top-level yt is of type Tt, which restricts Ta and whose x carries a {type
+// table}. big's {content type} is one xsd.Schema.ContentMatcher declines (its
+// GAP(xsd) ceiling), holding a of type Ta. X, unrelated to L, has the
+// attribute k; there is no top-level x.
 const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
   <xs:complexType name="L"><xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>
@@ -672,38 +676,73 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
       </xs:sequence>
     </xs:complexType>
   </xs:element>
+  <xs:element name="wo">
+    <xs:complexType>
+      <xs:openContent mode="suffix"><xs:any processContents="skip"/></xs:openContent>
+      <xs:sequence><xs:element name="v" type="t:Ta" minOccurs="0"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="nb">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="v" type="t:Ta" minOccurs="0"/>
+        <xs:element name="b" type="xs:string"/>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="Tt">
+    <xs:complexContent>
+      <xs:restriction base="t:Ta">
+        <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+        <xs:sequence><xs:element name="x" type="t:Lr" minOccurs="0"><xs:alternative test="@a" type="t:Lr"/></xs:element></xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="yt" type="t:Tt"/>
+  <xs:element name="wt">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="yt" type="t:Ta" minOccurs="0"/>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="big">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:sequence maxOccurs="1000"><xs:element name="a" type="t:Ta" maxOccurs="unbounded"/></xs:sequence>
+        <xs:element name="b" type="xs:string"/>
+        <xs:sequence maxOccurs="1000"><xs:element name="c" maxOccurs="unbounded"/></xs:sequence>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
 </xs:schema>`
 
-// TestAncestryTypeDeclines pins instanceGoverned's GAP(jsonsrc) remainder: a
-// "$type" declines where the types that may govern its parent settle on two
-// types, and where the mapping bounds none, though the engine assesses each
-// XML twin. In the first row the second y may be governed by Ta, under whose
-// {open content} the second x takes L, or by Tb, under which it takes Lr; the
-// wildcard's Tb governs it, and the twin is valid. In the second the second z
-// is ·laxly assessed·, so g may be ·attributed to· xs:anyType's wildcard and
-// governed through the top-level g's {type table}; the twin is valid. In the
-// third the second u may be governed by A, under which e takes Ta and the
-// second x L, or by B, whose {open content} gives e no ·locally declared
-// type· and leaves it ·laxly assessed·, so the second x takes X; the
-// wildcard's B governs it, and the twin charges cvc-complex-type twice.
+// TestAncestryTypeDeclines pins the GAP(jsonsrc) {type table} remainder: a
+// "$type" declines where the declaration an ·attribution· gives its parent
+// carries a {type table}, the mapping then determining no type that governs
+// the parent, though the engine assesses each XML twin. In the first row the
+// second z is ·attributed to· zw's lax wildcard and, no top-level z
+// existing, ·laxly assessed·, so g is attributed to xs:anyType's wildcard and
+// governed through the top-level g's {type table} (walker.resolvedType's
+// marker, #2669). In the second the second yt is governed by the top-level
+// yt's Tt, whose element particle x carries one (walker.declarationType's
+// marker, #2630); its members are classified under Ta, whose x carries none.
 func TestAncestryTypeDeclines(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
 	for _, tc := range []struct {
 		name, json, xml string
 		want            []xsderr.Rule
-		prefix          string
-		says            string
+		opens           string
 	}{
-		{"two types settle", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}]}}`,
-			`<w ` + x + `><y/><y><x/><x xsi:type="t:X"><k>zz</k></x></y></w>`, none,
-			"jsonsrc: instance.json:1:48: ", `the types that may govern {urn:t}y give {urn:t}x two ·governing type definitions·`},
-		{"a type table", `{"zw":{"z":[{},{"g":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}]}}`,
+		{"a wildcard's type table", `{"zw":{"z":[{},{"g":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}]}}`,
 			`<zw ` + x + `><z/><z><g><x/><x xsi:type="t:X"><k>zz</k></x></g></z></zw>`, none,
-			"jsonsrc: instance.json:1:54: ", `the mapping bounds no type that may govern {urn:t}g`},
-		{"an open content's resolution", `{"w6":{"u":[{},{"e":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}]}}`,
-			`<w6 ` + x + `><u/><u><e><x/><x xsi:type="t:X"><k>zz</k></x></e></u></w6>`, []xsderr.Rule{"cvc-complex-type", "cvc-complex-type"},
-			"jsonsrc: instance.json:1:54: ", `the types that may govern {urn:t}e give {urn:t}x two ·governing type definitions·`},
+			`jsonsrc: instance.json:1:54: the "$type" member of {urn:t}x: the mapping determines no type that governs {urn:t}g`},
+		{"an element particle's type table", `{"wt":{"yt":[{},{"x":{"k":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string"}}}]}}`,
+			`<wt ` + x + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"><yt/><yt><x><k xsi:type="xs:string"/></x></yt></wt>`, none,
+			`jsonsrc: instance.json:1:79: the "$type" member of {urn:t}k: the mapping determines no type that governs {urn:t}x`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			xres, err := xmlsrc.Validate(v, strings.NewReader(tc.xml), xmlsrc.WithURI("instance.xml"))
@@ -717,40 +756,88 @@ func TestAncestryTypeDeclines(t *testing.T) {
 			if err == nil {
 				t.Fatalf("Validate(%s) = %v violations, %d unevaluated, nil error; want the decline", tc.json, rules(res), len(res.Unevaluated()))
 			}
-			if !strings.HasPrefix(err.Error(), tc.prefix+`the "$type" member of {urn:t}x: `) || !strings.Contains(err.Error(), tc.says) {
-				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, tc.says)
+			if !strings.HasPrefix(err.Error(), tc.opens) {
+				t.Errorf("Validate(%s) = %q, want it to open %q", tc.json, err, tc.opens)
 			}
 		})
 	}
 }
 
-// TestAncestryTypeMaps pins the two arms of walker.governing #2615's mutations
-// survived. A "$type" settles the one type that governs its element, so a
-// "$type" on its child is settled under that type alone: under pp's Q, x takes
-// L, where under pp's declared D it would take X. A skip wildcard leaves an
-// element ·skipped·, so it adds no type: the v of ws is governed by Ta alone,
-// where the top-level v's Tz would settle the second x on X. Each row agrees
-// with its XML twin.
-func TestAncestryTypeMaps(t *testing.T) {
+// TestUnattributedParentTypeDeclines pins instanceGoverned's GAP(jsonsrc)
+// marker for a content model xsd.Schema.ContentMatcher declines: big's
+// children are not ·attributed·, so no type is determined to govern a, and
+// the "$type" on its x declines. The engine walks a undecided, recording
+// cvc-complex-content as Unevaluated against it.
+func TestUnattributedParentTypeDeclines(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
-	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
-	for _, tc := range []struct{ name, json, xml string }{
-		{"under a $type", `{"pp":{"$xmlns":{"t":"urn:t"},"$type":"t:Q","x":[{},{"$type":"t:X","k":"zz"}]}}`,
-			`<pp ` + x + ` xsi:type="t:Q"><x/><x xsi:type="t:X"><k>zz</k></x></pp>`},
-		{"under a skip wildcard", `{"ws":{"v":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}}`,
-			`<ws ` + x + `><v><x/><x xsi:type="t:X"><k>zz</k></x></v></ws>`},
-	} {
-		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, none) })
+	const xml = `<big xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl + `><a><x/><x xsi:type="t:X"><k>zz</k></x></a><b/></big>`
+	xres, err := xmlsrc.Validate(v, strings.NewReader(xml), xmlsrc.WithURI("instance.xml"))
+	if err != nil {
+		t.Fatalf("xmlsrc.Validate(%s): %v", xml, err)
+	}
+	if len(xres.Unevaluated()) == 0 {
+		t.Fatalf("XML twin %s charges %v and leaves nothing unevaluated; want big's content model undecided", xml, rules(xres))
+	}
+	const doc = `{"big":{"a":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]},"b":""}}`
+	_, err = Validate(v, strings.NewReader(doc), WithURI(jsonURI))
+	const want = `jsonsrc: instance.json:1:46: the "$type" member of {urn:t}x: the mapping determines no type that governs {urn:t}a`
+	if err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("Validate(%s) = %v, want it to open %q", doc, err, want)
 	}
 }
 
-// TestGovernedParentTypeMaps pins walker.instanceGoverned where every type
-// that may govern the parent charges the child: z may be governed by zt or,
-// ·attributed to· the lax wildcard with no top-level z, ·laxly assessed·
-// against xs:anyType (walker.resolvedType). other does not ·override· x's dt
-// under zt, which has no {open content}, nor the top-level x's dt under
-// xs:anyType, so the members are classified under other, and the engine
-// charges cvc-elt clause 4 as for the XML twin.
+// TestAncestryTypeMaps pins walker.governing's arms: a "$type" is settled
+// under the one type that governs its parent, read off the parent's
+// ·attribution·, whatever type the parent's members are classified under.
+// Under pp's "$type" Q, x takes L, where under pp's declared D it would take
+// X. The second y of w is ·attributed to· the lax wildcard and governed by
+// the top-level y's Tb, under whose {open content} the second x takes Lr,
+// which X does not ·override·, so k is a child of Lr (key-governing-ed clause
+// 3, key-governing-type-elem clause 7); its members are classified under Ta,
+// the contained declaration's. The second u of w6 is governed by the top-level
+// u's B, whose {open content} takes e with no ·locally declared type·, so e is
+// ·laxly assessed· and X governs the second x (key-governing-type-elem clause
+// 8), of which k is an attribute; B is charged cvc-complex-type clause 5
+// against u's A. A skip wildcard leaves the second v of ws ·skipped·, as a
+// skip {open content} does the second v of wo, and the declared Ta stands for
+// each. The second v of nb, rejected because b must follow the first, and the v
+// after the rejected t:c, which validate attributes to nothing once its
+// matcher rejected, are governed by their ·locally declared type· Ta, where
+// the top-level v's Tz would make k an attribute. Each row agrees with its XML
+// twin.
+func TestAncestryTypeMaps(t *testing.T) {
+	v := validatorOver(t, ancestrySchema)
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"under a $type", `{"pp":{"$xmlns":{"t":"urn:t"},"$type":"t:Q","x":[{},{"$type":"t:X","k":"zz"}]}}`,
+			`<pp ` + x + ` xsi:type="t:Q"><x/><x xsi:type="t:X"><k>zz</k></x></pp>`, none},
+		{"a wildcard's top-level declaration governs the parent", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}]}}`,
+			`<w ` + x + `><y/><y><x/><x xsi:type="t:X"><k>zz</k></x></y></w>`, none},
+		{"an open content's resolution", `{"w6":{"u":[{},{"e":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}]}}`,
+			`<w6 ` + x + `><u/><u><e><x/><x xsi:type="t:X" k="zz"/></e></u></w6>`, complexType},
+		{"under an element particle before a skip wildcard", `{"ws":{"v":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}}`,
+			`<ws ` + x + `><v><x/><x xsi:type="t:X"><k>zz</k></x></v></ws>`, none},
+		{"skipped", `{"ws":{"v":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}]}}`,
+			`<ws ` + x + `><v/><v><x/><x xsi:type="t:X"><k>zz</k></x></v></ws>`, none},
+		{"skipped by an open content", `{"wo":{"v":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}]}}`,
+			`<wo ` + x + `><v/><v><x/><x xsi:type="t:X"><k>zz</k></x></v></wo>`, none},
+		{"rejected", `{"nb":{"v":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}],"b":""}}`,
+			`<nb ` + x + `><v/><v><x/><x xsi:type="t:X"><k>zz</k></x></v><b/></nb>`, content},
+		{"after a rejected sibling", `{"nb":{"$xmlns":{"t":"urn:t"},"v":{},"t:c":"1","b":"","v":{"x":[{},{"$type":"t:X","k":"zz"}]}}}`,
+			`<nb ` + x + `><v/><t:c>1</t:c><b/><v><x/><x xsi:type="t:X"><k>zz</k></x></v></nb>`, content},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestGovernedParentTypeMaps pins walker.instanceGoverned where the type that
+// governs the parent charges the child: the one z is ·attributed to· zw's
+// element particle and governed by zt, which has no {open content}, and other
+// does not ·override· x's dt there, so the members are classified under other,
+// and the engine charges cvc-elt clause 4 as for the XML twin.
 func TestGovernedParentTypeMaps(t *testing.T) {
 	v := validatorOver(t, governanceSchema)
 	twin(t, v, `{"zw":{"z":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}}}}`,

@@ -127,9 +127,12 @@ landed since.
 `go tool gapaudit`, fed (walk stamp `rows 2667 distinct 2667 min 1 max 2667 no
 gaps`), at `6009fc0`: **169 markers across 11 areas** (xpath 63, xsd 32,
 validate 23, jsonsrc 17, value 11, parser 8, conformance 7, xml 3, landcheck 2,
-regex 2, cmd 1). Groups 1 and 2 were not reconciled this pass. #2647 kept the
-jsonsrc count: its `walker.instanceGoverned` marker cites #2666, now `ready`.
-The 2026-10-14 `/backlog`'s fed run had 11 Group 1 rows with no dead ends, and
+regex 2, cmd 1). Groups 1 and 2 were not reconciled this pass. #2666 removed
+the `walker.instanceGoverned` marker that cited it. Three markers own its
+remainder: `walker.resolvedType` (#2669), `walker.declarationType` (#2630), and
+`walker.instanceGoverned`'s decline under a parent `xsd.Schema.ContentMatcher`
+leaves unattributed (#2670, a `blocked` tracker that retires with #1601's
+permanent ceiling). The 2026-10-14 `/backlog`'s fed run had 11 Group 1 rows with no dead ends, and
 26 Group 2 rows.
 
 ### Milestones and queue
@@ -294,8 +297,10 @@ This is ordered for a `/develop` session: take the highest row you can start.
      `instance` cluster any single ruling would free, and `vc002.v1`, the last
      assertion decline.
    - #2081, the wild062.n3 loss. Its lift must also re-examine jsonsrc's
-     `walker.governing` and `walker.instanceUnder`, one of whose arms is wrong
-     once it lands (its body says so).
+     `walker.governing` (its wildcard arm, which takes `walker.resolvedType`)
+     and `walker.instanceUnder`, which the lift makes wrong (its body says so).
+     It also closes #2669's pinned row (b), where the mapping follows the
+     engine's clause-8 reading.
    - #1885, #1790 and #2022.
    - The branch deletions listed under Branch namespace.
 

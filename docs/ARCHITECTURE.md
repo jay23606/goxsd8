@@ -113,8 +113,9 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `Validate`/`Option`/`WithURI`, imports `validate`, `xsd`, `xsderr`,
 `internal/xmlname`, `internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
 view `Validator.Schema` returns, to name the root and classify members, and
-reads `xsd.Schema.LocallyDeclaredElementType` off that view through a
-capability interface, the one `xsd` method beyond it the mapping needs;
+reads `xsd.Schema.LocallyDeclaredElementType`, `ValidlySubstitutable` and
+`ContentMatcher` off that view through a capability interface, the `xsd`
+methods beyond it the mapping needs;
 `validate/bersrc` is a destination, on `[1]`'s terms.
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
