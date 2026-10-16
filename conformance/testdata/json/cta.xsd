@@ -6,8 +6,10 @@
      spelled "c:Plain". Under Plain a key "note" is the child note, named
      for the top-level declaration (no wildcard), as it is under Item, a
      contained reference to it, so every key classifies alike and the
-     mapped infoset is the one Plain alone would give: the engine's
-     selection, which the mapping does not compute, decides each verdict. -->
+     mapped infoset is the one Plain alone would give: the mapping reads
+     the selection at the root and classifies the members under the type
+     it selects, but that type, which the engine assesses tt under,
+     decides each verdict and not the infoset. -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
            targetNamespace="urn:goxsd8:json:cta" xmlns:c="urn:goxsd8:json:cta"

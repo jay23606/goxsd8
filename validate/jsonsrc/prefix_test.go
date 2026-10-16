@@ -173,7 +173,7 @@ func TestPrefixedKey(t *testing.T) {
 // alike (walker.wildcardMember).
 func TestPrefixedKeyName(t *testing.T) {
 	v := prefixValidator(t)
-	w := newWalker(jsonURI, strings.NewReader(`{"p:plain":{"$xmlns":{"p":"urn:p","z":"urn:z"},"z:s":"x","s":"y"}}`), v.Schema())
+	w := newWalker(jsonURI, strings.NewReader(`{"p:plain":{"$xmlns":{"p":"urn:p","z":"urn:z"},"z:s":"x","s":"y"}}`), v.Schema(), v.ConditionallySelected)
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)

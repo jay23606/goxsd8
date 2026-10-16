@@ -207,8 +207,10 @@ func execJSONCase(backend value.Backend, c caseSpec) (Status, refusal) {
 // selecting the type. The other routes to ·xs:error· stay closed: a child
 // jsonsrc classifies under an element whose type a {type table} selects is
 // governed by a declaration that type contains, which anyDeclaration visits
-// in an anonymous selectable type too, of the one named type jsonsrc's
-// classification read (its walker.classify maps no other); a wildcard's
+// in an anonymous selectable type too, its own inline type included
+// (declaresWhere): jsonsrc classifies the child by that declaration at the
+// root (its walker.settled), and below it by one of the one named type that
+// declaration's is (its walker.classify maps no other); a wildcard's
 // child, or a wildcard-free type's, governed by a top-level declaration is
 // governed by one of those visited here; one governed by a ·locally declared type· or
 // ·laxly assessed· has no declaration, so it is never ·nilled· and the walk
@@ -231,15 +233,18 @@ func nillableErrorType(schema *xsd.Schema) bool {
 // Those are every declaration jsonsrc can classify an element by: the root's,
 // a contained one, and the top-level one a wildcard's child, or a
 // wildcard-free type's, is named for; and the one a type a {type table}
-// selects contains, which governs a child jsonsrc classified by another.
+// selects contains, which governs a child jsonsrc classified by another, and
+// by which jsonsrc classifies a root's child where it reads the root's table
+// (its walker.settled).
 //
 // The types visited are every named one (Schema.Types) and every anonymous
 // one an ownership edge reaches from them, from a top-level declaration, or
 // from a declaration a named model group owns (Schema.ModelGroups): the inline
 // {type definition} of a declaration whose {scope}.{parent} is the type being
 // visited, an inline Type Alternative {type definition} of a declaration
-// visited (declaresWhere), and an inline {base type definition} (src-expredef
-// clause 1.1). Each anonymous type has one owner, so those edges form a tree
+// visited, the inline {type definition} of a declaration such a type owns
+// (declaresWhere), and an inline {base type definition} (src-expredef clause
+// 1.1). Each anonymous type has one owner, so those edges form a tree
 // rooted at the top-level components and the walk needs no visited set (STYLE
 // D4).
 func anyDeclaration(schema *xsd.Schema, holds func(xsd.ElementDeclaration) bool) bool {
@@ -249,7 +254,7 @@ func anyDeclaration(schema *xsd.Schema, holds func(xsd.ElementDeclaration) bool)
 		}
 	}
 	for _, td := range schema.Types() {
-		if t, ok := td.(xsd.ComplexType); ok && containsWhere(schema, t, holds) {
+		if t, ok := td.(xsd.ComplexType); ok && containsWhere(schema, t, false, holds) {
 			return true
 		}
 	}
@@ -267,19 +272,23 @@ func anyDeclaration(schema *xsd.Schema, holds func(xsd.ElementDeclaration) bool)
 //
 // An alternative's anonymous type reports d as its {context}, and a
 // declaration it owns names the alternative's own ownership edge as its
-// {scope}.{parent} (xsd.AnonymousComplexTypeScopeParent), so containsWhere
-// visits each declaration it contains but descends into none of their inline
-// types. jsonsrc classifies no element by such a type: its walker.classify
-// maps a child under a selectable type's declaration only where that
-// declaration's {type definition} names a named type.
+// {scope}.{parent} (xsd.AnonymousComplexTypeScopeParent), which that
+// {context} does not identify, so containsWhere is told which slot is an
+// alternative's and descends into the inline types of the declarations such a
+// type owns: jsonsrc classifies the members of a root by the type its {type
+// table} selects (its walker.settled), and their own members by those
+// declarations' types.
 func declaresWhere(schema *xsd.Schema, d xsd.ElementDeclaration, holds func(xsd.ElementDeclaration) bool) bool {
 	if holds(d) {
 		return true
 	}
-	return slices.ContainsFunc(typeSlots(d), func(ref xsd.TypeDefinitionOrRef) bool {
+	for i, ref := range typeSlots(d) {
 		t, ok := ownedComplexType(ref)
-		return ok && containsWhere(schema, t, holds)
-	})
+		if ok && containsWhere(schema, t, i > 0, holds) {
+			return true
+		}
+	}
+	return false
 }
 
 // groupOwnsWhere is anyDeclaration's walk over the declarations a named model
@@ -311,9 +320,12 @@ func groupOwnsWhere(schema *xsd.Schema, g xsd.ModelGroup, holds func(xsd.Element
 
 // containsWhere is anyDeclaration's walk below the Complex Type Definition t:
 // true if holds answers true for a declaration t's content model contains, or
-// if the walk down an ownership edge from t answers true.
-func containsWhere(schema *xsd.Schema, t xsd.ComplexType, holds func(xsd.ElementDeclaration) bool) bool {
-	if base, ok := ownedComplexType(t.Base()); ok && containsWhere(schema, base, holds) {
+// if the walk down an ownership edge from t answers true. alternative says t
+// is a Type Alternative's {type definition} (declaresWhere), every anonymous
+// owner of whose contained declarations is t itself: its base is by name, so
+// none comes from an inline {base type definition}.
+func containsWhere(schema *xsd.Schema, t xsd.ComplexType, alternative bool, holds func(xsd.ElementDeclaration) bool) bool {
+	if base, ok := ownedComplexType(t.Base()); ok && containsWhere(schema, base, false, holds) {
 		return true
 	}
 	for _, d := range schema.ContainedElementDeclarations(t) {
@@ -331,12 +343,12 @@ func containsWhere(schema *xsd.Schema, t xsd.ComplexType, holds func(xsd.Element
 		case xsd.ModelGroupScopeParent:
 			// A named model group's: visited from schema.ModelGroups().
 		case xsd.ComplexTypeScopeParent:
-			if p.Name == t.Name() && containsWhere(schema, inner, holds) {
+			if p.Name == t.Name() && containsWhere(schema, inner, false, holds) {
 				return true
 			}
 		case xsd.AnonymousComplexTypeScopeParent:
 			ctx, ok := t.Context()
-			if ok && ctx.ID() == p.Owner && containsWhere(schema, inner, holds) {
+			if (alternative || ok && ctx.ID() == p.Owner) && containsWhere(schema, inner, false, holds) {
 				return true
 			}
 		default:
@@ -411,9 +423,11 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     use of the name gives it a non-·absent· ·locally declared type·: so the
 //     strict and the lacks conditions bind every D, local ones included, and
 //     every X. Where D carries a {type table} and no "$type" names a type, the
-//     type the table selects governs instead, and jsonsrc maps a key only
-//     where that type classifies it alike (walker.classify): the attribute is
-//     under its use of the name or the one namespace its {attribute wildcard}
+//     type the table selects governs instead, and jsonsrc presents a key as an
+//     attribute only where that type classifies it as one — under the type
+//     itself at the root (walker.settled), and alike under every type the
+//     table can select below it (walker.classify): the attribute is under its
+//     use of the name or the one namespace its {attribute wildcard}
 //     enumerates, so the conditions bind every type a table can select too;
 //   - where a "$type" names X, jsonsrc classifies the element under the type
 //     T walker.instanceGoverned settles: X at the root, which ·overrides· its
@@ -452,9 +466,11 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     ·governing element declaration·, and a child jsonsrc matched to a
 //     declaration D's type contains is governed, under an element particle,
 //     by the declaration of its name the selected type contains, visited here
-//     (anyDeclaration), whose {type definition} is the named type D's own
-//     declaration of it refers to (jsonsrc's alike); the ·locally declared
-//     type· an {open content} gives is D's {type definition} still;
+//     (anyDeclaration): at the root jsonsrc matches the child to that
+//     declaration itself (walker.settled), and below it that declaration's
+//     {type definition} is the named type D's own declaration of it refers
+//     to (jsonsrc's alike); the ·locally declared type· an {open content}
+//     gives is D's {type definition} still;
 //   - which leaves a child with no "$type" that jsonsrc matched to a
 //     contained D carrying a {type table} but ·attributed to· a strict or lax
 //     Wildcard, governed by the top-level G its name ·resolves· to:

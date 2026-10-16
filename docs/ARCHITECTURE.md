@@ -99,8 +99,9 @@ and imports `xsd`, `value`, `regex` and
 `xsderr` for real (its section says which tiers are shipped).
 
 **[2] The infoset seam, the assessment skeleton, the XML adapter and the
-first two slices of the JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views and
-`New`/`Validator`/`Result` and imports `xsd`, `xsderr`, `value`, `xpath`,
+first two slices of the JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views,
+`New`/`Validator`/`Result` and `Validator.ConditionallySelected`, the
+key-cta-select scan its walk makes, and imports `xsd`, `xsderr`, `value`, `xpath`,
 `icpath` and `internal/xmlqname` — no longer `regex` directly, whose NCName class left with the
 identity-constraint path lexer for `icpath`, though it stays in the closure
 behind `value` for the pattern facets validate compiles — but never a
@@ -115,7 +116,8 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 view `Validator.Schema` returns, to name the root and classify members, and
 reads `xsd.Schema.LocallyDeclaredElementType`, `ValidlySubstitutable` and
 `ContentMatcher` off that view through a capability interface, the `xsd`
-methods beyond it the mapping needs;
+methods beyond it the mapping needs, and settles a root's attribute members
+by the type `Validator.ConditionallySelected` selects for them;
 `validate/bersrc` is a destination, on `[1]`'s terms.
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
@@ -628,7 +630,9 @@ it.**
 the two optional document-level capabilities an adapter may implement
 (`UnparsedEntities`, `DeclarationsProcessed`, narrowed off the root),
 plus `New`/`Validator`/`Result`/`Option`/`WithLogger`, `SchemaView` (what
-`Validator.Schema` returns: the schema reads an adapter makes) and `Unevaluated`
+`Validator.Schema` returns: the schema reads an adapter makes),
+`Validator.ConditionallySelected` (the key-cta-select scan `Assess` makes, for
+an adapter that classifies members by the type a {type table} selects) and `Unevaluated`
 (`Rule`/`Loc`/`Msg`, read off `Result.Unevaluated`: one check the assessment
 reached and did not perform, deliberately not an `error`), and `Assess` walks a
 source once. **Read which rules it charges, which clauses of each, and which

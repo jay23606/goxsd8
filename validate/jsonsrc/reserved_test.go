@@ -126,7 +126,7 @@ func TestXmlnsMember(t *testing.T) {
 // unchanged, located at the "$type" key, before the attribute members.
 func TestTypeAttribute(t *testing.T) {
 	v := validatorOver(t, typeSchema)
-	w := newWalker(jsonURI, strings.NewReader(`{"item":{"$type":" derived ","d":"1","a":"x","b":"y"}}`), v.Schema())
+	w := newWalker(jsonURI, strings.NewReader(`{"item":{"$type":" derived ","d":"1","a":"x","b":"y"}}`), v.Schema(), v.ConditionallySelected)
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)
@@ -414,7 +414,7 @@ type viewOnly struct{ validate.SchemaView }
 func TestTypeWithoutGovernor(t *testing.T) {
 	v := validatorOver(t, governedSchema)
 	const doc = `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:Xe","b":"1"}]}}`
-	w := newWalker(jsonURI, strings.NewReader(doc), viewOnly{v.Schema()})
+	w := newWalker(jsonURI, strings.NewReader(doc), viewOnly{v.Schema()}, v.ConditionallySelected)
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)
@@ -769,52 +769,33 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
 </xs:schema>`
 
-// TestAncestryTypeDeclines pins the GAP(jsonsrc) {type table} remainder: a
-// "$type" declines where the types the {type table} of its parent's
-// declaration can select settle it on different types
-// (walker.instanceGoverned's marker, #2696), though the engine assesses each
-// XML twin. gd may be governed by Ta or Tn: under Ta its second x is
-// ·attributed to· the {open content}, and t:X not ·overriding· x's L there, L
-// governs it, of which k is a child; under Tn it is rejected, and t:X governs
-// it, of which k is an attribute. The engine selects Ta, gd having no a, and
-// assesses the twin with k a child of L; the mapping does not choose. gw may
-// be governed by Gq, which rejects its second q, so that q's ·locally declared
-// type· L governs it, or by Gw, which ·attributes· it to the lax wildcard, so
-// that the top-level q's Qo does (walker.governing): t:X ·overrides· k's
-// xs:string under neither, so under L, with no {open content}, it is charged
-// and t:X classifies k's members, and under Qo, whose {open content} may take
-// k, xs:string does.
-func TestAncestryTypeDeclines(t *testing.T) {
+// TestAncestrySelected pins a "$type" below a root whose {type table}'s types
+// settle it differently: the mapping reads the type the root's table
+// ·conditionally selects· (walker.settled), which alone governs the root, and
+// settles the "$type" under it, as the engine assesses each XML twin. gd may
+// be governed by Ta or Tn: under Ta its second x is ·attributed to· the {open
+// content}, and t:X not ·overriding· x's L there, L governs it, of which k is
+// a child; under Tn it is rejected, and t:X governs it, of which k is an
+// attribute. gd has no a, so its table selects Ta. gw may be governed by Gq,
+// which rejects its second q, so that q's ·locally declared type· L governs
+// it, or by Gw, which ·attributes· it to the lax wildcard, so that the
+// top-level q's Qo does (walker.governing): t:X ·overrides· k's xs:string
+// under neither, so under L, with no {open content}, it is charged and t:X
+// classifies k's members, and under Qo, whose {open content} may take k,
+// xs:string does. gw has no a, so its table selects Gw.
+func TestAncestrySelected(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
 	for _, tc := range []struct {
 		name, json, xml string
 		want            []xsderr.Rule
-		opens           string
 	}{
 		{"a type table's types settling a child's $type differently", `{"gd":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}`,
-			`<gd ` + x + `><x/><x xsi:type="t:X"><k>zz</k></x></gd>`, none,
-			`jsonsrc: instance.json:1:40: the "$type" member of {urn:t}x: the types the {type table} of {urn:t}gd or of an ancestor can select settle the type governing {urn:t}x differently`},
+			`<gd ` + x + `><x/><x xsi:type="t:X"><k>zz</k></x></gd>`, none},
 		{"a type table's types governing a child differently", `{"gw":{"q":[{},{"k":{"$xmlns":{"t":"urn:t"},"$type":"t:X"}}]}}`,
-			`<gw ` + x + `><q/><q><k xsi:type="t:X"/></q></gw>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"},
-			`jsonsrc: instance.json:1:45: the "$type" member of {urn:t}k: the types the {type table} of {urn:t}q or of an ancestor can select settle the type governing {urn:t}k differently`},
+			`<gw ` + x + `><q/><q><k xsi:type="t:X"/></q></gw>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"}},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			xres, err := xmlsrc.Validate(v, strings.NewReader(tc.xml), xmlsrc.WithURI("instance.xml"))
-			if err != nil {
-				t.Fatalf("xmlsrc.Validate(%s): %v", tc.xml, err)
-			}
-			if got := rules(xres); !slices.Equal(got, tc.want) || len(xres.Unevaluated()) > 0 {
-				t.Fatalf("XML twin %s charges %v, %d unevaluated; want %v", tc.xml, got, len(xres.Unevaluated()), tc.want)
-			}
-			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
-			if err == nil {
-				t.Fatalf("Validate(%s) = %v violations, %d unevaluated, nil error; want the decline", tc.json, rules(res), len(res.Unevaluated()))
-			}
-			if !strings.HasPrefix(err.Error(), tc.opens) {
-				t.Errorf("Validate(%s) = %q, want it to open %q", tc.json, err, tc.opens)
-			}
-		})
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
 }
 
@@ -865,10 +846,10 @@ func TestUnattributedParentTypeDeclines(t *testing.T) {
 // content} the second x takes L, of which k is a child (walker.resolvedType);
 // the second yt of wt is governed by the top-level yt's Tt, whose x selects
 // Lr either way, of which k is a child, where its members are classified under
-// Ta's x of type L (walker.declarationType). gd may be governed by Ta or Tn,
-// and each ·attributes· its one x to the element particle of type L, so L
-// governs x and k's "$type" is settled under it (walker.governing). Each row
-// agrees with its XML twin.
+// Ta's x of type L (walker.declarationType). gd has no a, so its table selects
+// Ta (walker.settled), which, as Tn would, ·attributes· its one x to the
+// element particle of type L, so L governs x and k's "$type" is settled under
+// it (walker.governing). Each row agrees with its XML twin.
 func TestAncestryTypeMaps(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
