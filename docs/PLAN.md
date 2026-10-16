@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-16 (post-land #2685, on `main` at `c847fda`)
+## Status — 2026-10-16 (post-land #2686, on `main` at `41303b0`)
 
 **North star: grow the `json` lane, M8, now at 41.** M8 has no startable lane
 slice. #2696 is `needs-replan`: two rejections parked it, and its `PARKED:`
@@ -26,13 +26,15 @@ is warden-approved and lands with the selection-reading of the attribute run.
 The candidate-drop mechanism, #2703, is a second landing that needs a rule for
 readings ending earlier than the selected one. Its four other residue issues,
 #2699–#2702, are filed but unlabelled. Replanning them is the next planning
-action. #2685 landed `-help`'s JSON shape paragraph and README's worked JSON
-example (`Ratchet: unchanged`), so the three remaining M8 persona findings,
-#2686–#2688, lead the band. **Lean: product.**
+action. #2688 and #2686 have landed (`Ratchet: unchanged` each): jsonsrc is
+discoverable from README and the package docs, and every jsonsrc error keeps
+exit 4 and the rule-less line, with `-help` saying why. The M8 persona residue
+is #2687 (attribute order), #2710 (the typed decline #2686's ruling owed) and
+#2655 (a read fault's wording), and it leads the band. **Lean: product.**
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `c847fda`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `41303b0`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -45,7 +47,7 @@ lane score (#1120).
 | `schema` | 15300 | 98 | 15398 |
 | `xpath` | — | — | 0 |
 
-**No lane moved at `c847fda`.** `json` last moved +3 at `8dc1293`, and no W3C
+**No lane moved at `41303b0`.** `json` last moved +3 at `8dc1293`, and no W3C
 lane has moved since `6009fc0`. **`datatypes ⊆ instance` is intended** (#1507).
 **An em dash means a lane with no cases yet, not a lane scoring zero.**
 `datatypes` is M3 and complete. `schema` is M4 and `instance` is M5, and both
@@ -58,7 +60,7 @@ cases a landing adds. `xpath` waits on M7 and `ber` on M11.
 **Measured on `b79687d`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
 conformance run fed to `go tool lanepartition`. It was not re-run here because
 no W3C lane moved. Every arbiter since `ecc1ae3` measured its change as moving
-no W3C case, #2685's included. The measurement stands less four banked flips,
+no W3C case, #2686's included. The measurement stands less four banked flips,
 #2608's three and #894's one. All four are `schema` decided-`(accepted)` cases,
 so that column reads 86, not 90. Every figure is a part of the banked fails and
 a bound from above. `json` has no fails to partition.
@@ -99,9 +101,9 @@ a bound from above. `json` has no fails to partition.
 
 ### Branch namespace, `origin` (report-only; containers cannot delete a ref)
 
-**`go tool wipsurvey`, fed** this pass's whole-repository walk (`rows 2704
-distinct 2704 min 1 max 2704 no gaps`). Nothing is LIVE or CLAIMED, and
-`wip/issue-2685` went away with #2685's merge.
+**`go tool wipsurvey`, fed** this pass's whole-repository walk (`rows 2710
+distinct 2710 min 1 max 2710 no gaps`). Nothing is LIVE or CLAIMED, and
+`wip/issue-2686` went away with #2686's merge.
 
 - **`wip/issue-2696` is RETIRED** because its issue is `needs-replan`. It stays
   in place as the replan's evidence: its tip is `9ee12f1` plus the session's log
@@ -126,7 +128,7 @@ distinct 2704 min 1 max 2704 no gaps`). Nothing is LIVE or CLAIMED, and
 
 ### Marker census
 
-**`go tool gapaudit`, fed the same walk, at `c847fda`:** 170 markers across 11
+**`go tool gapaudit`, fed the same walk, at `41303b0`:** 170 markers across 11
 areas (xpath 63, xsd 32, validate 23, jsonsrc 18, value 11, parser 8,
 conformance 7, xml 3, landcheck 2, regex 2, cmd 1). The two jsonsrc markers on
 `walker.classify` and `walker.instanceGoverned` still cite #2696, which is open.
@@ -143,14 +145,13 @@ conformance 7, xml 3, landcheck 2, regex 2, cmd 1). The two jsonsrc markers on
   - `xsd/contentrestricts.go:1332` and `:1640`.
   - `xsd/defaultbinding.go:478`.
   - `validate/cvcidentityconstraint.go:132`.
-- **Group 2 grew from 27 to 32.** The five new rows are #2699–#2703. They are
-  #2696's residue issues, and only the parked branch's repointed markers cite
-  them. The other 27 are kind/gap trackers that carry no marker by design, among
-  them #2619, #2662 and #2541.
+- **Group 2 is 32.** Five rows are #2699–#2703, #2696's residue issues, which
+  only the parked branch's repointed markers cite. The other 27 are kind/gap
+  trackers that carry no marker by design, among them #2619, #2662 and #2541.
 
 ### Milestones and queue
 
-**Read from GitHub after this pass: 344 open issues.**
+**Read from GitHub after this pass: 343 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -161,29 +162,30 @@ conformance 7, xml 3, landcheck 2, regex 2, cmd 1). The two jsonsrc markers on
 | **M5 — Instance validation (XML)** | **8** | **136** | active |
 | **M6 — XPath required subset** | **6** | **45** | active |
 | M7 — XPath 2.0 growth | 1 | 1 | #2619 open |
-| **M8 — JSON instance adapter** | **6** | **16** | north star; `json` 41 |
+| **M8 — JSON instance adapter** | **5** | **18** | north star; `json` 41 |
 | M9–M12 | 0 | 0 | not started |
 
 M3's one open issue is #2566, a `value.Context` doc defect. It is follow-up
-work, not milestone scope. M8's six open issues:
+work, not milestone scope. M8's five open issues:
 
 - #2670 is `blocked`.
-- #2655, #2686, #2687 and #2688 are `ready`.
+- #2655, #2687 and #2710 are `ready`.
 - #2696 is `needs-replan`.
 
 #2675, #2676, #2679, #2683, #2690 and #2699–#2703 carry no milestone.
 
-The open issues are **321 `ready`, 15 `blocked`, 1 `needs-replan` (#2696), 2
-`epic`, and 5 with no state label (#2699–#2703)**, which sums to 344. Open
+The open issues are **320 `ready`, 15 `blocked`, 1 `needs-replan` (#2696), 2
+`epic`, and 5 with no state label (#2699–#2703)**, which sums to 343. Open
 `kind/process` is 8. #1880 and #1885 are both `blocked` on the owner. #2610,
 #2637, #2650, #2664, #2676 and #2683 are `ready`.
 
 - **`blocked` is 15:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #2022, #2081, #2376, #2533 and #2670. #2685 closed since the
-  `cbc82b0` stamp. No `blocked` body names it, and no trigger fired:
+  #1880, #1885, #2022, #2081, #2376, #2533 and #2670. #2688 and #2686 closed
+  since the `c847fda` stamp. No `blocked` body names either, and no trigger
+  fired:
   - #2670 waits on #1601's ruling reopening on one of its marker's two findings.
   - #2533 waits on an evaluation-time CTA decline landing in the engine.
-    #2685 changed only `usage`, its doc.go render, and README.
+    #2686 changed only jsonsrc's decline texts and `cmd/goxsd8`'s `usage`.
   - #1042 waits on `vc002.v1` (#1002, #1880) and on the slices its body lists as
     not yet filed.
   - #1609 has not fired. Arm 1 (`schema` Fail 0) reads 98, arm 2's Total is
@@ -194,8 +196,11 @@ The open issues are **321 `ready`, 15 `blocked`, 1 `needs-replan` (#2696), 2
     startable by any session touching `xsd/derivation.go`.
   - #1374 waits on a written trigger, and #16 waits on M9.
   - No human ruling is recorded on #1880, #1885, #1790, #2022 or #2081.
-- **Measured refactors:** none names #2685's files (`cmd/goxsd8`'s `usage`
-  const, its doc.go render, `README.md`). Each figure below carries its last run.
+- **Measured refactors:** #2370's pathspec `validate/*.go` reaches
+  `validate/jsonsrc`, which #2686 changed; re-run on `41303b0` it reads 35,
+  flat. No other measured refactor names #2686's files. Each figure below
+  carries its last run.
+  - On `41303b0`: #2370 (35).
   - On `cbc82b0`: #848 (2 and 0).
   - On `4daf1c6`: #2595 (1 and 1) and #2675 (5).
   - On `e5c08ba`: #2663 (4).
@@ -203,8 +208,8 @@ The open issues are **321 `ready`, 15 `blocked`, 1 `needs-replan` (#2696), 2
   - On `4914723`: #2599 (186 methods), #2601 (0 outside consumers), #2239 (2),
     #2372 (27), #1080 (8) and #2375 (1 and 1).
   - On `46bda66`: #2600 (2 copies), #2373 (16), #2374 (22), #1958 (2), #1757
-    (1), #2370 (35), #2359 (14), #2329 (1), #2101 (1 and 1), #363 (2), #2205
-    (2), #1865 (2) and #841 (0 of 2 paragraphs).
+    (1), #2359 (14), #2329 (1), #2101 (1 and 1), #363 (2), #2205 (2), #1865 (2)
+    and #841 (0 of 2 paragraphs).
 
 ### Persona consultations
 
@@ -212,7 +217,9 @@ The open issues are **321 `ready`, 15 `blocked`, 1 `needs-replan` (#2696), 2
 change. It judged the CLI solid and behaving as `-help` says, and found its
 defect in the documentation. It had 8 findings:
 
-- **Filed:** 2, #2685 (landed at `c847fda`) and #2686.
+- **Filed:** 2, #2685 and #2686, both landed (`c847fda`, `41303b0`). #2686's
+  ruling kept the rule-less line, so findings 2 and 4's `[<rule>]` token waits
+  on #2710's type and a cliuser round asking again.
 - **Folded into existing bodies:** 5. Finding 1's README half went to #1003,
   whose premise was corrected: JSON validates today. Finding 6 and part of
   finding 8 went to #1433, now re-scoped to `parse` and `gen`. The rest of
@@ -226,9 +233,11 @@ they are `value` and `xsd` doc defects that this round, scoped to the new
 surface, did not re-ask. libuser ran jsonsrc end to end from `go doc` alone. It
 had 8 findings:
 
-- **Filed:** 2, #2687 (finding 3) and #2688 (findings 1, 2 and 5).
-- **Folded:** 3. Finding 4 went into #2686, finding 7's suppression half into
-  #1898, and the toolchain note into #1000.
+- **Filed:** 2, #2687 (finding 3) and #2688 (findings 1, 2 and 5; landed
+  `9fdb32b`).
+- **Folded:** 3. Finding 4 went into #2686, whose ruling left it to #2710.
+  Finding 7's suppression half went into #1898, and the toolchain note into
+  #1000.
 - **Dismissed:** findings 6 and 8, and finding 7's lax half, with reasons in
   #2688's Notes.
 
@@ -246,9 +255,9 @@ This is ordered for a `/develop` session: take the highest row you can start.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2686 | **The ruling both personas reached, M8.** Rule whether malformed JSON and a shape-rule rejection keep exit 4 and the rule-less line, and whether a decline gets a typed error (libuser's 400/422 ask). Either arm re-reads `-help`'s JSON shape paragraph (#2685). #2655 is the same channel's I/O-fault slice, so a session taking either absorbs the other when it can. |
-| 2 | #2688 | **libuser's high finding, M8, docs and one Example.** README's Library section, `validate`'s adapter table and jsonsrc's doc read JSON as future work or bury the consumer rules. Its CLI half landed with #2685. Its lead section matches `-help`'s shape paragraph. |
-| 3 | #2687 | **libuser's adoption hazard, M8.** An attribute member after a child is declined, which is the order `encoding/json` emits for a struct declared that way. Rule: accept or warn. Arm (a) also drops `-help`'s "lead the object" clause. |
+| 1 | #2687 | **libuser's adoption hazard, M8.** An attribute member after a child is declined, which is the order `encoding/json` emits for a struct declared that way. Rule: accept or warn. Arm (a) also drops `-help`'s "lead the object" clause. #2686 left this decline's text and `ExampleValidate` unchanged. |
+| 2 | #2710 | **libuser finding 4, owed by #2686's ruling, M8.** A consumer tells a decline from malformed JSON and a read fault by `errors.As`, not message text. One export, warden-reviewed; message texts and exit codes unchanged. Shares `jsonsrc.go` with #2655 and `infoset.go` with #2687. |
+| 3 | #2655 | **A read fault says "malformed JSON", M8.** `walker.token` still wraps it that way at `41303b0`. #2686's grounding paired the arms, so its landed arm (b) points this at (b): wording only, exit 4 kept. Same file as #2710; one typed design if both want one. |
 | 4 | #2690 | **#2681's residual, a schema accepted that may be rejectable.** err:XPST0017 for a Type Alternative `{test}` naming a function outside the static context is withheld under `ctaFullStaticError`'s GAP(xpath), which cites this issue. Its first step is an oracle ruling, charge or `RULED permanent`: `xpath-valid` 2.2.8 leaves the signatures implementation-defined, and #894 declined to rule. Its schema-lane bound is unmeasured. It edits `xpath/syntax.go`. |
 | 5 | #2566 | **A libuser finding, doc only.** `value.Context.LookupNamespace`'s empty-prefix `ok`, with libuser's nil finding folded in. |
 | 6 | #2315 | **A libuser finding, doc only.** `xsd.TypeResolver`'s doc. It shares `xsd/schema.go`'s resolver block with #848, so the session absorbs #848 when it can. |
@@ -263,18 +272,15 @@ This is ordered for a `/develop` session: take the highest row you can start.
 | 10 | #841 | **A refactor ruled three times and never landed.** Two verbatim comment paragraphs, `Ratchet: unchanged`. Startable now. |
 
 **Named below the band, on purpose.**
-- **`cmd/goxsd8`'s `usage`, after row 1:** #1433 (worked invocations for
-  `parse` and `gen`; `validate`'s landed with #2685), #1571 (`-help` names no
-  kind of declined check behind exit 4), #1407 (its exit-code table) and #1570
-  (subcommand-scoped help). cliuser re-sighted all four. #1407's table follows
-  #2686's ruling.
+- **`cmd/goxsd8`'s `usage`:** #1433 (worked invocations for `parse` and `gen`;
+  `validate`'s landed with #2685), #1571 (`-help` names no kind of declined
+  check behind exit 4), #1407 (its exit-code table, which can now state #2686's
+  ruling: every jsonsrc error exits 4) and #1570 (subcommand-scoped help).
+  cliuser re-sighted all four.
 - **README:** #1143 (README's examples name files that exist nowhere). The
   `order.xsd` that #2685's JSON example shows now shares its name with the
   earlier block's unshown one, and #1143's body says to reconcile the two.
   #1003 (README's per-capability status) is listed with the doc fixes.
-- **M8, `Ratchet: unchanged`:** #2655 (jsonsrc reports a reader I/O fault as
-  "malformed JSON") rides row 1, and shares `validate/jsonsrc/jsonsrc.go` with
-  #2696.
 - **`xpath/cta.go` and `xpath/ctaparser.go`, startable now:** #2675 (drop
   `singleType`'s stand-in cast; flat at 5) is the first refactor to take in
   `xpath`. #2416 (a pinning row or a deletion) needs a reachability read. #2595
@@ -338,9 +344,9 @@ This is ordered for a `/develop` session: take the highest row you can start.
    - Give #2699–#2703 their state labels, M8, and `## Depends on`.
    - Restore Tier A from the result.
    - The landing that adds the export owes libuser a round.
-2. **The next persona round waits on rows 1 to 3 landing,** or on #2696's
-   export, whichever comes first. Both personas were consulted at `ad1eda4`,
-   and their findings are banded above.
+2. **The next persona round waits on #2710's export or #2696's, whichever lands
+   first** (libuser), and on #2687 (both personas met its rule). Both personas
+   were consulted at `ad1eda4`, and their findings are banded above.
 3. **The next `/backlog` reconciles `gapaudit`'s 8 unreconciled Group 1 rows**
    listed under Marker census. For each row, it names an owner, files one, or
    records the P3b ruling.
