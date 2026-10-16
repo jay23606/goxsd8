@@ -78,6 +78,7 @@ Usage (contract; subcommands land with their milestones):
       A bare <xs:import>, which names no document, is not reported.
 
   goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>...
+      For example: goxsd8 validate -schema order.xsd order.xml order.json
       Assess instances against the compiled set; every schema needs
       its own -schema, and every positional argument is an instance.
       The -schema documents compose into ONE set — several of them are
@@ -116,6 +117,30 @@ Usage (contract; subcommands land with their milestones):
       them from another: each prints jsonsrc: <loc>: <message> on
       stdout, with no [<rule>], and exits 4, where malformed XML and
       an I/O fault reading an XML instance exit 1.
+      The JSON shape in brief: the top-level object has exactly one
+      member, whose key names the root element. In an element's
+      object a "$xmlns" member, {"prefix":"uri",...}, comes first
+      and binds the prefixes of keys and QName content; a "$type"
+      member, the element's xsi:type, follows it; both precede every
+      other member, and neither is a member of the top-level object.
+      An unprefixed key matches a declaration or attribute use by
+      local name, and a prefixed key p:local by the namespace its
+      "$xmlns" binds p to. A key names an attribute where the
+      element's type has an attribute use of that name, and a child
+      element where the type contains a child declaration of it; a
+      key both carry is declined (exit 4). Attribute members are
+      plain keys spelling the attribute's own name — kind, not
+      "@kind", "_kind" or "-kind" — and lead the object, before
+      every child member. A scalar is the element's simple content,
+      null is xsi:nil="true", and an array is one child per item,
+      for repeated children.
+      Against a schema declaring {urn:o}order with an attribute kind
+      and a repeated child item, this order.json exits 0:
+        {"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","item":["a","b"]}}
+      The full mapping, wildcards and every decline included, is
+      go doc github.com/kud360/goxsd8/validate/jsonsrc, which needs
+      the module source; without it, read validate/jsonsrc/doc.go at
+      https://github.com/kud360/goxsd8.
       An XML instance's DOCTYPE is read for the unparsed entities
       an ENTITY value must name: the internal subset, including
       its internal parameter entities. The external DTD subset is

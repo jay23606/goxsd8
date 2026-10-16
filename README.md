@@ -67,6 +67,35 @@ goxsd8 gen -schema order.xsd -out ./gen/order \
            -schema items.xsd -out ./gen/items  # one package per pair; exit 0/1/2 once M9 builds it
 ```
 
+A JSON instance validates the same way. With this schema as `order.xsd`:
+
+```xml
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:o" elementFormDefault="qualified">
+  <xs:element name="order">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="xs:string" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:attribute name="kind" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+```
+
+and this instance as `order.json`:
+
+```json
+{"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","item":["a","b"]}}
+```
+
+```sh
+goxsd8 validate -schema order.xsd order.json    # exit 0
+```
+
+`goxsd8 -help` states the JSON shape in brief, and
+`go doc github.com/kud360/goxsd8/validate/jsonsrc` renders the full mapping.
+
 ### Library
 
 Seeding the builtin datatypes and compiling a schema set both work TODAY:
