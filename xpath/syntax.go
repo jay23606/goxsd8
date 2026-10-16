@@ -328,10 +328,12 @@ type syntaxStatic struct {
 //
 // GAP(xpath): a function name or arity no signature has, err:XPST0017, is not
 // charged; [CTATestStaticError] answers nil for a text carrying nothing else.
-// xpath-valid clause 2.2.8 leaves the function signatures
-// ·implementation-defined·, and #2690 decides whether that charges or
-// permanently withholds it. The oracle's #894 ruling, on clause 2.2.5's
-// in-scope schema types, states that it does not extend to 2.2.8.
+// RULED permanent by #2690 (STYLE P3b), on that thread's GROUNDING comment
+// (issuecomment-6221903995): ta-props-correct clause 2 requires only fn:not
+// and the built-in constructors, and xpath-valid clause 2.2.8 leaves every
+// further signature ·implementation-defined·, so no name or arity is outside
+// every conforming set, and an unknown name, a constructor for a non-built-in
+// type and an F&O function this engine does not implement are withheld alike.
 func ctaFullStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) *xsderr.Error {
 	toks, _, ok := syntaxTokenize(expr.Expression())
 	if !ok {
@@ -805,7 +807,7 @@ func (r *syntaxRecognizer) primaryExpr() bool {
 
 // functionCall is [48] FunctionCall. Its name is resolved for its prefix
 // alone: whether a function of that name and arity exists is err:XPST0017,
-// withheld (ctaFullStaticError).
+// withheld as RULED permanent by #2690 (ctaFullStaticError).
 func (r *syntaxRecognizer) functionCall() bool {
 	r.qname(r.peek(), ctaFunctionNS)
 	r.pos += 2 // the QName and '('

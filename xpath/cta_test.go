@@ -322,7 +322,7 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 		{"@kind instance of xs:untypedAtomic", "xs:untypedAtomic is held to no static error, as a cast target is"},
 		{"@kind castable as xs:string", "a builtin atomic SingleType"},
 		{"xs:QName('p:ppp') = @kind", "err:FONS0004 in a StringLiteral is withheld under ctaParser.cast's marker"},
-		{"a:f(.) = node-name(.)", "a function under a bound prefix: err:XPST0017 at most, withheld (#2690)"},
+		{"a:f(.) = node-name(.)", "a function under a bound prefix: err:XPST0017 at most, withheld as RULED permanent by #2690"},
 		// A KindTest TypeName in the in-scope schema types, and a
 		// schema-attribute name among the in-scope attribute declarations, is
 		// no err:XPST0008 (ctaTypes.inScopeType, ctaInScopeAttribute):
@@ -344,7 +344,7 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 		// The constructor spelling names a FUNCTION: err:XPST0051 and
 		// err:XPST0080 are cast-target errors, and a name with no constructor
 		// is err:XPST0017 at most, whose signatures xpath-valid clause 2.2.8
-		// leaves implementation-defined, withheld pending #2690.
+		// leaves implementation-defined, withheld as RULED permanent by #2690.
 		{"string(@kind) = 'x'", "fn:string as a constructor name, which castTarget finds no type for"},
 		{"xs:anyAtomicType(@kind) = 'x'", "the constructor spelling of an err:XPST0080 target"},
 		{"xs:Missing(@kind) = 'x'", "the constructor spelling of an err:XPST0051 target"},

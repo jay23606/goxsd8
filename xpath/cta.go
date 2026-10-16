@@ -312,7 +312,8 @@ const ruleXPST0008 xsderr.Rule = "err:XPST0008"
 //     err:XPST0051 for an `instance of` or `treat as` AtomicType, and
 //     err:XPST0051 or err:XPST0080 for a `cast as` or `castable as` target. A
 //     constructor call naming such a type is no cast target and is not charged
-//     (ctaParser.constructorFunction).
+//     (ctaParser.constructorFunction): a function name or arity no signature
+//     has, err:XPST0017, is withheld as RULED permanent by #2690.
 //
 // A decline excuses none of them: §3.12.6 clause 2's Note licenses declining
 // only "Any XPath expression containing no static errors", and xpath-valid

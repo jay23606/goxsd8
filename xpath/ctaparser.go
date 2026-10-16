@@ -3223,8 +3223,9 @@ func (p *ctaParser) cast(v ctaValue, target *xsd.SimpleType, allowsEmpty bool) (
 // castable TARGET errors (xpath20.md §3.10.2, §3.10.3), and a name with no
 // constructor is a call to a function the static context has no signature
 // for, err:XPST0017 at most — which xpath-valid clause 2.2.8 leaves
-// ·implementation-defined·, and the oracle's #894 ruling does not extend to.
-// So `string(@k)` and `xs:anyAtomicType(@k)` are withheld, never charged.
+// ·implementation-defined·, withheld as RULED permanent by #2690
+// (ctaFullStaticError). So `string(@k)` and `xs:anyAtomicType(@k)` are
+// withheld, never charged.
 func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 	name := p.functionName(p.peek(0).text)
 	p.advance() // the function name

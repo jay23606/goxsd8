@@ -471,8 +471,8 @@
 // `castable as` target, in a text ctaTokenize never reads too. Only
 // CTATestStaticError reports any of them: CompileAssertionTest and
 // FacetAssertions decline every one like any other defect. An unknown
-// function name, err:XPST0017, is withheld under the GAP(xpath) at
-// ctaFullStaticError.
+// function name or arity, err:XPST0017, is withheld under the GAP(xpath) at
+// ctaFullStaticError, RULED permanent by #2690.
 //
 // A constructor call naming such a type is withheld, never charged: it
 // names a function, not a cast target. So is err:FONS0004, an unbound
