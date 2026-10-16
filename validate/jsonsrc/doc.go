@@ -281,7 +281,8 @@
 // "$type", a reserved member other than those two or at the top level, the
 // malformed "$xmlns" and "$type" values below, and the top-level shapes and
 // array root value that "The validation root" declines have no XML twin, and
-// no marker:
+// no marker; the error for each names the spelling the mapping takes instead,
+// where one exists:
 //
 //   - an unprefixed key two expanded names carry: among the top-level
 //     declarations at the root, among the declarations a type contains, or

@@ -292,6 +292,13 @@ func TestUsageCoversContract(t *testing.T) {
 	if !strings.Contains(usage, "gen is reserved but "+verb) {
 		t.Errorf("usage does not state gen's status in the wording notImplementedFmt prints (%q)", verb)
 	}
+	// Why every jsonsrc error exits 4, whether the input is malformed, a shape
+	// the mapping rejects or an arm it does not implement (#2686). Matched over
+	// the text with its line breaks folded, as the sentence wraps.
+	why := "They share 4 because nothing tells malformed input, or a shape the mapping rejects, from an arm it does not implement, and charging 1 would charge every decline as invalid."
+	if !strings.Contains(strings.Join(strings.Fields(usage), " "), why) {
+		t.Errorf("usage does not state why every jsonsrc error exits 4 (%q)", why)
+	}
 }
 
 // TestBuiltBinaryMatrix drives the real executable, following #251: exit

@@ -116,7 +116,10 @@ Usage (contract; subcommands land with their milestones):
       all reach jsonsrc's one error channel, which tells none of
       them from another: each prints jsonsrc: <loc>: <message> on
       stdout, with no [<rule>], and exits 4, where malformed XML and
-      an I/O fault reading an XML instance exit 1.
+      an I/O fault reading an XML instance exit 1. They share 4
+      because nothing tells malformed input, or a shape the mapping
+      rejects, from an arm it does not implement, and charging 1
+      would charge every decline as invalid.
       The JSON shape in brief: the top-level object has exactly one
       member, whose key names the root element. In an element's
       object a "$xmlns" member, {"prefix":"uri",...}, comes first
