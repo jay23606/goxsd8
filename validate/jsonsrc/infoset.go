@@ -325,7 +325,9 @@ func (m *members) next() (*element, error) {
 // seekable pre-scan, needs an exported io.ReadSeeker entry point with no
 // consumer (STYLE T5) and re-reads each object once per enclosing object.
 // Attribute members leading the object is the notation's own ordering rule,
-// as the ORDER TRAP is (package doc).
+// as the ORDER TRAP is (package doc); the decline names the reorder, since
+// encoding/json marshals a struct in field order and so puts an attribute
+// field declared after a child field after its child member (#2687).
 func (m *members) key() (peeked, error) {
 	if h := m.head; h != nil {
 		m.head = nil
@@ -344,7 +346,7 @@ func (m *members) key() (peeked, error) {
 		return peeked{}, err
 	}
 	if _, ok := mem.(attributeMember); ok {
-		return peeked{}, m.w.declinef(loc, "attribute member %q follows a child member of %s; attribute members lead the object, as an element's attributes are read before its children",
+		return peeked{}, m.w.declinef(loc, "attribute member %q follows a child member of %s; move attribute members ahead of the first child member, or declare a struct's attribute fields before its child fields, as an element's attributes are read before its children",
 			key, m.object.owner)
 	}
 	child, _ := mem.(elementMember) // nil for an array value

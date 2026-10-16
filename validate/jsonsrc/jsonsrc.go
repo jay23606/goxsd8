@@ -75,6 +75,10 @@ func WithURI(uri string) Option {
 // read either way, so a fault after the point the assessment stopped at is
 // still reported.
 //
+// An attribute member after a child member is the order encoding/json
+// marshals a struct whose child field is declared before an attribute field:
+// declare a struct's attribute fields first, or the document declines.
+//
 // Every error is a plain one, prefixed "jsonsrc: " and, past the nil checks,
 // the location of the construct it names. None is an [xsderr.Error]: none is a
 // validity verdict about a document.

@@ -22,7 +22,9 @@
 //     "$xmlns" binds p to.
 //   - Attribute members are plain keys spelling the attribute's own name —
 //     kind, not "@kind", "_kind" or "-kind" — and lead the object, before
-//     every child member.
+//     every child member. encoding/json marshals a Go struct in field order,
+//     so declare its attribute fields before its child fields: a child field
+//     declared first yields a document that declines.
 //   - "$xmlns" and "$type" are reserved and lead the object: a "$xmlns"
 //     member, {"prefix":"uri",...}, comes first and binds the prefixes of keys
 //     and QName content; a "$type" member, the element's xsi:type, follows

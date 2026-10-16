@@ -560,7 +560,7 @@ func TestAttributeMemberDeclines(t *testing.T) {
 		says       string
 	}{
 		{"attribute after a child", `{"r":{"price":1,"a":"x"}}`,
-			"jsonsrc: instance.json:1:17: ", `attribute member "a" follows a child member of {urn:t}r; attribute members lead the object`},
+			"jsonsrc: instance.json:1:17: ", `attribute member "a" follows a child member of {urn:t}r; move attribute members ahead of the first child member, or declare a struct's attribute fields before its child fields`},
 		{"repeated attribute", `{"r":{"a":"x","a":"y"}}`,
 			"jsonsrc: instance.json:1:15: ", `attribute member "a" repeats in the object of {urn:t}r; an element carries one attribute of each expanded name, so give it once`},
 		{"null value", `{"r":{"a":null}}`,
@@ -1172,7 +1172,7 @@ func TestWildcardMemberDeclines(t *testing.T) {
 		{"member of an undeclared wildcard child", `{"box":{"u":{"w":5}}}`,
 			"jsonsrc: instance.json:1:14: ", `member "w" of {urn:w}u, an element no contained and no top-level element declaration names; only an empty object maps under it`},
 		{"wildcard attribute after a child", `{"att":{"text":"t","p":5}}`,
-			"jsonsrc: instance.json:1:20: ", `attribute member "p" follows a child member of {urn:w}att`},
+			"jsonsrc: instance.json:1:20: ", `attribute member "p" follows a child member of {urn:w}att; move attribute members ahead of the first child member`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))

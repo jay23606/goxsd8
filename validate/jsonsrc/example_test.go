@@ -68,5 +68,5 @@ func ExampleValidate() {
 	// Output:
 	// no violations, nothing undecided
 	// violation: order.json:1:2 [cvc-complex-content]
-	// error: jsonsrc: order.json:1:49: attribute member "kind" follows a child member of {urn:o}order; attribute members lead the object, as an element's attributes are read before its children
+	// error: jsonsrc: order.json:1:49: attribute member "kind" follows a child member of {urn:o}order; move attribute members ahead of the first child member, or declare a struct's attribute fields before its child fields, as an element's attributes are read before its children
 }
