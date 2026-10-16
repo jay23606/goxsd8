@@ -262,16 +262,16 @@
 // A JSON instance on validate/jsonsrc's error channel exits 4 too, with no
 // Unevaluated record and no assessment standing. That channel is one error
 // carrying malformed JSON, content after the top-level object, an I/O fault
-// reading the instance once it is open (which jsonsrc reports as malformed
-// JSON) and every input jsonsrc's mapping declines, and jsonsrc's doc makes
-// none of them a validity verdict. jsonsrc types its declines alone, as
-// *jsonsrc.DeclineError, but the line names no class, and nothing tells a
+// reading the instance once it is open (which jsonsrc reports as a fault
+// reading the input) and every input jsonsrc's mapping declines, and jsonsrc's
+// doc makes none of them a validity verdict. jsonsrc types its declines alone,
+// as *jsonsrc.DeclineError, but the line names no class, and nothing tells a
 // shape the mapping rejects from an arm it does not implement, so charging 1
 // would charge every decline as invalid: all of them are undecided — unlike
 // malformed XML, and an I/O fault reading an XML instance, which exit 1. The
-// line is jsonsrc's own, jsonsrc: <loc>: <message>, with no [<rule>], on
-// stdout with the report, and it aggregates like any 4: beside an invalid
-// instance the run exits 1.
+// line is jsonsrc's own, jsonsrc: <loc>: <message>, with no [<rule>], on stdout
+// with the report, and it aggregates like any 4: beside an invalid instance the
+// run exits 1.
 //
 // validate assesses its instances in argument order. An instance argument
 // spelled - is standard input, which has no extension to name a source format,

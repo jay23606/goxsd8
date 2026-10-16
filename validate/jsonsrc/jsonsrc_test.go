@@ -297,6 +297,10 @@ func TestRootNaming(t *testing.T) {
 			"jsonsrc: instance.json:1:", "malformed JSON", false},
 		{"truncated", `{"order":{"size":1`,
 			"jsonsrc: instance.json:1:", "malformed JSON", false},
+		// The decoder reports this as io.ErrUnexpectedEOF, no
+		// *json.SyntaxError: malformed all the same, as no read faulted.
+		{"cut off mid-token", `{"order":"ab`,
+			"jsonsrc: instance.json:1:", "malformed JSON", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
@@ -309,6 +313,39 @@ func TestRootNaming(t *testing.T) {
 			var d *DeclineError
 			if got := errors.As(err, &d); got != tc.decline {
 				t.Errorf("Validate(%s): errors.As(err, *DeclineError) = %v, want %v", tc.json, got, tc.decline)
+			}
+		})
+	}
+}
+
+// TestReadFault pins a fault reading the input reported as one, never as
+// malformed JSON, still wrapping the reader's error, at the location the walk
+// had reached (walker.token, #2655).
+func TestReadFault(t *testing.T) {
+	v := validatorOver(t, orderSchema)
+	boom := errors.New("disk on fire")
+	for _, tc := range []struct {
+		name   string
+		r      io.Reader
+		prefix string
+	}{
+		{"first read", iotest.ErrReader(boom), "jsonsrc: instance.json:1:1: "},
+		{"mid-document", io.MultiReader(strings.NewReader(`{"order":{"si`), iotest.ErrReader(boom)),
+			"jsonsrc: instance.json:1:11: "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Validate(v, tc.r, WithURI(jsonURI))
+			if err == nil {
+				t.Fatal("Validate returned no error; want the read fault")
+			}
+			if want := tc.prefix + "fault reading the input: disk on fire"; err.Error() != want {
+				t.Errorf("Validate = %q, want %q", err, want)
+			}
+			if strings.Contains(err.Error(), "malformed JSON") {
+				t.Errorf("Validate = %q; a read fault is no malformed JSON", err)
+			}
+			if !errors.Is(err, boom) {
+				t.Errorf("Validate = %q; errors.Is does not reach the reader's error", err)
 			}
 		})
 	}

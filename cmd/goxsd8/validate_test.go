@@ -964,8 +964,8 @@ func TestValidateJSONInstance(t *testing.T) {
 }
 
 // TestValidateJSONReadFaultIsUndecided pins what the contract promises for an
-// I/O fault reading a JSON instance after it is opened: jsonsrc's decoder
-// reports it as malformed JSON, its one error channel, so it exits 4, where
+// I/O fault reading a JSON instance after it is opened: jsonsrc reports it as
+// a fault reading the input on its one error channel, so it exits 4, where
 // the same fault under an XML instance is an [xml-wf] verdict exiting 1.
 // /proc/self/mem opens, and its first read faults (EIO at offset 0).
 func TestValidateJSONReadFaultIsUndecided(t *testing.T) {
@@ -978,7 +978,7 @@ func TestValidateJSONReadFaultIsUndecided(t *testing.T) {
 		code   int
 		prefix string
 	}{
-		{"json", exitUndecided, "jsonsrc: " + faulting + ":1:1: malformed JSON: read " + faulting + ": input/output error"},
+		{"json", exitUndecided, "jsonsrc: " + faulting + ":1:1: fault reading the input: read " + faulting + ": input/output error"},
 		{"xml", exitInvalid, faulting + ":1:1: [xml-wf] read " + faulting + ": input/output error"},
 	} {
 		var stdout, stderr bytes.Buffer

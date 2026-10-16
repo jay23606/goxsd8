@@ -147,9 +147,9 @@ type walker struct {
 	pos    *positions
 	uri    string
 	schema validate.SchemaView
-	// err is the walk's single latched fault, a malformed document or a
-	// decline. Every cursor reports this one field and none keeps a copy of it
-	// (STYLE D3).
+	// err is the walk's single latched fault, a malformed document, a fault
+	// reading the input or a decline. Every cursor reports this one field
+	// and none keeps a copy of it (STYLE D3).
 	err error
 }
 
@@ -163,6 +163,12 @@ func newWalker(uri string, r io.Reader, schema validate.SchemaView) *walker {
 }
 
 // token pulls the next token and the location it starts at.
+//
+// A token error is a fault reading the input when it is the error the
+// reader itself returned (positions.fault), and malformed JSON otherwise:
+// the reader's error decides, never the error's type, because the decoder
+// reports a document cut off mid-token as io.ErrUnexpectedEOF, no
+// *json.SyntaxError, and a reader can return any error at all (#2655).
 func (w *walker) token() (json.Token, xsderr.Loc, error) {
 	off := w.dec.InputOffset()
 	tok, err := w.dec.Token()
@@ -170,6 +176,9 @@ func (w *walker) token() (json.Token, xsderr.Loc, error) {
 	loc := xsderr.Loc{URI: w.uri, Line: line, Col: col}
 	if errors.Is(err, io.EOF) {
 		return nil, loc, err
+	}
+	if w.pos.fault != nil && errors.Is(err, w.pos.fault) {
+		return nil, loc, fmt.Errorf("jsonsrc: %s: fault reading the input: %w", loc, err)
 	}
 	if err != nil {
 		return nil, loc, fmt.Errorf("jsonsrc: %s: malformed JSON: %w", loc, err)

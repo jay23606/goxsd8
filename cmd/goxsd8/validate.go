@@ -277,8 +277,8 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 // it. instanceHints, an XML tokenizer, is never run over JSON bytes.
 //
 // jsonsrc's error channel is one (nil, err): malformed JSON, content after the
-// top-level object, an I/O fault mid-read (which the decoder reports as
-// malformed JSON), and every input the mapping declines, which alone comes
+// top-level object, an I/O fault mid-read (which jsonsrc reports as a fault
+// reading the input), and every input the mapping declines, which alone comes
 // back as a *jsonsrc.DeclineError. jsonsrc's doc makes none of them a validity
 // verdict, and nothing tells a shape the mapping rejects from an arm it does
 // not implement, so the line — already "jsonsrc: <loc>: <message>", with no

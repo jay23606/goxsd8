@@ -1,6 +1,9 @@
 package jsonsrc
 
-import "io"
+import (
+	"errors"
+	"io"
+)
 
 // positions is the reader the json.Decoder pulls from, which keeps the line
 // and column of every token it is asked to locate. json.Decoder reports a
@@ -19,6 +22,10 @@ type positions struct {
 	base    int64
 	// line and col are base's position.
 	line, col int
+	// fault is the first error other than io.EOF that r returned: a token
+	// error that is r's own is a fault reading the input, and any other is
+	// the decoder's verdict on the bytes, whatever its type (#2655).
+	fault error
 }
 
 func newPositions(r io.Reader) *positions {
@@ -28,6 +35,9 @@ func newPositions(r io.Reader) *positions {
 func (p *positions) Read(b []byte) (int, error) {
 	n, err := p.r.Read(b)
 	p.pending = append(p.pending, b[:n]...)
+	if err != nil && !errors.Is(err, io.EOF) && p.fault == nil {
+		p.fault = err
+	}
 	return n, err
 }
 
