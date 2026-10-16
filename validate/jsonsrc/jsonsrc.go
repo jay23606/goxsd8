@@ -47,26 +47,26 @@ func WithURI(uri string) Option {
 //
 // It returns (nil, err) whenever no assessment of the whole document stands,
 // and (result, nil) otherwise; a result it returns never carries
-// [validate.Result.Err]. The faults are: a nil v or r; JSON that is malformed,
-// or followed by further content; and every input the mapping DECLINES —
-// a top level that is not an object with exactly one member, and, anywhere in
-// the document, a member the implemented arms do not map (a key whose colon
-// makes no QName or whose prefix no "$xmlns" in scope binds; a key no child
-// element declaration and no attribute use carries whose namespace neither a
-// prefix nor the type's wildcards fix, or whose kind a type with both an
-// element wildcard and an {attribute wildcard} leaves open, or which a
-// wildcard puts in the xsi or xml namespace, or a prefix in the xsi namespace
-// or, as a child element, in the xml namespace; a member of an object under
-// a child no contained and no top-level declaration names; an unprefixed key
-// two expanded names carry, a key both a child declaration and an
-// attribute use carry, an attribute member after a child member or repeated,
-// an attribute member whose value is null, an object or an array, a "$type"
-// or "$xmlns" member out of its leading place or of the wrong shape, a
-// "$type" whose parent's ·governing type definition· the mapping does not
+// [validate.Result.Err]. The faults are: a nil v or r; JSON that is malformed
+// or absent, or followed by further content; and every input the mapping
+// DECLINES — a top level that is not an object with exactly one member, and,
+// anywhere in the document, a member the implemented arms do not map (a key
+// whose colon makes no QName or whose prefix no "$xmlns" in scope binds; a
+// key no child element declaration and no attribute use carries whose
+// namespace neither a prefix nor the type's wildcards fix, or whose kind a
+// type with both an element wildcard and an {attribute wildcard} leaves open,
+// or which a wildcard puts in the xsi or xml namespace, or a prefix in the
+// xsi namespace or, as a child element, in the xml namespace; a member of an
+// object under a child no contained and no top-level declaration names; an
+// unprefixed key two expanded names carry, a key both a child declaration and
+// an attribute use carry, an attribute member after a child member or
+// repeated, an attribute member whose value is null, an object or an array, a
+// "$type" or "$xmlns" member out of its leading place or of the wrong shape,
+// a "$type" whose parent's ·governing type definition· the mapping does not
 // determine or that the types a {type table} can select for it settle
-// differently, any other "$"-prefixed reserved member, a nested
-// array, a member of an element whose declaration carries a {type table} that
-// its declared {type definition} and a type the table can select classify
+// differently, any other "$"-prefixed reserved member, a nested array, a
+// member of an element whose declaration carries a {type table} that its
+// declared {type definition} and a type the table can select classify
 // differently; the package doc lists them all). A decline names the arm it is
 // not, and for an input with no XML twin the spelling the mapping takes
 // instead where one exists; it is never a silent drop or a guessed mapping: a
@@ -79,9 +79,12 @@ func WithURI(uri string) Option {
 // marshals a struct whose child field is declared before an attribute field:
 // declare a struct's attribute fields first, or the document declines.
 //
-// Every error is a plain one, prefixed "jsonsrc: " and, past the nil checks,
-// the location of the construct it names. None is an [xsderr.Error]: none is a
-// validity verdict about a document.
+// An input the mapping declines comes back as a [*DeclineError]; match it with
+// [errors.As]. No other error is one: the nil checks, malformed or absent JSON,
+// content after the top-level object and a fault reading r are plain errors.
+// Every error is prefixed "jsonsrc: " and, past the nil checks, the location of
+// the construct it names. None is an [xsderr.Error]: none is a validity verdict
+// about a document.
 //
 // Read the verdict off a returned result as the "Contract" section of package
 // [validate] says, but for the one difference from an xmlsrc result stated
@@ -111,6 +114,29 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 		return nil, err
 	}
 	return res, nil
+}
+
+// DeclineError is the error [Validate] returns for an input the mapping
+// declines: one the implemented arms do not map, as the package doc's
+// "Declines" section lists, never malformed JSON or a fault reading the input.
+// Validate is what builds one. It wraps no other error, so it is never an
+// [xsderr.Error]: a decline is not a validity verdict.
+type DeclineError struct {
+	loc xsderr.Loc
+	msg string
+}
+
+// Error renders the decline as "jsonsrc: <loc>: <message>", the message naming
+// the arm the input is not.
+func (e *DeclineError) Error() string {
+	return fmt.Sprintf("jsonsrc: %s: %s", e.loc, e.msg)
+}
+
+// Loc is the location of the construct the decline names, as the package doc's
+// "Locations" section places it, under the URI [WithURI] gives: empty, and
+// rendered "?", without one.
+func (e *DeclineError) Loc() xsderr.Loc {
+	return e.loc
 }
 
 // walker is the one token stream a whole mapping pulls from: a single
@@ -158,9 +184,9 @@ func (w *walker) fail(err error) {
 	}
 }
 
-// declinef builds the error for an input the mapping declines at loc.
+// declinef builds the [*DeclineError] for an input the mapping declines at loc.
 func (w *walker) declinef(loc xsderr.Loc, format string, args ...any) error {
-	return fmt.Errorf("jsonsrc: %s: %s", loc, fmt.Sprintf(format, args...))
+	return &DeclineError{loc: loc, msg: fmt.Sprintf(format, args...)}
 }
 
 // root reads the top-level object up to the value of its one member and
@@ -170,15 +196,17 @@ func (w *walker) declinef(loc xsderr.Loc, format string, args ...any) error {
 // walker.value has read it (package doc, "The validation root"). The key's
 // declines are rootMember's, under its GAP(jsonsrc) markers.
 //
-// It DECLINES an input holding no JSON value, a top-level value that is not an
-// object, a top-level object with no member, a reserved root key, and a root
-// member whose value is an array. None has an XML twin, so none carries a
-// marker: an XML document has exactly one document element (XML 1.0 §2.1
-// [1]), and each of these spells none or several, or a name no XML Name is.
+// It DECLINES a top-level value that is not an object, a top-level object with
+// no member, a reserved root key, and a root member whose value is an array.
+// None has an XML twin, so none carries a marker: an XML document has exactly
+// one document element (XML 1.0 §2.1 [1]), and each of these spells none or
+// several, or a name no XML Name is. An input holding no JSON value is no
+// decline but malformed, JSON text being one value (RFC 8259 §2), and its
+// error is a plain one.
 func (w *walker) root() (*element, error) {
 	tok, loc, err := w.token()
 	if errors.Is(err, io.EOF) {
-		return nil, w.declinef(loc, "the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {\"<root>\":...}")
+		return nil, fmt.Errorf("jsonsrc: %s: the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {\"<root>\":...}", loc)
 	}
 	if err != nil {
 		return nil, err
@@ -1833,10 +1861,11 @@ func (w *walker) item(o *object, run *arrayRun, sc *scope, scalar bool) (element
 // rest of the root's subtree the assessment did not read, classified as the
 // walk would have, then the top-level object's close and the end of the input.
 //
-// It DECLINES a second member of the top-level object and content after it.
-// Neither has an XML twin, so no marker tracks them: a second member would be
-// a second document element (XML 1.0 §2.1 [1]), and JSON text is one value
-// (RFC 8259 §2), so content after it is malformed.
+// It DECLINES a second member of the top-level object, which has no XML twin,
+// so no marker tracks it: it would be a second document element (XML 1.0 §2.1
+// [1]). Content after the object is no decline but malformed, JSON text being
+// one value (RFC 8259 §2), and its error is a plain one, whether the decoder
+// reads that content as a value or as a syntax error.
 func (w *walker) end(root *element) error {
 	root.finish()
 	if w.err != nil {
@@ -1856,7 +1885,7 @@ func (w *walker) end(root *element) error {
 	if err != nil {
 		return err
 	}
-	return w.declinef(loc, "content follows the top-level object")
+	return fmt.Errorf("jsonsrc: %s: content follows the top-level object", loc)
 }
 
 // unexpectedEOF turns the io.EOF token reports at the end of the input into

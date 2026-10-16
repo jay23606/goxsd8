@@ -1,9 +1,12 @@
 package jsonsrc
 
 import (
+	"errors"
+	"io"
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/loader"
@@ -266,7 +269,9 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 
 // TestRootNaming pins the top-level shapes that name no validation root, none
 // of which has an XML twin (walker.root), and the shapes after the root's
-// value. How the root's key names it is TestPrefixedKey's and
+// value, each with its class: a decline is a *DeclineError, and an absent or
+// malformed document and content after the top-level object are not (#2710).
+// How the root's key names it is TestPrefixedKey's and
 // TestRootOfTwoExpandedNames'.
 func TestRootNaming(t *testing.T) {
 	v := validatorOver(t, orderSchema)
@@ -274,23 +279,24 @@ func TestRootNaming(t *testing.T) {
 		name, json string
 		prefix     string
 		says       string
+		decline    bool // whether errors.As matches a *DeclineError
 	}{
 		{"top level not an object", `["order"]`,
-			"jsonsrc: instance.json:1:1: ", "the top-level value is not an object"},
+			"jsonsrc: instance.json:1:1: ", "the top-level value is not an object", true},
 		{"top level empty", `{}`,
-			"jsonsrc: instance.json:1:2: ", "the top-level object has no member"},
+			"jsonsrc: instance.json:1:2: ", "the top-level object has no member", true},
 		{"no top-level value", ``,
-			"jsonsrc: instance.json:1:1: ", `the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {"<root>":...}`},
+			"jsonsrc: instance.json:1:1: ", `the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {"<root>":...}`, false},
 		{"root value an array", `{"order":[]}`,
-			"jsonsrc: instance.json:1:10: ", `the value of root member "order" is an array; the validation root is one element, so give it an object, a scalar or null`},
+			"jsonsrc: instance.json:1:10: ", `the value of root member "order" is an array; the validation root is one element, so give it an object, a scalar or null`, true},
 		{"second root member", `{"order":{"size":1,"item":{"sku":"ABC"}},"order":{}}`,
-			"jsonsrc: instance.json:1:42: ", `the top-level object has a second member "order"`},
+			"jsonsrc: instance.json:1:42: ", `the top-level object has a second member "order"`, true},
 		{"trailing value", `{"order":{"size":1,"item":{"sku":"ABC"}}} {}`,
-			"jsonsrc: instance.json:1:43: ", "content follows the top-level object"},
+			"jsonsrc: instance.json:1:43: ", "content follows the top-level object", false},
 		{"malformed", `{"order":{"size":1,}}`,
-			"jsonsrc: instance.json:1:", "malformed JSON"},
+			"jsonsrc: instance.json:1:", "malformed JSON", false},
 		{"truncated", `{"order":{"size":1`,
-			"jsonsrc: instance.json:1:", "malformed JSON"},
+			"jsonsrc: instance.json:1:", "malformed JSON", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
@@ -299,6 +305,10 @@ func TestRootNaming(t *testing.T) {
 			}
 			if !strings.HasPrefix(err.Error(), tc.prefix) || !strings.Contains(err.Error(), tc.says) {
 				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, tc.says)
+			}
+			var d *DeclineError
+			if got := errors.As(err, &d); got != tc.decline {
+				t.Errorf("Validate(%s): errors.As(err, *DeclineError) = %v, want %v", tc.json, got, tc.decline)
 			}
 		})
 	}
@@ -405,6 +415,44 @@ func TestNilArguments(t *testing.T) {
 	}
 	if _, err := Validate(v, nil); err == nil || !strings.HasPrefix(err.Error(), "jsonsrc: Validate: nil io.Reader") {
 		t.Errorf("nil reader: %v", err)
+	}
+}
+
+// TestDeclineError pins the decline class a caller matches with errors.As
+// (#2710): a decline is a *DeclineError carrying the location its message
+// opens with, and is no *xsderr.Error; a fault reading the input and a nil
+// argument are not declines. TestRootNaming pins the class of the top-level
+// shapes, malformed JSON included.
+func TestDeclineError(t *testing.T) {
+	v := validatorOver(t, attributeDeclinesSchema)
+	_, err := Validate(v, strings.NewReader(`{"r":{"price":1,"a":"x"}}`), WithURI(jsonURI))
+	var d *DeclineError
+	if !errors.As(err, &d) {
+		t.Fatalf("attribute after a child: errors.As(%v, *DeclineError) = false, want the decline", err)
+	}
+	if want := (xsderr.Loc{URI: jsonURI, Line: 1, Col: 17}); d.Loc() != want {
+		t.Errorf("attribute after a child: Loc() = %v, want %v", d.Loc(), want)
+	}
+	var x *xsderr.Error
+	if errors.As(err, &x) {
+		t.Errorf("attribute after a child: %v is an *xsderr.Error; a decline is no validity verdict", err)
+	}
+	for _, tc := range []struct {
+		name string
+		v    *validate.Validator
+		r    io.Reader
+	}{
+		{"read fault", v, iotest.ErrReader(errors.New("disk on fire"))},
+		{"nil validator", nil, strings.NewReader(`{}`)},
+		{"nil reader", v, nil},
+	} {
+		_, err := Validate(tc.v, tc.r, WithURI(jsonURI))
+		if err == nil {
+			t.Fatalf("%s: Validate returned no error", tc.name)
+		}
+		if errors.As(err, &d) {
+			t.Errorf("%s: errors.As(%v, *DeclineError) = true; only a decline is one", tc.name, err)
+		}
 	}
 }
 

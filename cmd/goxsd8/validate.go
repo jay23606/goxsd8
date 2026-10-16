@@ -276,14 +276,16 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 // (#2627), so a JSON instance carries none, and -no-hints changes nothing for
 // it. instanceHints, an XML tokenizer, is never run over JSON bytes.
 //
-// jsonsrc's error channel is one untyped (nil, err): malformed JSON, content
-// after the top-level object, an I/O fault mid-read (which the decoder reports
-// as malformed JSON), and every input the mapping declines. jsonsrc's doc makes
-// none of them a validity verdict, and nothing tells a decline from malformed
-// input, so the line — already "jsonsrc: <loc>: <message>", with no [<rule>]
-// — lands on stdout with the report and is charged exitUndecided: charging
-// exitInvalid would charge every decline as invalid. Malformed XML is charged
-// exitInvalid instead, on one's reasoning for xmlsrc's fault.
+// jsonsrc's error channel is one (nil, err): malformed JSON, content after the
+// top-level object, an I/O fault mid-read (which the decoder reports as
+// malformed JSON), and every input the mapping declines, which alone comes
+// back as a *jsonsrc.DeclineError. jsonsrc's doc makes none of them a validity
+// verdict, and nothing tells a shape the mapping rejects from an arm it does
+// not implement, so the line — already "jsonsrc: <loc>: <message>", with no
+// [<rule>] and no class named — lands on stdout with the report and is
+// charged exitUndecided whatever the class: charging exitInvalid would charge
+// every decline as invalid. Malformed XML is charged exitInvalid instead, on
+// one's reasoning for xmlsrc's fault.
 func (vn *validation) assessJSON(instance string, src io.Reader, stdout, stderr io.Writer) int {
 	result, err := jsonsrc.Validate(vn.base, src, jsonsrc.WithURI(instance))
 	if err != nil {
