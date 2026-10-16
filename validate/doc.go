@@ -10,9 +10,9 @@
 // off an information item, plus the Loc a diagnostic cites. Adapters
 // construct infoset values and hand them over:
 //
-//	validate/xmlsrc   XML instances via parser/xmltree      (M5)
-//	validate/jsonsrc  JSON instances                        (M8)
-//	validate/bersrc   BER-encoded instances                 (M11)
+//	validate/xmlsrc   XML instances via parser/xmltree      implemented
+//	validate/jsonsrc  JSON instances                        implemented
+//	validate/bersrc   BER-encoded instances                 planned (M11), unbuilt
 //
 // No package of this module in the engine's import closure imports
 // encoding/xml, encoding/json, or a BER decoder; only the adapters do.

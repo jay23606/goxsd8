@@ -18,7 +18,7 @@ marshalling code.
   component model with **query** (lookup by name) and **walk**
   (content-model traversal) APIs.
 - **Validate** instance documents against the compiled set. Sources are
-  adapters over one abstract infoset: XML first, then JSON, then BER.
+  adapters over one abstract infoset: XML and JSON today, BER planned.
   Every violation carries the spec rule ID (`cvc-…`) and an exact
   file:line:column location.
 - **XPath 2.0** for assertions, conditional type assignment, and
@@ -223,11 +223,37 @@ for _, u := range res.Unevaluated() { // no String method: this is the CLI's for
 }
 ```
 
+A JSON instance validates through the same `v` today: `validate/jsonsrc`
+maps it onto the infoset and hands it to the same engine, so its violations
+carry the same `cvc-` rule IDs, located by jsonsrc's line and byte column.
+`go doc github.com/kud360/goxsd8/validate/jsonsrc` opens on the JSON shape in
+brief. Continuing the program, add `github.com/kud360/goxsd8/validate/jsonsrc`
+to its imports:
+
+```go
+jf, err := os.Open("order.json") // the CLI section's order.json
+if err != nil {
+	log.Fatal(err)
+}
+defer jf.Close()
+
+// err is every fault: a nil argument, malformed JSON or content after it, a
+// read fault, and every input the mapping declines. res.Err() is nil on every
+// result jsonsrc returns, but Unevaluated() still applies: an empty
+// Violations() proves nothing unless Unevaluated() is empty too.
+res, err = jsonsrc.Validate(v, jf, jsonsrc.WithURI("order.json"))
+if err != nil {
+	log.Fatal(err)
+}
+// Read res.Violations() and res.Unevaluated() as above.
+```
+
 Start at `go doc github.com/kud360/goxsd8` and follow the package list;
 each package's godoc is its contract. Plain-text `go doc` does not print
 the runnable `Example*` funcs, so for working, tested end-to-end code
 (seed builtins → parse a lexical → assert capabilities) read the example
-tests directly: `value/example_test.go` (`ExampleOverride`),
+tests directly: `validate/jsonsrc/example_test.go` (`ExampleValidate`),
+`value/example_test.go` (`ExampleOverride`),
 `builtin/example_test.go` (`ExampleSeed`, `ExampleSeed_missingPrimitive`),
 `builtin/strict/example_test.go` (`ExampleNew`),
 `loader/example_test.go` (`Example_chain`), `xsd/example_test.go`

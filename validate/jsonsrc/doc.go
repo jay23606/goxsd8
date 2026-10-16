@@ -9,6 +9,43 @@
 // json conformance lane pins the mapping with curated cases
 // (conformance/testdata/json).
 //
+// # The JSON shape in brief
+//
+// The top-level value is an object with exactly one member, whose key names
+// the root element. Below it, each object is one element's attributes and
+// children:
+//
+//   - A key names an attribute where the element's type has an attribute use
+//     of that name, and a child element where the type contains a child
+//     declaration of it; a key both carry is declined. An unprefixed key
+//     matches by local name, and a prefixed key p:local by the namespace its
+//     "$xmlns" binds p to.
+//   - Attribute members are plain keys spelling the attribute's own name —
+//     kind, not "@kind", "_kind" or "-kind" — and lead the object, before
+//     every child member.
+//   - "$xmlns" and "$type" are reserved and lead the object: a "$xmlns"
+//     member, {"prefix":"uri",...}, comes first and binds the prefixes of keys
+//     and QName content; a "$type" member, the element's xsi:type, follows
+//     it; both precede every other member, and neither is a member of the
+//     top-level object.
+//   - A scalar is the element's simple content, null is xsi:nil="true", and an
+//     array is one child per item, for repeated children.
+//   - An input the mapping declines is an error from [Validate], not a
+//     verdict: it returns no [validate.Result].
+//
+// Against a schema declaring {urn:o}order with an attribute kind and a
+// repeated child item, this instance maps to <o:order xmlns:o="urn:o"
+// kind="x"><o:item>a</o:item><o:item>b</o:item></o:order>:
+//
+//	{"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","item":["a","b"]}}
+//
+// ExampleValidate, in example_test.go, assesses it beside an instance the
+// engine charges and one the mapping declines.
+//
+// "The validation root" and "The mapping" below state each arm exactly —
+// keys no declaration or use carries, wildcards and namespaces included — and
+// "Declines" lists every input the mapping refuses.
+//
 // # The validation root
 //
 // The top-level value is an object with exactly one member. Its key names the

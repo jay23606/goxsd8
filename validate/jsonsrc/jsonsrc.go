@@ -76,6 +76,14 @@ func WithURI(uri string) Option {
 // Every error is a plain one, prefixed "jsonsrc: " and, past the nil checks,
 // the location of the construct it names. None is an [xsderr.Error]: none is a
 // validity verdict about a document.
+//
+// Read the verdict off a returned result as the "Contract" section of package
+// [validate] says, but for the one difference from an xmlsrc result stated
+// above: every fault comes back as err, and [validate.Result.Err] is nil. The
+// rest of that caveat applies unchanged: an empty [validate.Result.Violations]
+// with an empty [validate.Result.Unevaluated] means not proven invalid, not
+// valid, and a non-empty Unevaluated leaves the document undecided against the
+// rules its entries name.
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
 		return nil, fmt.Errorf("jsonsrc: Validate: nil *validate.Validator")
