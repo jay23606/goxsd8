@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -892,10 +893,10 @@ func TestValidateFormatVocabulary(t *testing.T) {
 // validate/jsonsrc: its verdicts print the "<loc>: [<rule>] <message>" line an
 // XML instance's do, at jsonsrc's line and byte column, and earn the same
 // codes, while jsonsrc's one error channel — malformed JSON and every decline
-// alike — prints its own "jsonsrc: <loc>: <message>" line, no [<rule>], and
-// exits 4: it is no validity verdict. Every row runs with and without
-// -no-hints and must answer the same, because a JSON instance carries no
-// hints.
+// alike — prints "<loc>: [jsonsrc] <message>", the source name standing where
+// a rule ID stands, and exits 4: it is no validity verdict. Every row runs
+// with and without -no-hints and must answer the same, because a JSON instance
+// carries no hints.
 func TestValidateJSONInstance(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -915,14 +916,14 @@ func TestValidateJSONInstance(t *testing.T) {
 			assertedJSON + ":1:2: [cvc-assertion] ",
 		}},
 		{"malformed", orderSchema, []string{malformedJSON}, exitUndecided, []string{
-			"jsonsrc: " + malformedJSON + ":2:1: malformed JSON: unexpected EOF",
+			malformedJSON + ":2:1: [jsonsrc] malformed JSON: unexpected EOF",
 		}},
 		{"declined", orderSchema, []string{declinedJSON}, exitUndecided, []string{
-			"jsonsrc: " + declinedJSON + `:1:2: member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`,
+			declinedJSON + `:1:2: [jsonsrc] member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`,
 		}},
 		// A decline is less severe than a violation, as an undecided check is.
 		{"declined beside invalid", orderSchema, []string{declinedJSON, invalidJSON}, exitInvalid, []string{
-			"jsonsrc: " + declinedJSON + `:1:2: member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`,
+			declinedJSON + `:1:2: [jsonsrc] member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`,
 			invalidJSON + ":1:19: [cvc-attribute] ",
 			invalidJSON + ":1:11: [cvc-identity-constraint] ",
 		}},
@@ -978,7 +979,7 @@ func TestValidateJSONReadFaultIsUndecided(t *testing.T) {
 		code   int
 		prefix string
 	}{
-		{"json", exitUndecided, "jsonsrc: " + faulting + ":1:1: fault reading the input: read " + faulting + ": input/output error"},
+		{"json", exitUndecided, faulting + ":1:1: [jsonsrc] fault reading the input: read " + faulting + ": input/output error"},
 		{"xml", exitInvalid, faulting + ":1:1: [xml-wf] read " + faulting + ": input/output error"},
 	} {
 		var stdout, stderr bytes.Buffer
@@ -988,6 +989,48 @@ func TestValidateJSONReadFaultIsUndecided(t *testing.T) {
 		}
 		if stdout.String() != c.prefix+"\n" {
 			t.Errorf("run(%q) stdout = %q, want %q", args, stdout.String(), c.prefix+"\n")
+		}
+	}
+}
+
+// TestValidateJSONErrorLineSplitsByURI pins that a jsonsrc error line's
+// location is split off by the instance's own name, so a path carrying a colon
+// keeps it whole and the line stays openable.
+func TestValidateJSONErrorLineSplitsByURI(t *testing.T) {
+	body, err := os.ReadFile(malformedJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance := filepath.Join(t.TempDir(), "order:1.json")
+	if err := os.WriteFile(instance, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	args := []string{"validate", "-schema", orderSchema, instance}
+	if code := run(args, &stdout, &stderr); code != exitUndecided {
+		t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, exitUndecided, stdout.String(), stderr.String())
+	}
+	want := instance + ":2:1: [jsonsrc] malformed JSON: unexpected EOF\n"
+	if stdout.String() != want {
+		t.Errorf("run(%q) stdout = %q, want %q", args, stdout.String(), want)
+	}
+	if n := mustCiteOpenableLocations(t, "stdout", stdout.String()); n != 1 {
+		t.Errorf("stdout cites %d locations, want 1:\n%s", n, stdout.String())
+	}
+}
+
+// TestJSONErrorLine pins jsonErrorLine on the spellings no instance the CLI
+// reads produces: a location with no line, and an error not located at the
+// URI at all, which is located at the URI with its own text.
+func TestJSONErrorLine(t *testing.T) {
+	for _, c := range []struct{ uri, err, want string }{
+		{"a.json", "jsonsrc: a.json: no line", "a.json: [jsonsrc] no line"},
+		{"a.json", "jsonsrc: a.json:3: line only", "a.json:3: [jsonsrc] line only"},
+		{"a.json", "jsonsrc: Validate: nil io.Reader", "a.json: [jsonsrc] Validate: nil io.Reader"},
+		{"a", "jsonsrc: a.json:1:2: elsewhere", "a: [jsonsrc] a.json:1:2: elsewhere"},
+	} {
+		if got := jsonErrorLine(c.uri, errors.New(c.err)); got != c.want {
+			t.Errorf("jsonErrorLine(%q, %q) = %q, want %q", c.uri, c.err, got, c.want)
 		}
 	}
 }

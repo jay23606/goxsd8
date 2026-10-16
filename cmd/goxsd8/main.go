@@ -114,9 +114,11 @@ Usage (contract; subcommands land with their milestones):
       mapping declines, malformed JSON, content after the top-level
       object and an I/O fault reading the instance once it is open
       all reach jsonsrc's one error channel, and the line names
-      none of them: each prints jsonsrc: <loc>: <message> on
-      stdout, with no [<rule>], and exits 4, where malformed XML and
-      an I/O fault reading an XML instance exit 1. They share 4
+      none of them: each prints <loc>: [jsonsrc] <message> on
+      stdout, [jsonsrc] standing where [<rule>] stands and naming
+      the source that raised the error, not a rule, and exits 4,
+      where malformed XML and an I/O fault reading an XML instance
+      exit 1. They share 4
       because the line names no class, and nothing tells a shape
       the mapping rejects from an arm it does not implement, so
       charging 1 would charge every decline as invalid.

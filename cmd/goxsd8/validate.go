@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -79,8 +80,8 @@ func formatVocabulary() string {
 // into ONE schema set and assesses every positional argument against it,
 // writing each violation, and each check the assessment declined, to stdout as
 // the contract's "<loc>: [<rule>] <message>", and a JSON instance jsonsrc
-// could not assess as jsonsrc's own error line (assessJSON). args excludes the
-// subcommand name itself.
+// could not assess as "<loc>: [jsonsrc] <message>" (assessJSON). args excludes
+// the subcommand name itself.
 //
 // Every instance is assessed, in argument order: a violation in one never
 // stops the next, so a script gets the whole report from one run. The exit
@@ -281,18 +282,66 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 // reading the input), and every input the mapping declines, which alone comes
 // back as a *jsonsrc.DeclineError. jsonsrc's doc makes none of them a validity
 // verdict, and nothing tells a shape the mapping rejects from an arm it does
-// not implement, so the line — already "jsonsrc: <loc>: <message>", with no
-// [<rule>] and no class named — lands on stdout with the report and is
-// charged exitUndecided whatever the class: charging exitInvalid would charge
-// every decline as invalid. Malformed XML is charged exitInvalid instead, on
-// one's reasoning for xmlsrc's fault.
+// not implement, so the line — jsonErrorLine's "<loc>: [jsonsrc] <message>",
+// naming no class — lands on stdout with the report and is charged
+// exitUndecided whatever the class: charging exitInvalid would charge every
+// decline as invalid. Malformed XML is charged exitInvalid instead, on one's
+// reasoning for xmlsrc's fault.
 func (vn *validation) assessJSON(instance string, src io.Reader, stdout, stderr io.Writer) int {
 	result, err := jsonsrc.Validate(vn.base, src, jsonsrc.WithURI(instance))
 	if err != nil {
-		return reportLines(stdout, stderr, instance, []string{violationLine(err)}, exitUndecided)
+		return reportLines(stdout, stderr, instance, []string{jsonErrorLine(instance, err)}, exitUndecided)
 	}
 	lines, code := assessmentLines(result)
 	return reportLines(stdout, stderr, instance, lines, code)
+}
+
+// jsonsrcToken stands where a diagnostic line's [<rule>] stands on every line
+// jsonErrorLine renders. It names the source that raised the error, not a spec
+// rule: no jsonsrc error is an xsderr.Error (#2721).
+const jsonsrcToken = "jsonsrc"
+
+// jsonErrorLine renders an error from jsonsrc's error channel, uri being the
+// name assessJSON passed to jsonsrc.WithURI, as the contract's
+// "<loc>: [jsonsrc] <message>", so a line-oriented consumer splits it like a
+// violation's line.
+//
+// It reads err's text, the one encoding every error of the channel has:
+// malformed JSON, content after the top-level object and a read fault are
+// plain errors, and only a decline is a *jsonsrc.DeclineError with a Loc.
+// jsonsrc.Validate's doc spells each one "jsonsrc: " and the location, which
+// renders as uri followed by its line and column, then ": " and the message.
+// The location is therefore split off by uri and not at the first colon, which
+// a path may carry, and ends at the first ": " after uri, which the line and
+// column cannot contain. An error not spelled that way — the nil-argument
+// errors are the only ones Validate's doc names, and assessJSON passes neither
+// — is located at uri alone, with its own text as the message.
+func jsonErrorLine(uri string, err error) string {
+	msg := strings.TrimPrefix(err.Error(), jsonsrcToken+": ")
+	rest, _ := strings.CutPrefix(msg, uri)
+	lineCol, message, ok := strings.Cut(rest, ": ")
+	if !strings.HasPrefix(msg, uri) || !ok || !isLineCol(lineCol) {
+		return fmt.Sprintf("%s: [%s] %s", uri, jsonsrcToken, msg)
+	}
+	return fmt.Sprintf("%s%s: [%s] %s", uri, lineCol, jsonsrcToken, message)
+}
+
+// isLineCol reports whether s is what an xsderr.Loc renders after its URI: ""
+// when it has no line, ":<line>" or ":<line>:<col>".
+func isLineCol(s string) bool {
+	if s == "" {
+		return true
+	}
+	parts := strings.Split(s, ":")
+	if parts[0] != "" || len(parts) > 3 {
+		return false
+	}
+	for _, p := range parts[1:] {
+		if _, err := strconv.ParseUint(p, 10, 0); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // validatorFor returns the validator instance is assessed against and the

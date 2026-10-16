@@ -300,6 +300,11 @@ func TestUsageCoversContract(t *testing.T) {
 	if !strings.Contains(strings.Join(strings.Fields(usage), " "), why) {
 		t.Errorf("usage does not state why every jsonsrc error exits 4 (%q)", why)
 	}
+	// The jsonsrc error line's shape, which jsonErrorLine renders (#2721).
+	shape := "each prints " + fmt.Sprintf("<loc>: [%s] <message>", jsonsrcToken) + " on stdout"
+	if !strings.Contains(strings.Join(strings.Fields(usage), " "), shape) {
+		t.Errorf("usage does not state the jsonsrc error line's shape (%q)", shape)
+	}
 }
 
 // TestBuiltBinaryMatrix drives the real executable, following #251: exit

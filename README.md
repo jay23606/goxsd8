@@ -96,7 +96,16 @@ goxsd8 validate -schema order.xsd order.json    # exit 0
 A child key may repeat in one object: each member is one more child, in
 member order, which is how a model interleaving repeats (a, b, a) is
 spelled. A repeated attribute key, `"$xmlns"` or `"$type"` is declined
-(exit 4).
+(exit 4). A decline, malformed JSON and a fault reading the instance each
+print one `<loc>: [jsonsrc] <message>` line on stdout, `jsonsrc` naming the
+source of the error where a violation's line names its rule. With
+`{"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","kind":"y","item":["a"]}}` as
+`twice.json`:
+
+```sh
+$ goxsd8 validate -schema order.xsd twice.json    # exit 4
+twice.json:1:47: [jsonsrc] attribute member "kind" repeats in the object of {urn:o}order; an element carries one attribute of each expanded name, so give it once
+```
 
 `goxsd8 -help` states the JSON shape in brief, and
 `go doc github.com/kud360/goxsd8/validate/jsonsrc` renders the full mapping.
