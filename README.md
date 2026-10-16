@@ -93,6 +93,11 @@ and this instance as `order.json`:
 goxsd8 validate -schema order.xsd order.json    # exit 0
 ```
 
+A child key may repeat in one object: each member is one more child, in
+member order, which is how a model interleaving repeats (a, b, a) is
+spelled. A repeated attribute key, `"$xmlns"` or `"$type"` is declined
+(exit 4).
+
 `goxsd8 -help` states the JSON shape in brief, and
 `go doc github.com/kud360/goxsd8/validate/jsonsrc` renders the full mapping.
 
@@ -240,7 +245,8 @@ defer jf.Close()
 // err is every fault: a nil argument, malformed JSON or content after it, a
 // read fault, and every input the mapping declines. res.Err() is nil on every
 // result jsonsrc returns, but Unevaluated() still applies: an empty
-// Violations() proves nothing unless Unevaluated() is empty too.
+// Violations() proves nothing unless Unevaluated() is empty too. Pass WithURI:
+// without it, a decline or a violation is located at ?, as in ?:1:2.
 res, err = jsonsrc.Validate(v, jf, jsonsrc.WithURI("order.json"))
 if err != nil {
 	log.Fatal(err)

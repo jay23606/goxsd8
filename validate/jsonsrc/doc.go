@@ -24,7 +24,12 @@
 //     kind, not "@kind", "_kind" or "-kind" — and lead the object, before
 //     every child member. encoding/json marshals a Go struct in field order,
 //     so declare its attribute fields before its child fields: a child field
-//     declared first yields a document that declines.
+//     declared first yields a document that declines. It marshals a map, such
+//     as map[string]any, with its keys sorted, which puts "$type" before
+//     "$xmlns" where an object has both, and a child key before an attribute
+//     key wherever one sorts first; both orders decline, so marshal a struct,
+//     or write the members in order yourself, as a json.Marshaler of your own
+//     can.
 //   - "$xmlns" and "$type" are reserved and lead the object: a "$xmlns"
 //     member, {"prefix":"uri",...}, comes first and binds the prefixes of keys
 //     and QName content; a "$type" member, the element's xsi:type, follows
@@ -285,6 +290,46 @@
 // wherever its verdict stands uncharged, as "The mapping" says.
 //
 // # Declines
+//
+// Each decline, listed in full below, and the change to the input or the
+// schema that avoids it:
+//
+//	top level not {"<root>":value}        one member, keyed by the root's name
+//	root value an array                   an object, a scalar or null
+//	key whose colon makes no QName        local or p:local
+//	prefix no "$xmlns" in scope binds     bind it in a "$xmlns" in scope
+//	unprefixed key two names carry        prefix it; for a name in no namespace
+//	                                        beside one in a namespace, none: a
+//	                                        permanent limitation
+//	wildcard-only key, namespace unfixed  prefix it
+//	wildcard-only key, kind unfixed       none: a permanent limitation
+//	key in the xsi or xml namespace       null for xsi:nil, "$type" for
+//	                                        xsi:type; prefix it xml: for an
+//	                                        attribute under an {attribute
+//	                                        wildcard} alone; else none: a
+//	                                        permanent limitation
+//	member under an undeclared child      declare the child
+//	key a declaration and a use carry     none: a permanent limitation
+//	attribute member after a child        move attribute members first
+//	attribute member repeated             give it once
+//	attribute member null, object, array  give it a scalar
+//	attribute use in the xsi namespace    null for xsi:nil, "$type" for
+//	                                        xsi:type; else none: a permanent
+//	                                        limitation
+//	attribute on simple content           none: a permanent limitation
+//	"$xmlns" or "$type" misplaced,        "$xmlns" then "$type", once each,
+//	  repeated or in the top level          leading the element's own object
+//	"$type" or "$xmlns" value malformed   a string "$type"; a "$xmlns" binding
+//	                                        each NCName prefix once, not xml or
+//	                                        xmlns, to a non-empty name
+//	"$type" a {type table} settles        none in the input; an open gap
+//	  differently, or under a parent
+//	  whose type is undetermined
+//	other "$" member                      key it by its own name, with no "$"
+//	array item that is an array           an object, a scalar or null item
+//	member a {type table}'s types         none in the input; an open gap
+//	  classify differently
+//	unresolved {type definition}          none: a permanent limitation
 //
 // An input the implemented arms do not map is a [*DeclineError] from
 // [Validate], which [errors.As] matches, naming the arm it is not — never a

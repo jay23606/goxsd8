@@ -136,7 +136,10 @@ Usage (contract; subcommands land with their milestones):
       "@kind", "_kind" or "-kind" — and lead the object, before
       every child member. A scalar is the element's simple content,
       null is xsi:nil="true", and an array is one child per item,
-      for repeated children.
+      for repeated children. A child key may repeat in one object:
+      each member is one more child, in member order, which is how a
+      model interleaving repeats (a, b, a) is spelled. A repeated
+      attribute key, "$xmlns" or "$type" is declined (exit 4).
       Against a schema declaring {urn:o}order with an attribute kind
       and a repeated child item, this order.json exits 0:
         {"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","item":["a","b"]}}
