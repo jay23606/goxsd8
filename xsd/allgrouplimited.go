@@ -42,6 +42,20 @@ const ruleCosAllLimited xsderr.Rule = "cos-all-limited"
 // with no qualification by origin. So the shape is charged, which is what makes
 // "extend a type whose content model is an <all>" an error rather than a
 // silently accepted content model no instance can satisfy as the author meant.
+//
+// NOT A componentWalk PHASE, deliberately (#841). componentWalk
+// (componentwalk.go) charges a by-name arm and never follows it; this rule
+// needs a third treatment of a <group ref>: read the referenced definition's
+// {compositor} through it and stop there (resolveTermGroup). §3.7.2 (xr.mgd3)
+// makes that {model group} the reference's {term}, and componentWalk holds no
+// schema to read it with. The rule is also stated over a particle's POSITION
+// — its {min occurs}/{max occurs} (clauses 1.2 and 1.3) and its container's
+// {compositor} (clause 1 against clause 2), with no container at all for a
+// {content type}'s particle — and componentWalk's callbacks receive neither.
+// A further Phase C/D constraint joins componentWalk when it enumerates what
+// componentWalk enumerates and charges per component; one that reads through
+// a by-name arm, or decides on a particle's position, takes a descent of its
+// own with its reason at its head, as this file and complextypewalk.go do.
 
 // checkAllGroupsLimited is the cos-all-limited step of Phase C. It runs FIRST in
 // that phase: the shape clause 2 forbids — a sequence or choice group among an

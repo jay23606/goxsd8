@@ -52,6 +52,12 @@ import "github.com/kud360/goxsd8/xsderr"
 // element declaration — so a field for one would be parameterization no phase
 // fills (STYLE T5). A phase that comes to charge a wildcard or an assertion adds
 // the field here, and every phase gets the slot at once.
+//
+// That is the rule for a constraint that enumerates what this descent
+// enumerates. Two do not, and each states why at its head:
+// checkAllGroupsLimited (allgrouplimited.go) reads through a <group ref> and
+// decides on a particle's position, and complexTypeWalk (complextypewalk.go)
+// enumerates a different set of owned types (#841).
 type componentWalk struct {
 	// typeDefinitionSlot is charged on a {type definition}/{base type definition}
 	// slot in every arm, including the inline one the descent then enters. loc
