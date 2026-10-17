@@ -70,8 +70,8 @@ translate the local times above and mind DST drift. Keep develop slots
   believing an empty result** — otherwise the mandated open-queue search
   silently no-ops and a session concludes "no duplicate exists" having
   never searched (#893). Relevance ranking is not completeness: to
-  enumerate every open issue carrying a label, paginate the REST listing
-  under **Survey input** and filter locally.
+  enumerate every open issue carrying a label, run `go tool issuefeed`
+  (**Survey input**) and filter its `gapissues.json` locally.
 
   **Write bodies and comments from a file** with
   `gh api repos/{owner}/{repo}/issues/{n} -X PATCH -F body=@FILE`, and
@@ -142,10 +142,11 @@ translate the local times above and mind DST drift. Keep develop slots
     contains it, and name the refusal and the spelling run in your account
     (#2250). Use `go -C <dir>` and `git -C <dir>` rather than
     `cd <dir> &&`; write a body or payload to a scratch file and send it
-    with `-F body=@FILE` or `--input FILE`; run a multi-step procedure,
-    the Survey input walk among them, as a script file invoked as a bare
-    `python3 /abs/path` or `bash /abs/path` that does its own `cd`, or as
-    one literal command per page (#2047).
+    with `-F body=@FILE` or `--input FILE`; feed a survey with `go tool
+    issuefeed` (**Survey input**); run any other multi-step procedure
+    as a script file invoked as a bare `python3 /abs/path` or `bash
+    /abs/path` that does its own `cd`, or as one literal command per step
+    (#2047).
   - **A refused command that a procedure assigns — a write, a test run or
     a read — is reported, and is never a reason to end the turn without a
     report.** The refusing agent — an arbiter's bank commit, a
@@ -185,113 +186,48 @@ This file does not restate them.
 
 ## Survey input
 
-**A failing `gh auth status` is not evidence against the recipe below** — it is
-repository-scoped REST, and which `gh` and proxy errors are real is settled
-under **Environment requirements**.
-
-`go tool wipsurvey`, `go tool gapaudit` and `go tool lanepartition` read `gh
-issue list --json`-shaped JSON on stdin, so any channel that can write that
-JSON to a file feeds them; `lanepartition` reads `gapissues.json`, the shape
-carrying `body`.
-Over repository-scoped REST — and from a script file, never inline, because
-the worktree guard refuses its loops (**Environment requirements**):
+**Feed the survey tools with `go tool issuefeed -dir <dir>`, naming a
+directory outside the checkout** — the session scratchpad — so the lists
+never ride a `git add -A` (#1217). It writes the files `go tool wipsurvey`,
+`go tool gapaudit` and `go tool lanepartition` read on stdin:
+`<dir>/issues.json` for `wipsurvey`, and `<dir>/gapissues.json`, the shape
+that also carries `title` and `body`, for `gapaudit` and `lanepartition`:
 
 ```sh
-# `gh api --paginate` is a trap: the Link header carries numeric-ID repository
-# paths, the proxy answers "Numeric-ID repository paths (repositories/{id}/...)
-# are not supported through this proxy" (HTTP 403), and it does so AFTER
-# writing the pages it did fetch — a truncated file plus a non-zero exit that a
-# redirect into a survey tool does not notice. Page explicitly, never to a fixed
-# count, and abort on a failed fetch rather than looping on its error body.
-#
-# Re-request every page that comes back below per_page — empty included — and
-# keep whichever answer has more items; stop only once a page survives its
-# re-request empty. A short answer is either the end of the list or a transient
-# truncation of a full page, and taking a transient for the end truncates the
-# feed with exit status 0 and valid JSON that no exit check anywhere catches
-# (#1145). Every page but the last must then be full, so a short page the loop
-# walked past is that transient and the run aborts instead of handing a survey
-# a partial list.
-mkdir -p pages && rm -f pages/p*.json
-p=1
-while :; do
-  gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p" > pages/p$p.json || exit 1
-  n=$(jq length pages/p$p.json)
-  if [ "$n" -lt 100 ]; then
-    sleep 2
-    r=$(gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p") || exit 1
-    m=$(printf '%s' "$r" | jq length)
-    if [ "$m" -gt "$n" ]; then printf '%s\n' "$r" > pages/p$p.json; n=$m; fi
-  fi
-  if [ "$n" -eq 0 ]; then rm pages/p$p.json; break; fi
-  p=$((p + 1))
-done
-
-for f in pages/p*.json; do
-  [ -e "$f" ] || continue
-  [ "$f" = "pages/p$((p - 1)).json" ] && continue
-  [ "$(jq length "$f")" -eq 100 ] && continue
-  echo "$f came back short and is not the last page — re-run the loop" >&2
-  exit 1
-done
-
-seen=
-i=1
-while [ "$i" -lt "$p" ]; do
-  f=pages/p$i.json
-  nums=$(jq -r '.[].number' "$f")
-  dup=$(printf '%s\n%s\n' "$nums" "$seen" | sort | uniq -d | head -n 1)
-  if [ -n "$dup" ]; then
-    echo "$f repeats #$dup from an earlier page — re-run the loop" >&2
-    exit 1
-  fi
-  seen=$(printf '%s\n%s' "$nums" "$seen")
-  i=$((i + 1))
-done
-
-jq -sr 'add | map(.number) as $n | ($n | unique) as $u
-        | "rows \($n | length) distinct \($u | length)"
-          + " min \($u[0]) max \($u[-1])"
-          + (if ($u | length) == ($u[-1] - $u[0] + 1)
-             then " no gaps"
-             else " missing numbers \($u[-1] - $u[0] + 1 - ($u | length))"
-             end)' pages/*.json >&2
-
-jq -s 'add | map(select(.pull_request == null))
-       | map({number, state, labels: [.labels[] | {name}]})' pages/*.json > issues.json
-
-jq -s 'add | map(select(.pull_request == null))
-       | map({number, title, state, body, labels: [.labels[] | {name}]})' pages/*.json > gapissues.json
+go tool issuefeed -dir /abs/scratchpad/feed
+go tool wipsurvey < /abs/scratchpad/feed/issues.json
 ```
 
-**Quote the distinct-number stamp wherever a survey's figures are quoted**, and
-re-run the whole walk when the check aborts. A page can come back the right
-SIZE with the wrong CONTENTS — served from another page's offset, repeating a
-range already collected and dropping its own — which the fullness check cannot
-see, `jq -s add` accepts, and the reshape turns into well-formed JSON at exit 0
-(#1520). Nothing else records that a walk was verified: `issues.json`,
-`gapissues.json` and `pages/` are untracked and nothing in `.gitignore` covers
-them, so the stamp on stderr is the only evidence there is.
+**A failing `gh auth status` is not evidence against it** — the tool calls
+repository-scoped REST through `gh api`, and which `gh` and proxy errors are
+real is settled under **Environment requirements**. Its package doc owns how
+it walks and checks the listing.
+
+**A non-zero exit means there is no feed: re-run the command.** A failed
+fetch, check or write exits 1 with its reason, a missing `-dir` exits 2,
+and either way `<dir>` holds neither file afterwards, an earlier run's copies
+included.
+
+**Quote the distinct-number stamp the tool prints to stderr wherever a
+survey's figures are quoted**: `rows N distinct D min A max B no gaps`, or
+`... missing numbers K`. It counts every row the walk kept, pull requests
+included, since they share the issues' number space: `no gaps` says every
+number from the first to the newest arrived, and `missing numbers K` says K
+numbers in that range did not. The stamp is the only record that a walk was
+verified.
 
 No part of the reshape is optional: **pull requests share the issues endpoint**
-and every survey miscounts unless `select(.pull_request == null)` drops them,
-and **both tools read a label** — `needs-replan` in `wipsurvey`, `kind/gap` in
-`gapaudit` — so a row that loses `labels` loses a verdict (#840, #1062). The
-`{name}` projection only keeps the files small; the other fields gh emits
-decode away either way.
+and every survey miscounts unless they are dropped, and **both tools read a
+label** — `needs-replan` in `wipsurvey`, `kind/gap` in `gapaudit` — so a row
+that loses `labels` loses a verdict (#840, #1062). JSON from any other
+channel feeds the tools only in the same shape: rows of `number`, `state` and
+`labels: [.labels[] | {name}]` with pull requests dropped, plus `title` and
+`body` for `gapissues.json`.
 
-Feed `gapaudit` the whole repository — do not select `kind/gap` here. The tool
-makes that selection itself, for its group 2 alone, so that a marker citing an
-owner labeled anything else resolves instead of reading as an untracked leak
-(#1062).
-
-The pages go in their own directory, emptied first, because a bare
-`p[0-9]*.json` glob in the working directory swallows any unrelated file that
-happens to match — and a page left over from a longer earlier run is read back
-in as current. `jq -s add` fails outright on the first of those and silently
-believes the second. The empty page that ends the loop is deleted for the same
-reason: every file left in `pages/` is a page with issues on it, which is what
-the fullness check, the distinct-number check and the reshape all read.
+Feed `gapaudit` the whole repository — the tool selects `kind/gap` itself, for
+its group 2 alone, so that a marker citing an owner labeled anything else
+resolves instead of reading as an untracked leak (#1062). `issuefeed` selects
+no label.
 
 ### Supplying the thread's comments
 
@@ -308,14 +244,14 @@ is small, and `repos/{owner}/{repo}/issues` carries no bodies, only a
 count:
 
 ```sh
-for n in $(go tool wipsurvey < issues.json | awk '$4 ~ /^(CLAIMED|EXPIRED)$/ {print $1}'); do
+for n in $(go tool wipsurvey < /abs/scratchpad/feed/issues.json | awk '$4 ~ /^(CLAIMED|EXPIRED)$/ {print $1}'); do
   gh api "repos/kud360/goxsd8/issues/$n/comments?per_page=100" \
     | jq --argjson n "$n" '{number: $n, comments: [.[] | {body, createdAt: .created_at}]}' > c$n.json
 done
 
 jq -s 'INDEX(.[1:][]; .number) as $c
        | .[0] | map(.comments = ($c[.number|tostring].comments // null))' \
-   issues.json c*.json > issues-dated.json
+   /abs/scratchpad/feed/issues.json c*.json > issues-dated.json
 
 go tool wipsurvey < issues-dated.json
 ```
