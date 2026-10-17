@@ -2339,7 +2339,9 @@ func (w *walker) extend(r *attributeRun, next *runMember) (unsettled, err error)
 // assesses each XML twin, whichever members it takes as attributes: the
 // mapping names a member an attribute only where the type the root is
 // assessed under classifies it as one, as walker.settled's marker of the same
-// owner says. Owned by #2701.
+// ruling says. RULED permanent by #2701: Structures assesses an element whose
+// [attributes] are given, each reading is an element of its own, and no clause
+// ranks the readings, so the mapping has no reading to name.
 func (w *walker) readAhead(r *attributeRun, next *runMember, sc *scope, unsettled error) ([]validate.Attribute, []peeked, *object, error) {
 	la, err := w.lookAhead(r, next, sc)
 	if err != nil {
@@ -2722,8 +2724,11 @@ func (w *walker) take(r *attributeRun, la lookahead, rd reading) ([]validate.Att
 // or the member that ends the run, otherwise, and no longer run is left,
 // though the engine assesses each XML twin, whichever members it takes as
 // attributes: the mapping names a member an attribute only where the type
-// the root is assessed under classifies it as one, and here none does. Owned
-// by #2701.
+// the root is assessed under classifies it as one, and here none does. RULED
+// permanent by #2701: Structures assesses an element whose [attributes] are
+// given, each reading is an element of its own, and no clause ranks the
+// readings (key-selected-type clause 1 ranks Type Alternatives within one),
+// so the mapping has no reading to name.
 //
 // GAP(jsonsrc): where the engine withholds the type a root's {type table}
 // ·conditionally selects·, a {test} it reaches being outside its §3.12.6
