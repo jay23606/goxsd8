@@ -88,7 +88,7 @@ Surveys, in place of the greps they replace (PRINCIPLES 27):
 ```sh
 go tool lanestatus                    # committed lane scores, as PLAN.md's table
 go tool surface -base origin/main     # what this branch added/removed from the exported surface (T5)
-go tool wipsurvey < issues.json       # LIVE/CLAIMED/EXPIRED/RETIRED/UNKNOWN branches
+go tool wipsurvey < issues.json       # LIVE/CLAIMED/EXPIRED/RETIRED/UNKNOWN branches, then the Working band's rows
 go tool gapaudit  < gapissues.json    # GAP( markers vs trackers
 go tool suiteindex <query>            # suite fixtures carrying a construct; <query> shapes below
 go tool suiteindex -paths <query> | go tool casejoin join <lane>   # that census's candidate cases in a lane
@@ -103,7 +103,8 @@ when one errors, and spells the paginate-and-reshape recipe under "Survey
 input".
 
 Empty stdin is a supported mode for a census, not a failure. `wipsurvey`
-then reports leases only and can never report RETIRED; `gapaudit` reports the
+then reports leases only, can never report RETIRED, and reads every band
+row's state UNKNOWN; `gapaudit` reports the
 marker census only and reconciles nothing against trackers. Each says so in
 its own output; neither exits non-zero. A run whose output an issue's
 `## Acceptance` quotes is a measurement, and only a fed run discharges it

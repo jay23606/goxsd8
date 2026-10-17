@@ -62,7 +62,7 @@ counts.
    branch is dated by its thread's `RESUME:`/`TAKEOVER:` comments, not by
    git. If no channel yields an issue list, run it on empty stdin: the
    lease-only report classifies everything but RETIRED, which is not a
-   reason to survey by hand.
+   reason to survey by hand, and prints every band row's state UNKNOWN.
    - **Resuming beats starting.** Take the oldest EXPIRED — or takeable
      CLAIMED — `wip/issue-<N>` whose issue is open and not `needs-replan`,
      and take it over per WORKFLOW's lease invariant before anything else.
@@ -84,8 +84,8 @@ counts.
      closed, with no live branch, and whose `## Notes` names no same-file
      relation to an issue with a LIVE branch (#1111). A closed issue can
      still wear `ready`, and the band keeps landed rows until its next
-     stamp, so read each row's state from the issue list that fed
-     `wipsurvey`, never issue by issue (#2399). Claim with a commit only
+     stamp, so take each row's state and branch from `wipsurvey`'s WORKING
+     BAND section, never issue by issue (#2399). Claim with a commit only
      this session could write, then push it:
 
      ```sh

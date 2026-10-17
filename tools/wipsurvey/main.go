@@ -32,7 +32,7 @@
 // PLAN.md stamps reported a parked/* count taken from a refspec that
 // never carried parked/*, and the count was right every time, which is
 // the hazard rather than the reprieve (#1627). So wip/issue-<N> refs are
-// the classified rows, and two trailing sections report the rest: the
+// the classified rows, and two further sections report the rest: the
 // parked/* branches WORKFLOW.md keeps for human triage, and every head
 // outside both namespaces. Each section prints a "none" line when its
 // namespace is empty, so a zero this tool measured never reads like a
@@ -121,28 +121,41 @@
 // or EXPIRED there provisional rather than settled (#806); a row whose
 // diff is undecided simply names no remedy.
 //
+// The report ends with docs/PLAN.md's Working band, so a /develop session
+// picks the first startable row from this output rather than by joining
+// the band to the issue list by hand (#2399). Each `| N | #M |` row of the
+// band's tier tables prints in band order with its issue's state from the
+// fed list — OPEN, CLOSED, UNKNOWN when no list was fed, UNLISTED when the
+// fed list lacks it — and its wip/issue-<M> branch with that branch's
+// verdict, or "none" and "unclaimed" when the remote carries no such
+// branch. The -plan flag names another roadmap file. A band section that
+// is missing or unreadable prints an UNREAD line, never an empty band, and
+// the run exits 2 after the report.
+//
 // Usage:
 //
 //	git fetch origin   # git fetch --unshallow origin, in a shallow clone
 //	gh issue list --state all --json number,state,labels,comments | go tool wipsurvey
 //	gh issue list --state all --json number,state,labels | go tool wipsurvey  # empty claims stay CLAIMED
 //	go tool wipsurvey < /dev/null   # issue data omitted: lease-only report
+//	go tool wipsurvey -plan path/to/PLAN.md < issues.json
 //
 // Every fed row must carry `state`: an absent one would read as OPEN, and a
 // branch whose issue is closed could never report RETIRED. A fed list with
 // any row lacking it is discarded whole — the report still prints, every
-// branch judged lease-only — and the run exits 2 naming the first such issue
-// (#1604).
+// branch judged lease-only and every band row UNKNOWN — and the run exits 2
+// naming the first such issue (#1604).
 //
 // Exit status is 0 for a normal report (whatever the branches' verdicts
 // turn out to be) and 2 for an operational error: git is not on PATH, the
-// remote is unreachable, stdin carries malformed JSON, or a fed row carries
-// no `state`.
+// remote is unreachable, stdin carries malformed JSON, a fed row carries
+// no `state`, or the Working band could not be read.
 package main
 
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -171,7 +184,9 @@ const claimTTL = 2 * time.Hour
 const takeoverRemedyThreshold = 3
 
 func main() {
-	if err := run(os.Stdout, os.Stderr, os.Stdin, time.Now()); err != nil {
+	planPath := flag.String("plan", defaultPlanPath, "roadmap whose Working band rows the report prints")
+	flag.Parse()
+	if err := run(os.Stdout, os.Stderr, os.Stdin, time.Now(), *planPath); err != nil {
 		fmt.Fprintf(os.Stderr, "wipsurvey: %v\n", err)
 		os.Exit(2)
 	}
@@ -179,14 +194,15 @@ func main() {
 
 // run drives the survey end to end: discover every head from the remote,
 // read optional issue data from stdin, classify the wip/issue-<N>
-// branches, and render the report ([renderReport]). A wip/ branch whose
-// name does not fit the wip/issue-<N> shape is skipped with a warning to
-// stderr rather than aborting the whole report — an unexpected
-// refs/heads/wip/* branch is evidence worth a warning, not a reason to
-// withhold every other row. A fed list missing `state` is the same kind of
-// evidence, and stronger: run discards that list and hands its error to
-// renderReport, which owns when it is returned.
-func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
+// branches, read the Working band from the roadmap at planPath, and render
+// the report ([renderReport]). A wip/ branch whose name does not fit the
+// wip/issue-<N> shape is skipped with a warning to stderr rather than
+// aborting the whole report — an unexpected refs/heads/wip/* branch is
+// evidence worth a warning, not a reason to withhold every other row. A
+// fed list missing `state` is the same kind of evidence, and stronger: run
+// discards that list and hands its error to renderReport, which owns when
+// it is returned. A band that cannot be read is handed over the same way.
+func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time, planPath string) error {
 	buckets, err := remoteRefs()
 	if err != nil {
 		return err
@@ -249,16 +265,21 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 	}
 	sortOtherRows(others)
 
-	return renderReport(stdout, rows, branchNames(buckets.parked), others, feedErr)
+	// A band that cannot be read is not fatal here: renderReport returns it.
+	bandRows, bandErr := readBand(planPath)
+	band := bandSection{path: planPath, lines: bandLines(bandRows, issues, rows), err: bandErr}
+
+	return renderReport(stdout, rows, branchNames(buckets.parked), others, band, feedErr)
 }
 
-// renderReport writes the whole report to w — the classified table, then
-// the parked/* section, then the section for heads in neither namespace —
-// and returns the first write error. Absent one it renders every section
-// and only then returns feedErr, the error run was handed by readIssues, so
-// a fed list missing `state` still prints the leases it could not spoil
-// before main exits 2 (#1604).
-func renderReport(w io.Writer, rows []row, parked []string, others []otherRow, feedErr error) error {
+// renderReport writes the whole report to w — the classified table, the
+// parked/* section, the section for heads in neither namespace, then the
+// Working band — and returns the first write error. Absent one it renders
+// every section and only then returns feedErr, the error run was handed by
+// readIssues, joined with the band's read error, so a fed list missing
+// `state` or a band that could not be read still prints the rest of the
+// report before main exits 2 (#1604).
+func renderReport(w io.Writer, rows []row, parked []string, others []otherRow, band bandSection, feedErr error) error {
 	if err := renderTable(w, rows); err != nil {
 		return err
 	}
@@ -268,7 +289,10 @@ func renderReport(w io.Writer, rows []row, parked []string, others []otherRow, f
 	if err := renderOther(w, others); err != nil {
 		return err
 	}
-	return feedErr
+	if err := renderBand(w, band); err != nil {
+		return err
+	}
+	return errors.Join(feedErr, band.err)
 }
 
 // refSHA is one line of `git ls-remote --heads` output: a remote head's
@@ -280,8 +304,8 @@ type refSHA struct {
 
 // remoteRefs asks the origin remote directly for every head it carries,
 // main's included — one network call for the whole report, so neither the
-// ancestry test nor the two trailing sections costs extra remote access.
-// See the package doc comment for why this — not the local
+// ancestry test nor the two sections for the other heads costs extra
+// remote access. See the package doc comment for why this — not the local
 // refs/remotes/origin/* cache — is the authoritative branch set, and why
 // the request carries no pattern.
 func remoteRefs() (refBuckets, error) {
@@ -794,10 +818,11 @@ func newestHeartbeat(comments []ghComment) *time.Time {
 // number,state,labels,comments`'s JSON array from r into a lookup by issue
 // number. Empty input — no stdin redirected, or an explicit `< /dev/null`
 // — is not an error: it means the caller has no issue data to offer, and
-// readIssues returns a nil map so every branch is judged lease-only. The
-// comments field is likewise optional, per issue: without it that issue's
-// branch can still be retired or dated from its own tip, only an empty
-// claim goes undated.
+// readIssues returns a nil map so every branch is judged lease-only and
+// every band row's state is UNKNOWN ([bandStatus]). A fed list, even an
+// empty one, returns a non-nil map. The comments field is likewise
+// optional, per issue: without it that issue's branch can still be retired
+// or dated from its own tip, only an empty claim goes undated.
 //
 // The state field is not optional: a list with any row lacking it returns
 // a nil map and an error wrapping errMissingState ([missingState]); run

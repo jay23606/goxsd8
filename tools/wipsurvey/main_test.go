@@ -1955,11 +1955,11 @@ func TestSortOtherRows(t *testing.T) {
 // count from (#1627).
 func TestReportNamesEveryNamespace(t *testing.T) {
 	var buf bytes.Buffer
-	if err := renderReport(&buf, nil, nil, nil, nil); err != nil {
+	if err := renderReport(&buf, nil, nil, nil, bandSection{}, nil); err != nil {
 		t.Fatalf("renderReport: %v", err)
 	}
 	got := buf.String()
-	for _, want := range []string{"ISSUE", "PARKED BRANCHES", "OTHER BRANCHES", "wip/*", "parked/*"} {
+	for _, want := range []string{"ISSUE", "PARKED BRANCHES", "OTHER BRANCHES", "WORKING BAND", "wip/*", "parked/*"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("report over an empty remote does not mention %q:\n%s", want, got)
 		}
@@ -1967,18 +1967,18 @@ func TestReportNamesEveryNamespace(t *testing.T) {
 }
 
 // TestRenderReportSectionsThenFeedError pins renderReport's composition
-// (#1652): all three sections, in order, and the error it was handed
+// (#1652): all four sections, in order, and the error it was handed
 // returned only after them — #1604's state-less feed still prints its
 // report before main exits 2.
 func TestRenderReportSectionsThenFeedError(t *testing.T) {
 	errSentinel := errors.New("sentinel")
 	var buf bytes.Buffer
-	if err := renderReport(&buf, nil, nil, nil, errSentinel); !errors.Is(err, errSentinel) {
+	if err := renderReport(&buf, nil, nil, nil, bandSection{}, errSentinel); !errors.Is(err, errSentinel) {
 		t.Fatalf("renderReport err = %v, want the feed error it was handed", err)
 	}
 	got := buf.String()
 	prev := -1
-	for _, heading := range []string{"ISSUE", "PARKED BRANCHES", "OTHER BRANCHES"} {
+	for _, heading := range []string{"ISSUE", "PARKED BRANCHES", "OTHER BRANCHES", "WORKING BAND"} {
 		at := strings.Index(got, heading)
 		if at <= prev {
 			t.Fatalf("heading %q at %d, want present and after the previous section's (%d):\n%s", heading, at, prev, got)
@@ -1986,7 +1986,7 @@ func TestRenderReportSectionsThenFeedError(t *testing.T) {
 		prev = at
 	}
 
-	if err := renderReport(&bytes.Buffer{}, nil, nil, nil, nil); err != nil {
+	if err := renderReport(&bytes.Buffer{}, nil, nil, nil, bandSection{}, nil); err != nil {
 		t.Errorf("renderReport with no feed error = %v, want nil", err)
 	}
 }

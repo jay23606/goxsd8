@@ -115,8 +115,8 @@ pruned, so `git for-each-ref` invents in-flight work. Fetch with
 
 A maintenance command lands from a short-lived branch of its own; it opens
 and squash-merges its PR in the same session, so it holds no lease and
-claims no issue. `go tool wipsurvey` still prints it, ahead of main, in the
-trailing section for heads outside `wip/*` and `parked/*`, for as long as
+claims no issue. `go tool wipsurvey` still prints it, ahead of main, in its
+section for heads outside `wip/*` and `parked/*`, for as long as
 it is landing: that section is cleanup for a human, never a lease row, so a
 branch listed there is not in-flight work.
 
