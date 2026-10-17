@@ -45,12 +45,18 @@ in the same commit.
 
 ## What trips you most
 
-S1/S2 (else blocks), S3 (dropped loop errors), E2 (missing rule ID), D2
-(map iteration into output), D3 (redundant state), T5 (unjustified
+STYLE S1/S2 (else blocks), S3 (dropped loop errors), E2 (missing rule ID),
+D2 (map iteration into output), D3 (redundant state), T5 (unjustified
 exports), T6 (stale doc.go prose — render `go doc` for every package you
 touch before claiming its status section current), P3 (an untracked
-fail-open, or disclosing prose with no `GAP(` in its block). Check the
-diff against these before handoff.
+fail-open, disclosing prose with no `GAP(` in its block, or a marker the
+diff adds or restates citing anything but an OPEN owner or P3b's `RULED
+permanent by #N` — never a closed issue, the one this landing closes
+included), P3a (a marker or comment the diff adds or rewrites that states
+a direction — "fail-open", "the direction is the withhold", "can only cost
+a win" — names the consumers by identifier and the direction each charges
+in, points at the marker that does, or claims none and says the direction
+is unestablished). Check the diff against these before handoff.
 
 Spec-derived data tables — builtin properties, hfn definitions, regex and
 facet tables, rule catalogs — are NEVER hand-typed: write or extend a
@@ -123,11 +129,15 @@ you can observe — plus the destination `wip/issue-<N>` branch by name and
 no SHA of its own, the shape you chose and the alternative it beats, the
 spec rules implemented, the cases that moved, what you absorbed beyond the
 issue body, the gate result, expected ratchet movement, and what you want
-scrutinized hardest. That last is a question no document decides: a risk
-PRINCIPLES 20 or a cited rule already decides — "this can charge where
-the spec may say otherwise" — is fixed in the withholding direction,
-declined under a `GAP(` marker, before handoff, whatever the brief
-pressed for, and the account names the fix (#2247).
+scrutinized hardest. That last is a question no document decides: what
+your account would name there that PRINCIPLES 20 or a cited rule already
+decides, however mildly it words it, is a defect repaired before handoff
+whatever the brief pressed for — a risk that "can charge where the spec
+may say otherwise" withheld under a `GAP(` marker, anything else made
+true, its message, its location and its prose included, with a repair
+that changes behaviour pinned by a test that fails without it, never
+merely disclosed beside a marker — and the account names the repair
+(#2247, #2664).
 
 You never push and never switch branches, whatever a brief asks, so how
 your commits arrive on the destination — fast-forward or merge — and
