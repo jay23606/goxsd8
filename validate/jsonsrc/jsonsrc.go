@@ -47,42 +47,58 @@ func WithURI(uri string) Option {
 //
 // It returns (nil, err) whenever no assessment of the whole document stands,
 // and (result, nil) otherwise; a result it returns never carries
-// [validate.Result.Err]. The faults are: a nil v or r; JSON that is malformed
-// or absent, or followed by further content; and every input the mapping
-// DECLINES — a top level that is not an object with exactly one member, and,
-// anywhere in the document, a member the implemented arms do not map (a key
-// whose colon makes no QName or whose prefix no "$xmlns" in scope binds; a
-// key no child element declaration and no attribute use carries whose
-// namespace neither a prefix nor the type's wildcards fix, or whose kind a
-// type with both an element wildcard and an {attribute wildcard} leaves open,
-// or which a wildcard puts in the xsi or xml namespace, or a prefix in the
-// xsi namespace or, as a child element, in the xml namespace; a member of an
-// object under a child no contained and no top-level declaration names; an
-// unprefixed key two expanded names carry, a key both a child declaration and
-// an attribute use carry, an attribute member after a child member or
-// repeated, an attribute member whose value is null, an object or an array, a
-// "$type" or "$xmlns" member out of its leading place or of the wrong shape,
-// a "$type" whose parent's ·governing type definition· the mapping does not
-// determine or that the types a {type table} below the root can select for it
-// settle differently, any other "$"-prefixed reserved member, a nested array,
-// a member of an element below the root whose declaration carries a {type
-// table} that its declared {type definition} and a type the table can select
-// classify differently, and, at such a root, the leading attribute members no
-// run settles by the type the table ·conditionally selects· for them; the
-// package doc lists them all). A decline names the arm it is not, and for an
-// input with no XML twin the spelling the mapping takes instead where one
-// exists; it is never a silent drop or a guessed mapping: a member the mapping
-// cannot name is not part of the document the assessment saw, so its result
-// is discarded rather than returned. The whole document is read either way,
-// so a fault after the point the assessment stopped at is still reported.
+// [validate.Result.Err]. Its faults are the four error classes listed below.
+// The inputs the mapping DECLINES are a top level that is not an object with
+// exactly one member, and, anywhere in the document, a member the implemented
+// arms do not map (a key whose colon makes no QName or whose prefix no
+// "$xmlns" in scope binds; a key no child element declaration and no attribute
+// use carries whose namespace neither a prefix nor the type's wildcards fix,
+// or whose kind a type with both an element wildcard and an {attribute
+// wildcard} leaves open, or which a wildcard puts in the xsi or xml namespace,
+// or a prefix in the xsi namespace or, as a child element, in the xml
+// namespace; a member of an object under a child no contained and no top-level
+// declaration names; an unprefixed key two expanded names carry, a key both a
+// child declaration and an attribute use carry, an attribute member after a
+// child member or repeated, an attribute member whose value is null, an object
+// or an array, a "$type" or "$xmlns" member out of its leading place or of the
+// wrong shape, a "$type" whose parent's ·governing type definition· the
+// mapping does not determine or that the types a {type table} below the root
+// can select for it settle differently, any other "$"-prefixed reserved
+// member, a nested array, a member of an element below the root whose
+// declaration carries a {type table} that its declared {type definition} and a
+// type the table can select classify differently, and, at such a root, the
+// leading attribute members no run settles by the type the table
+// ·conditionally selects· for them; the package doc lists them all). A decline
+// names the arm it is not, and for an input with no XML twin the spelling the
+// mapping takes instead where one exists; it is never a silent drop or a
+// guessed mapping: a member the mapping cannot name is not part of the
+// document the assessment saw, so its result is discarded rather than
+// returned. The whole document is read either way, so a fault after the point
+// the assessment stopped at is still reported.
 //
 // An attribute member after a child member is the order encoding/json
 // marshals a struct whose child field is declared before an attribute field:
 // declare a struct's attribute fields first, or the document declines.
 //
-// An input the mapping declines comes back as a [*DeclineError]; match it with
-// [errors.As]. No other error is one: the nil checks, malformed or absent JSON,
-// content after the top-level object and a fault reading r are plain errors.
+// Every error it returns is of one of four classes. Only a decline has a type
+// of its own; the other three are plain errors, by design, and no sentinel
+// value marks any of them:
+//
+//   - A nil argument: "jsonsrc: Validate: nil *validate.Validator" or
+//     "jsonsrc: Validate: nil io.Reader". It wraps nothing.
+//   - Malformed JSON: an input that is not exactly one JSON value (RFC 8259
+//     §2), spelled "malformed JSON: …", "the document holds no JSON value; …"
+//     or "content follows the top-level object". The first may wrap an error,
+//     whose identity is not part of this contract; the other two wrap
+//     nothing.
+//   - A fault reading r: "fault reading the input: …", wrapping the error r
+//     returned, which [errors.Is] reaches. Because r may return any error,
+//     io.ErrUnexpectedEOF among them, no matchable value separates this class
+//     from malformed JSON: a caller that needs the split checks whether its
+//     own r returned an error.
+//   - A decline: a [*DeclineError], matched with [errors.As]. It wraps
+//     nothing.
+//
 // Every error is prefixed "jsonsrc: " and, past the nil checks, the location of
 // the construct it names. None is an [xsderr.Error]: none is a validity verdict
 // about a document.
@@ -119,9 +135,8 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 
 // DeclineError is the error [Validate] returns for an input the mapping
 // declines: one the implemented arms do not map, as the package doc's
-// "Declines" section lists, never malformed JSON or a fault reading the input.
-// Validate is what builds one. It wraps no other error, so it is never an
-// [xsderr.Error]: a decline is not a validity verdict.
+// "Declines" section lists. Validate is what builds one, and its doc states
+// what a decline wraps and the other error classes it returns.
 type DeclineError struct {
 	loc xsderr.Loc
 	msg string

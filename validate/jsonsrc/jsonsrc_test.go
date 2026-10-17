@@ -493,6 +493,41 @@ func TestDeclineError(t *testing.T) {
 	}
 }
 
+// TestErrorWraps pins the error classes Validate's doc states as wrapping
+// nothing: a nil argument, the two malformed-JSON spellings with no decoder
+// error behind them, and a decline. Each row's message is pinned too, so a row
+// reaching another class fails rather than passes. TestReadFault pins the one
+// class that wraps, and no row asserts what a "malformed JSON: …" error wraps.
+func TestErrorWraps(t *testing.T) {
+	v := validatorOver(t, orderSchema)
+	for _, tc := range []struct {
+		name string
+		v    *validate.Validator
+		r    io.Reader
+		says string
+	}{
+		{"nil validator", nil, strings.NewReader(`{}`), "jsonsrc: Validate: nil *validate.Validator"},
+		{"nil reader", v, nil, "jsonsrc: Validate: nil io.Reader"},
+		{"no JSON value", v, strings.NewReader(``), "the document holds no JSON value"},
+		{"content after the top-level object", v, strings.NewReader(`{"order":null}{}`),
+			"content follows the top-level object"},
+		{"decline", v, strings.NewReader(`[]`), "the top-level value is not an object"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Validate(tc.v, tc.r, WithURI(jsonURI))
+			if err == nil {
+				t.Fatal("Validate returned no error")
+			}
+			if !strings.Contains(err.Error(), tc.says) {
+				t.Errorf("Validate = %q, want it to say %q", err, tc.says)
+			}
+			if inner := errors.Unwrap(err); inner != nil {
+				t.Errorf("Validate = %q wraps %v; this class wraps nothing", err, inner)
+			}
+		})
+	}
+}
+
 // attributeSchema declares one root, shipment, whose element-only type holds a
 // required unqualified id (xs:NCName), an optional priority (xs:integer), an
 // optional flag (xs:boolean), a reference to the qualified top-level attribute
