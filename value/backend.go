@@ -7,10 +7,22 @@ import "github.com/kud360/goxsd8/xsd"
 // a prefix against the in-scope namespace bindings at the point of the literal
 // (Datatypes §3.3.18/§3.3.19, xmlschema11-2.md — prose-only, with no Appendix E
 // hfn), which is why [Mapping.Parse] receives one (PRINCIPLES 19).
+//
+// A nil Context binds nothing, the empty prefix included: by repository
+// policy, a host with no XML namespace context of its own supplies the
+// bindings it means, so every QName and NOTATION lexical is rejected under
+// cvc-datatype-valid clause 2.1. It is safe for every other type.
 type Context interface {
-	// LookupNamespace resolves prefix to its bound namespace name in scope;
-	// ok is false when the prefix has no binding. The empty prefix is the
-	// default namespace.
+	// LookupNamespace resolves prefix against the namespace bindings in scope.
+	// The empty prefix yields the default namespace with ok true: namespace is
+	// "" where none is in scope or `xmlns=""` undeclares it. Any other prefix
+	// yields its namespace name with ok true where it is bound, and ("",
+	// false) where it is unbound; "xml" is always bound. Whether "xmlns" is
+	// bound is the implementer's.
+	//
+	// The QName and NOTATION mappings reject a lexical whose prefix answers ok
+	// false (cvc-datatype-valid clause 2.1), so a Context that answers ("",
+	// false) for the empty prefix rejects every unprefixed one.
 	LookupNamespace(prefix string) (namespace string, ok bool)
 }
 

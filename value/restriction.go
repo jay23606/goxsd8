@@ -653,7 +653,7 @@ func declaredNotation(r xsd.TypeResolver, st *xsd.SimpleType, variety xsd.Variet
 // (§3.3.18). It reports false where ctx binds no namespace to the prefix: a
 // NOTATION mapping that does not itself reject an unbound prefix must not turn
 // p:n into the no-namespace n. A nil ctx binds nothing, the empty prefix
-// included.
+// included ([Context]).
 func resolveNotationLexical(lexical string, ctx Context) (xsd.QName, bool) {
 	if ctx == nil {
 		return xsd.QName{}, false

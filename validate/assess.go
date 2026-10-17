@@ -950,9 +950,9 @@ type walk struct {
 // form} — a ·defaulted attribute·'s or an element default's — is never mapped
 // under it: [value.ConstraintContext] is that literal's context.
 //
-// It exists so no site passes a nil Context. A nil one makes a backend reject
-// every prefixed QName lexical for want of bindings, which is a false reject of
-// every xsi-free QName value in existence.
+// It exists so no site passes a nil Context, which binds nothing
+// ([value.Context]): mapping an instance's QName lexical under one would
+// false-reject a value whose bindings the owning element does supply.
 type elementContext struct{ owner Element }
 
 func (c elementContext) LookupNamespace(prefix string) (string, bool) {

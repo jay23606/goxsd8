@@ -9,9 +9,11 @@ import (
 
 // fakeContext is a package-private value.Context backed by a prefix→namespace
 // map, mirroring how the other _test.go files pass nil for the context-free
-// types. The empty prefix (default namespace) is an ordinary key. A prefix
-// absent from the map is unbound (ok=false); a prefix mapped to "" is bound to
-// no namespace (ok=true), the "no default namespace declared" case.
+// types. A prefix absent from the map is unbound (ok=false). The empty prefix
+// is an ordinary key, so the map states the default namespace: mapping "" to
+// "" is the [value.Context] contract's no-default case ("", true), and leaving
+// "" out answers ("", false), which the contract forbids and only the
+// off-contract defence in TestQNameUnboundPrefixRejected relies on.
 type fakeContext map[string]string
 
 func (c fakeContext) LookupNamespace(prefix string) (string, bool) {
@@ -75,8 +77,10 @@ func TestQNameUnboundPrefixRejected(t *testing.T) {
 		if _, err := m.Parse("q:x", ctx); !isDatatypeInvalid(t, err) {
 			t.Errorf("%s Parse(%q): want cvc-datatype-valid rejection, got %v", local, "q:x", err)
 		}
-		// An unprefixed name with no default-namespace binding (empty prefix
-		// absent from the context) is likewise unresolvable, so rejected.
+		// Off-contract defence: this ctx answers ("", false) for the empty
+		// prefix, which value.Context forbids (no default namespace is ("",
+		// true)). strict fails closed on such a Context and rejects the
+		// unprefixed name rather than inventing a namespace for it.
 		if _, err := m.Parse("x", ctx); !isDatatypeInvalid(t, err) {
 			t.Errorf("%s Parse(%q) with no default ns: want cvc-datatype-valid rejection, got %v", local, "x", err)
 		}
@@ -84,9 +88,9 @@ func TestQNameUnboundPrefixRejected(t *testing.T) {
 }
 
 func TestQNameNoDefaultNamespaceBoundToEmpty(t *testing.T) {
-	// A context that explicitly binds the empty prefix to no namespace ("") is
-	// the "no default namespace declared" case: an unprefixed name resolves to a
-	// no-namespace QName rather than being rejected.
+	// Guard: a context answering ("", true) for the empty prefix is the
+	// value.Context contract's no-default-namespace case, and an unprefixed
+	// name resolves to a no-namespace QName rather than being rejected.
 	ctx := fakeContext{"": ""}
 	for _, local := range qnameLocals {
 		m := mappingFor(t, local)

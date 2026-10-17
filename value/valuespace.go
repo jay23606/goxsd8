@@ -343,7 +343,7 @@ func primitivesMatch(b Backend, x string, xctx Context, y string, yctx Context, 
 // admitted" and "admitted, different" are one fact. Any other Parse error, a
 // primitive the backend does not map, and a QName or NOTATION member without
 // both contexts are undecided — a nil [Context] makes a mapping reject every
-// prefixed literal, which would read as a decided non-admission.
+// such literal, which would read as a decided non-admission.
 func primitiveMatches(b Backend, name xsd.QName, x string, xctx Context, y string, yctx Context, rel relation) (same, decided bool) {
 	if (name == qnameName || name == notationName) && (xctx == nil || yctx == nil) {
 		return false, false

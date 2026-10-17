@@ -86,8 +86,9 @@ func resolveQNameLexical(lexical string, ctx value.Context, typ string) (space, 
 	if err != nil {
 		return "", "", err
 	}
-	// A nil context cannot resolve any binding, not even the default namespace
-	// for an unprefixed name; reject cleanly rather than dereferencing nil.
+	// A nil context binds nothing, not even the default namespace for an
+	// unprefixed name ([value.Context]); reject cleanly rather than
+	// dereferencing nil.
 	if ctx == nil {
 		return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"%q has no namespace bindings in scope to resolve it against, so it maps to no %s value, but cvc-datatype-valid clause 2.1 requires it to map to one", lexical, typ)
