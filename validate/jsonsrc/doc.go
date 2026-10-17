@@ -226,29 +226,32 @@
 //     classified those as the run did; the members after it are classified
 //     under that type alone, which governs the element. A candidate type that
 //     declines a member of the run drops from it where no reading of the run
-//     selects a type that declines that member. Where no run is so
-//     settled, where one candidate type would carry the run on past the
-//     member the selected type ends it at, and where the engine withholds the
-//     selection while the candidate types classify the members differently,
-//     the root's members decline (Declines); where it withholds the selection
-//     and every candidate classifies them alike, they map as below the root.
-//     Below the root each member maps only where every candidate classifies
-//     it alike: an attribute of one expanded name; a child of one expanded
-//     name whose value is a scalar or null, whatever declarations it is under,
-//     its element being built from its name alone; and, under any other value,
-//     a declaration-less child of one expanded name, or a child under
-//     declarations of one expanded name and one type — of one name, or an
-//     anonymous complex type of one declaration's {context} — neither carrying
-//     a {type table}; the engine selects the type from the attributes the
-//     mapping presents, xsi:type included, and the infoset is the one any
-//     candidate gives. Its "$type" arm reads no table, the type it names
-//     ·overriding· the selected one or being charged cvc-elt clause 4. A
-//     "$type" on its child or below it is settled under the type the root's
-//     table selects, and below the root under every type the table can select,
-//     its children ·attributed· under each, so it maps where every one settles
-//     on one type; where every type the table can select is one named type,
-//     that type governs the element. A scalar or null value classifies no
-//     member.
+//     selects a type that declines that member. Where a member leaves more than
+//     one reading open — a reading that takes it and members after it as
+//     attributes, one candidate type carrying the run on past the member the
+//     selected type ends it at, or candidate types naming it differently — the
+//     mapping reads on and takes the one reading the type it selects
+//     classifies as it reads. Where no run is so settled, where two readings
+//     are, and where the engine withholds the selection while the candidate
+//     types classify the members differently, the root's members decline
+//     (Declines); where it withholds the selection and every candidate
+//     classifies them alike, they map as below the root. Below the root each
+//     member maps only where every candidate classifies it alike: an attribute
+//     of one expanded name; a child of one expanded name whose value is a
+//     scalar or null, whatever declarations it is under, its element being
+//     built from its name alone; and, under any other value, a declaration-less
+//     child of one expanded name, or a child under declarations of one expanded
+//     name and one type — of one name, or an anonymous complex type of one
+//     declaration's {context} — neither carrying a {type table}; the engine
+//     selects the type from the attributes the mapping presents, xsi:type
+//     included, and the infoset is the one any candidate gives. Its "$type" arm
+//     reads no table, the type it names ·overriding· the selected one or being
+//     charged cvc-elt clause 4. A "$type" on its child or below it is settled
+//     under the type the root's table selects, and below the root under every
+//     type the table can select, its children ·attributed· under each, so it
+//     maps where every one settles on one type; where every type the table can
+//     select is one named type, that type governs the element. A scalar or null
+//     value classifies no member.
 //   - No DTD-shaped declaration exists in JSON, so the adapter does not
 //     implement [validate.UnparsedEntities] and every ·ENTITY value· fails
 //     cvc-simple-type clause 3, as that interface's doc states.
@@ -337,8 +340,8 @@
 // guessed mapping. [Validate]'s doc states every error class it returns. Each
 // entry below whose XML twin the engine assesses is tracked by a GAP(jsonsrc)
 // marker at the function that declines it — rootMember, childNamed, useNamed,
-// wildcardMember, classify, selection, attributes, extend, settled,
-// members.key, reserved, instanceGoverned and declaredType; one more at
+// wildcardMember, classify, selection, attributes, candidates, readAhead,
+// settled, members.key, reserved, instanceGoverned and declaredType; one more at
 // classify tracks the mapping's own choice of a declaration or use over a
 // wildcard, under "The mapping". A repeated attribute member, an attribute
 // member whose value is null, an object or an array, an array item that is
@@ -422,16 +425,19 @@
 //     classifies alike whichever type is selected; and, at the root, a member
 //     of the attribute run a candidate type still reading attributes
 //     declines, where the type some reading of the run selects — one ending
-//     the run at or before it, or, for a scalar member closing the object,
-//     the one taking it as an attribute too — declines it, or that selection
-//     is withheld, or another member follows a scalar one, the mapping
-//     dropping a candidate that declines a member only where no reading of
-//     the run selects one that does; one the candidates still reading attributes
-//     take as attributes of different expanded names, one a candidate takes as
-//     an attribute where the type the attributes before it select ends the run
-//     on it, members no run of attributes settles, and members the candidate
-//     types classify differently where the engine withholds the selection, a
-//     {test} it reaches being outside its compiler's §3.12.6 subset;
+//     the run at or before it, or, for a scalar member, the one taking it as
+//     an attribute too — declines it, or that selection is withheld, the
+//     mapping dropping a candidate that declines a member only where no
+//     reading of the run selects one that does; where the mapping reads on
+//     past a member, two readings the type each selects classifies as it
+//     reads, a reading whose type declines a member it reads, a reading with
+//     no XML twin that its type classifies as it reads — one whose type takes
+//     a null member as an attribute, or whose attributes repeat an expanded
+//     name — even beside another that stands, and a type declining more of a
+//     reading's attributes than the mapping reads every name of; members no
+//     run of attributes settles, and members the candidate types classify
+//     differently where the engine withholds the selection, a {test} it
+//     reaches being outside its compiler's §3.12.6 subset;
 //   - a {type definition} that does not resolve, under an object value.
 //
 // # Locations

@@ -211,9 +211,11 @@ type members struct {
 	// object is what the owner's members are classified against, read once
 	// per element.
 	object *object
-	// head is the token walker.attributes ended the leading attribute run on,
-	// which the first read starts from, and nil once read.
-	head *peeked
+	// ahead is what walker.attributes read past the leading attribute run, in
+	// member order and not yet classified: the member or close it ended the
+	// run on, then any member walker.readAhead read after that one. Reads
+	// take from it first, and from the stream once it is empty.
+	ahead []peeked
 	// run is the array-valued member the stream stands inside, and nil
 	// outside one.
 	run *arrayRun
@@ -225,10 +227,10 @@ type members struct {
 }
 
 // peeked is a member read ahead of its cursor: a key, its location, its
-// value as far as walker.value read it, and its classification as a child
-// element, nil for an array value, whose items are classified one by one; or
-// the object's close, with member nil and no value. An attribute member is
-// never peeked: it ends no attribute run.
+// value as far as walker.value read it, and, once members.key has classified
+// it, its classification as a child element, nil for an array value, whose
+// items are classified one by one; or the object's close, with member nil
+// and no value.
 type peeked struct {
 	tok    json.Token
 	loc    xsderr.Loc
@@ -312,10 +314,11 @@ func (m *members) next() (*element, error) {
 }
 
 // key reads the owner's next member, its key classified as a child over its
-// value (walker.entry), or its close: first the head the attribute run ended
-// on, then from the stream. A key classified as an attribute there DECLINES:
-// it follows a child member, and the owner's [[attributes]] were read whole
-// before its first child (walker.attributes).
+// value (walker.classify, but for an array value), or its close: first those
+// the attribute run left ahead, then from the stream (walker.entry). A key
+// classified as an attribute there DECLINES: it follows a child member, and
+// the owner's [[attributes]] were read whole before its first child
+// (walker.attributes).
 //
 // GAP(jsonsrc): an attribute member after a child member declines, where its
 // XML twin, attribute order being insignificant, carries the attribute. RULED
@@ -329,9 +332,35 @@ func (m *members) next() (*element, error) {
 // encoding/json marshals a struct in field order and so puts an attribute
 // field declared after a child field after its child member (#2687).
 func (m *members) key() (peeked, error) {
-	if h := m.head; h != nil {
-		m.head = nil
-		return *h, nil
+	p, err := m.read()
+	if err != nil {
+		return peeked{}, err
+	}
+	key, ok := p.tok.(string)
+	if !ok || p.val.tok == json.Delim('[') {
+		return p, nil
+	}
+	mem, err := m.w.classify(m.object, key, p.val.scope, p.loc, scalarValue(p.val.tok))
+	if err != nil {
+		return peeked{}, err
+	}
+	child, ok := mem.(elementMember)
+	if !ok {
+		return peeked{}, m.w.declinef(p.loc, "attribute member %q follows a child member of %s; move attribute members ahead of the first child member, or declare a struct's attribute fields before its child fields, as an element's attributes are read before its children",
+			key, m.object.owner)
+	}
+	p.member = child
+	return p, nil
+}
+
+// read is the owner's next member, its value read as far as walker.value
+// reads it, or its close, unclassified: the first of m.ahead, or else the
+// stream's (walker.entry).
+func (m *members) read() (peeked, error) {
+	if len(m.ahead) > 0 {
+		p := m.ahead[0]
+		m.ahead = m.ahead[1:]
+		return p, nil
 	}
 	tok, loc, err := m.w.token()
 	if err != nil {
@@ -341,16 +370,11 @@ func (m *members) key() (peeked, error) {
 	if !ok {
 		return peeked{tok: tok, loc: loc}, nil
 	}
-	mem, v, err := m.w.entry(m.object, m.owner.scope, key, loc)
+	v, err := m.w.entry(m.owner.scope, key, loc)
 	if err != nil {
 		return peeked{}, err
 	}
-	if _, ok := mem.(attributeMember); ok {
-		return peeked{}, m.w.declinef(loc, "attribute member %q follows a child member of %s; move attribute members ahead of the first child member, or declare a struct's attribute fields before its child fields, as an element's attributes are read before its children",
-			key, m.object.owner)
-	}
-	child, _ := mem.(elementMember) // nil for an array value
-	return peeked{tok: tok, loc: loc, member: child, val: v}, nil
+	return peeked{tok: tok, loc: loc, val: v}, nil
 }
 
 // Err reports the walk's one latched fault (STYLE D3).
