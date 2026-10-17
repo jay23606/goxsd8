@@ -667,7 +667,7 @@ func (w *walker) classify(o *object, key string, sc *scope, loc xsderr.Loc, scal
 	if err != nil {
 		return nil, err
 	}
-	ms, err := w.membersOf(append([]*object{o}, o.selectable...), key, k, loc, w.notAlike)
+	ms, err := w.membersOf(append([]*object{o}, o.selectable...), key, k, loc)
 	if err != nil {
 		return nil, err
 	}
@@ -678,15 +678,16 @@ func (w *walker) classify(o *object, key string, sc *scope, loc xsderr.Loc, scal
 }
 
 // membersOf classifies the key, read as k, at loc, under each of objects, one
-// owner's: the first one's decline is the key's own, and another's is
-// declined's, given objects[0] — notAlike below the root, undetermined in a
-// root's attribute run.
-func (w *walker) membersOf(objects []*object, key string, k keyName, loc xsderr.Loc, declined func(*object, string, xsderr.Loc) error) ([]member, error) {
+// owner's for which the mapping reads no ·selected type definition·: the first
+// one's decline is the key's own, and another's is notAlike's. In a root's
+// attribute run, which reads the selection, walker.candidates classifies the
+// key instead.
+func (w *walker) membersOf(objects []*object, key string, k keyName, loc xsderr.Loc) ([]member, error) {
 	ms := make([]member, 0, len(objects))
 	for i, o := range objects {
 		m, err := w.memberOf(o, key, k, loc)
 		if err != nil && i > 0 {
-			return nil, declined(objects[0], key, loc)
+			return nil, w.notAlike(objects[0], key, loc)
 		}
 		if err != nil {
 			return nil, err
@@ -719,11 +720,12 @@ func (w *walker) notAlike(o *object, key string, loc xsderr.Loc) error {
 // undetermined declines the member key, at loc, of o's object, the attribute
 // run of a root whose {type table} the mapping reads the selection of
 // (walker.attributes), which a live candidate other than the first declines,
-// the first classifying it: the selection reads the whole run
-// (key-cta-ta-select clause 1.1.2), so it turns on a member the mapping does
-// not map, and walker.attributes' GAP(jsonsrc) marker tracks the decline.
+// the first classifying it, where walker.candidates may not drop the one that
+// declines it: a type some reading of the run selects declines it, the
+// engine withholds one reading's selection, or the member is a scalar another
+// member follows. walker.candidates' GAP(jsonsrc) markers track the decline.
 func (w *walker) undetermined(o *object, key string, loc xsderr.Loc) error {
-	return w.declinef(loc, "member %q of %s is declined under a type its {type table} can select and classified under another; the type the table ·conditionally selects· reads the whole run of attribute members, so the mapping declines rather than drop the type that declines it",
+	return w.declinef(loc, "member %q of %s is declined under a type its {type table} can select and classified under another; the type the table ·conditionally selects· reads the whole run of attribute members, and the mapping drops a type that declines a member only where no reading of the run, read up to the object's close, selects one that does",
 		key, o.owner)
 }
 
@@ -1929,27 +1931,13 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 // classified so against o. Where table is the root's {type table}
 // (selection), the run is the one the table's own selection settles
 // (walker.settled): each member is classified under every candidate still
-// reading attributes — o and each of o.selectable at the start — and where
-// one classifies it as no attribute, the type the attributes before it select
-// decides whether the run ends there.
-//
-// GAP(jsonsrc): in the attribute run of a root whose declaration carries a
-// {type table}, a member declines where any one live candidate declines it,
-// though the engine assesses the XML twin under the one type the table
-// selects, which may map it. Each member is classified under every live
-// candidate (walker.membersOf): a later candidate's decline is undetermined's,
-// and the first live candidate's — the declared {type definition}'s while it
-// is live — passes through alone as its own exit's, wildcardMember's for a key
-// under an element wildcard of variety any. No candidate that declines a
-// member is dropped: the selection reads the whole run (key-cta-ta-select
-// clause 1.1.2), so the reading that ends the run at that member would go
-// unexamined. Owned by #2703.
+// reading attributes — o and each of o.selectable at the start — a candidate
+// that declines it dropping from the run where no reading of the run selects
+// a type that declines it (walker.candidates), and where one classifies it as
+// no attribute, the type the attributes before it select decides whether the
+// run ends there.
 func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc, typ *attribute, table *xsd.TypeTable) ([]validate.Attribute, peeked, *object, error) {
 	r := &attributeRun{owner: o, live: append([]*object{o}, o.selectable...), table: table, typ: typ}
-	declined := w.notAlike
-	if table != nil {
-		declined = w.undetermined
-	}
 	for {
 		key, ok := tok.(string)
 		if !ok {
@@ -1971,7 +1959,7 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 			if next.k, err = w.keyName(key, v.scope, false, loc); err != nil {
 				return nil, peeked{}, nil, err
 			}
-			if next.ms, err = w.membersOf(r.live, key, next.k, loc, declined); err != nil {
+			if err := w.candidates(r, next); err != nil {
 				return nil, peeked{}, nil, err
 			}
 		}
@@ -1996,11 +1984,12 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 // attributeRun is the leading run of attribute members walker.attributes
 // reads: owner, the object the element's members are classified against
 // before any selection; live, the candidates still reading attributes, owner
-// and each of owner.selectable at the start; table, the {type table} whose
-// selection settles the run, nil where none does (selection); typ, the
-// element's xsi:type, nil where no "$type" presents one; and run, the members
-// taken as attributes so far, which the selected type classifies again
-// (walker.agrees).
+// and each of owner.selectable at the start, less each one that took a member
+// as no attribute (walker.extend) or declined one (walker.candidates); table,
+// the {type table} whose selection settles the run, nil where none does
+// (selection); typ, the element's xsi:type, nil where no "$type" presents
+// one; and run, the members taken as attributes so far, which the selected
+// type classifies again (walker.agrees).
 type attributeRun struct {
 	owner *object
 	live  []*object
@@ -2032,7 +2021,8 @@ func (r *attributeRun) has(name xsd.QName) bool {
 
 // runMember is one member walker.attributes reads: its key, read as k, at
 // loc; its value as far as walker.value read it; and ms, its classification
-// under each of the run's live candidates, in their order, nil for an array
+// under each of the run's live candidates, in their order, once
+// walker.candidates has dropped those that decline it, nil for an array
 // value, whose items are classified one by one.
 type runMember struct {
 	key string
@@ -2064,10 +2054,11 @@ func (m *runMember) asAttribute() *attribute {
 	return &attribute{name: m.attributeName(), value: lexical, loc: m.loc}
 }
 
-// child reports whether some live candidate classifies m as no attribute, an
-// array value under every one.
+// child reports whether some live candidate classifies m as no attribute, or
+// none classifies it at all: an array value, which none classifies, and a
+// member every live candidate declined (walker.candidates).
 func (m *runMember) child() bool {
-	return m.ms == nil || slices.ContainsFunc(m.ms, func(x member) bool {
+	return len(m.ms) == 0 || slices.ContainsFunc(m.ms, func(x member) bool {
 		_, ok := x.(attributeMember)
 		return !ok
 	})
@@ -2079,6 +2070,167 @@ func (m *runMember) attribute() bool {
 		_, ok := x.(attributeMember)
 		return ok
 	})
+}
+
+// candidates classifies next, a member of r's run whose value is no array,
+// under each live candidate of r, in their order, into next.ms.
+//
+// Where r reads no selection, it DECLINES next where one candidate declines
+// it (walker.membersOf). Where r reads one, the candidates that decline next
+// drop from r.live, and next.ms holds the others' classifications, where no
+// reading of the run selects a type that declines next (walker.droppable):
+// the root is assessed under the type its leading attributes select alone
+// (key-selected-type clause 1, key-cta-select), so a candidate no reading
+// selects governs no twin. Where every live candidate declines next, next.ms
+// is empty and the run ends at it (runMember.child) under walker.settled's
+// declines. Otherwise it DECLINES next, with the first live candidate's own
+// decline where that one declines it, and undetermined's where it does not.
+//
+// GAP(jsonsrc): in the attribute run of a root whose declaration carries a
+// {type table}, a member some live candidate declines declines the root where
+// a type some reading of the run selects declines it — a reading that ends
+// the run at or before the member, or, for a scalar member that closes the
+// object, the one that takes it as an attribute too, under any name an
+// attribute keyed so can take — though the engine assesses each XML twin, and
+// that reading may place another member as its type does not, leaving one
+// other reading the only consistent one. RULED permanent by #2703: the type a
+// reading selects governs the root under it (key-governing-type-elem clause
+// 4), so its decline of the member is a decline of that reading, and the
+// mapping maps only where no such reading remains.
+//
+// GAP(jsonsrc): the same decline stands where the engine withholds the type
+// one of those readings selects, a {test} it reaches being outside its
+// §3.12.6 compiler's subset, the mapping then not knowing which type governs
+// that reading. Owned by #2702.
+//
+// GAP(jsonsrc): a scalar member some live candidate declines, followed by
+// another member, declines the root, though the engine assesses each XML
+// twin: the readings that take it and the members after it as attributes
+// select their types from members the mapping has not read, and it settles
+// the run member by member, never reading ahead. Owned by #2700.
+func (w *walker) candidates(r *attributeRun, next *runMember) error {
+	if r.table == nil {
+		ms, err := w.membersOf(r.live, next.key, next.k, next.loc)
+		next.ms = ms
+		return err
+	}
+	live := make([]*object, 0, len(r.live))
+	ms := make([]member, 0, len(r.live))
+	var first error
+	for i, o := range r.live {
+		m, err := w.memberOf(o, next.key, next.k, next.loc)
+		if err != nil && i == 0 {
+			first = err
+		}
+		if err != nil {
+			continue
+		}
+		live, ms = append(live, o), append(ms, m)
+	}
+	next.ms = ms
+	if len(live) == len(r.live) {
+		return nil
+	}
+	if w.droppable(r, next) {
+		r.live = live
+		return nil
+	}
+	if first != nil {
+		return first
+	}
+	return w.undetermined(r.owner, next.key, next.loc)
+}
+
+// droppable reports whether no reading of r's run selects a type that
+// declines next, the member at position j of the run, a reading k taking the
+// first k members as the root's attributes, beside r.typ, and the rest as its
+// children (key-cta-ta-select clause 1.1.2 reads [attributes] alone):
+//
+//   - each k up to j, whose selection reads no member from next on, and so
+//     stands whatever next is;
+//   - k = j+1, where next is a scalar, the one value an attribute takes, and
+//     the last member of the object; it is false where another member follows
+//     (walker.candidates' read-ahead GAP(jsonsrc) marker). Next's name under
+//     that reading is the type's that reading selects, which may be the very
+//     type that declines next, so the selection is read under each name
+//     attributeNames gives it.
+//
+// No reading past j+1 exists for a member droppable admits, so no candidate it
+// drops classifies any member after next. It is false where the engine
+// withholds a selection (walker.classifiedUnder).
+func (w *walker) droppable(r *attributeRun, next *runMember) bool {
+	attrs := r.attributes()
+	for k := len(attrs) - len(r.run); k <= len(attrs); k++ {
+		if !w.classifiedUnder(r, attrs[:k], next) {
+			return false
+		}
+	}
+	lexical, ok := scalarLexical(next.val.tok)
+	if !ok {
+		return true
+	}
+	if w.dec.More() {
+		return false
+	}
+	for _, name := range attributeNames(*r.table, next.k) {
+		taken := append(attrs[:len(attrs):len(attrs)], validate.Attribute(&attribute{name: name, value: lexical, loc: next.loc}))
+		if !w.classifiedUnder(r, taken, next) {
+			return false
+		}
+	}
+	return true
+}
+
+// classifiedUnder reports whether the type r's {type table} selects for the
+// attributes attrs (walker.selected, key-cta-select) classifies next, its
+// decline being the one fact read: false where it declines next, and where the
+// engine withholds the selection. Every type the table can select resolves,
+// walker.selectable having declined the root before its run otherwise, so the
+// false an unresolved one answers is never read.
+func (w *walker) classifiedUnder(r *attributeRun, attrs []validate.Attribute, next *runMember) bool {
+	slot, decided := w.selected(*r.table, attrs, nil)
+	if !decided {
+		return false
+	}
+	s, ok := w.schema.ResolvedType(slot)
+	if !ok {
+		return false
+	}
+	_, err := w.memberOf(w.object(r.owner.owner, s), next.key, next.k, next.loc)
+	return err == nil
+}
+
+// attributeNames is an expanded name for an attribute keyed k in each class
+// of names the {test}s of table cannot tell apart: the one a prefixed key
+// spells; for an unprefixed key, its local name in no namespace, in each
+// namespace a {test}'s {namespace bindings} bind — the xml namespace among
+// them wherever a name test can spell it — and in one namespace none binds,
+// longer than every one of them. Every name test a {test} the engine
+// evaluates carries reads an attribute's namespace as no namespace (an
+// unprefixed name) or one of those bindings, or does not read it (`*`,
+// `*:local`) (xpath.CompileCTATest's subset), so each class selects one type.
+func attributeNames(table xsd.TypeTable, k keyName) []xsd.QName {
+	if k.prefixed {
+		return []xsd.QName{k.name}
+	}
+	spaces := []string{""}
+	for _, alt := range table.Alternatives() {
+		test, ok := alt.Test()
+		if !ok {
+			continue
+		}
+		for _, b := range test.NamespaceBindings() {
+			if !slices.Contains(spaces, b.Namespace()) {
+				spaces = append(spaces, b.Namespace())
+			}
+		}
+	}
+	spaces = append(spaces, strings.Join(spaces, " ")+" unbound")
+	names := make([]xsd.QName, 0, len(spaces))
+	for _, space := range spaces {
+		names = append(names, xsd.QName{Space: space, Local: k.name.Local})
+	}
+	return names
 }
 
 // extend takes next, a member some live candidate of r classifies as an

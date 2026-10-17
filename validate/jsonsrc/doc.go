@@ -224,7 +224,9 @@
 //     run of attribute members ends at the first member that the type the
 //     attributes before it select classifies as no attribute, having
 //     classified those as the run did; the members after it are classified
-//     under that type alone, which governs the element. Where no run is so
+//     under that type alone, which governs the element. A candidate type that
+//     declines a member of the run drops from it where no reading of the run
+//     selects a type that declines that member. Where no run is so
 //     settled, where one candidate type would carry the run on past the
 //     member the selected type ends it at, and where the engine withholds the
 //     selection while the candidate types classify the members differently,
@@ -418,10 +420,13 @@
 //     can select classify differently, or that one of them declines: there the
 //     mapping reads no ·selected type definition·, so it maps only what
 //     classifies alike whichever type is selected; and, at the root, a member
-//     of the attribute run any candidate type still reading attributes
-//     declines, though the type the table selects may map it, since the
-//     selection reads the whole run and the mapping drops no candidate on a
-//     member it declines (#2703); one the candidates still reading attributes
+//     of the attribute run a candidate type still reading attributes
+//     declines, where the type some reading of the run selects — one ending
+//     the run at or before it, or, for a scalar member closing the object,
+//     the one taking it as an attribute too — declines it, or that selection
+//     is withheld, or another member follows a scalar one, the mapping
+//     dropping a candidate that declines a member only where no reading of
+//     the run selects one that does; one the candidates still reading attributes
 //     take as attributes of different expanded names, one a candidate takes as
 //     an attribute where the type the attributes before it select ends the run
 //     on it, members no run of attributes settles, and members the candidate
