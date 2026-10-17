@@ -453,9 +453,9 @@ type AttributeResolver interface {
 
 // TypeResolver is the minimal capability a consumer needs to look up a
 // top-level type definition (simple or complex) by its expanded name (STYLE
-// T3). Its intended consumer is finalize's {base type definition}/{type
-// definition} cross-reference resolution (#173) and the instance validator's
-// xsi:type resolution (a future consumer).
+// T3). [*Schema] implements it over a finalized schema; parser answers one over
+// the built-in datatypes alone, before any *Schema exists. Its consumers are
+// this package and packages value, builtin, xpath, and validate.
 type TypeResolver interface {
 	Type(name QName) (TypeDefinition, bool)
 }
