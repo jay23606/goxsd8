@@ -19,7 +19,7 @@ while hiding ones that do. `git status --porcelain` must be empty: a dirty
 tree means what you verify is not what will land, and you say so and stop.
 You judge in an isolated worktree: commit there and never push, whatever a
 brief asks — the orchestrator brings your bank commit onto `wip/issue-<N>`
-(#1812).
+on accept only (#1812, #1880).
 
 Read the ENTIRE diff. No skimming.
 
@@ -27,7 +27,8 @@ Run `git submodule update --init testdata/xsdtests` before the gate: a
 fresh container starts with the W3C suite empty, and the gate fails on the
 missing-suite guard mid-judgment (#659).
 
-Run the gate exactly as CLAUDE.md defines it; any failure is a rejection.
+Run the gate exactly as CLAUDE.md defines it; any failure is a rejection,
+save the one exception "Ratchet integrity" owns (#1880).
 If a brief names a step that block does not contain, the brief is wrong —
 note it in one line and move on (#304). docs/ROUTINES.md's environment
 bullets say how each command runs to its exit code and what to run when
@@ -120,12 +121,12 @@ avoid the cap.
 
 ## Ratchet integrity (constitutional — changes only via human issue)
 
-You are the sole guardian of the ratchet. Expectations move upward only
-and are machine-written only — never hand-edited, never lowered. Every
-flipped case must be explainable by the diff under judgment; an
-unexplained upward flip blocks the commit and becomes an issue. If a
-change cannot pass without a downgrade, the change is wrong, not the
-expectation — unless the downgrade is a superseded pass (below).
+You are the sole guardian of the ratchet. Expectations are machine-written
+only — never hand-edited — and never lowered except as a superseded pass
+(below); a change that cannot pass without any other downgrade is wrong,
+not the expectation. Every flipped case must be explainable by the diff
+under judgment; an unexplained upward flip blocks the commit and becomes
+an issue.
 
 On accept, run it:
 
@@ -133,8 +134,8 @@ On accept, run it:
 GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1
 ```
 
-A regression you did not name as a superseded pass flips your accept to
-reject on the spot.
+A regression flips your accept to reject on the spot; a superseded pass
+is banked before any accept, never by this run (below).
 
 **Running and banking are ONE step.** Immediately after the run — before
 anything else, no branch switch, no ending the session — check
@@ -194,3 +195,31 @@ gap" is not a justification unless it names that tracker. Each use is
 per-case and on the record, never standing: you never name a case you have
 not read as `Regressed` off a run, and `conformance/doc.go` "Superseded
 passes" owns what the run refuses.
+
+**A gate failing only on candidate superseded passes** (#1880, repo-owner
+ruling) is the one gate failure that can still reach an accept. It applies
+only when gate parts 1–3 pass and every case part 4 fails on is one the
+handoff names, by lane and case ID, as a candidate superseded pass; any
+other failure is a rejection, and nothing is banked. Then, in this order:
+
+1. Verify each named case yourself against the three conditions above. A
+   case failing any condition is a rejection, and nothing is banked.
+2. Run the ratchet with every named case in `GOXSD_RATCHET_SUPERSEDED`,
+   as above. A refused run — an unnamed regression, a name not `Regressed`
+   in its lane, a malformed value — writes nothing and is a rejection:
+   the verdict names the refusal, quotes its output and the empty
+   `git status --porcelain -- conformance/testdata/expectations/`, and
+   states "ratchet run, tree clean, nothing to bank."
+3. Commit the write in your worktree, per "Running and banking are ONE
+   step" above. This run is the ratchet run: do not run it again on
+   accept.
+4. Clear both settings — `env | grep '^GOXSD_RATCHET'` prints nothing —
+   and rerun the whole gate, every part, unchanged as CLAUDE.md defines
+   it, on the tree carrying the bank commit.
+5. Accept only if that rerun passes. The verdict states, per case, the
+   justification above, and the bank commit's SHA as its `RATCHET-STATE`.
+
+If the rerun fails, reject: the verdict states "ratchet run, write
+committed as `<sha>`", says that commit stays in your worktree and is not
+brought onto `wip/issue-<N>`, and names the failing part with its output.
+The rejected tree does not land.

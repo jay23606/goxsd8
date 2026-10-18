@@ -107,8 +107,12 @@ gate fails on the missing-suite guard (#659).
 
 The gate (CLAUDE.md) passes, each command run to its exit code as
 docs/ROUTINES.md's environment bullets say, and your return is your
-account, never a notice that you are waiting on a run (#2250). New
-behavior has tests that can actually fail.
+account, never a notice that you are waiting on a run (#2250). The one
+failing gate you may hand off is part 4 failing only on cases your account
+names, by lane and case ID, as candidate superseded passes; the arbiter
+verifies and banks them, and `.claude/agents/arbiter.md` "Ratchet
+integrity" owns that path (#1880). New behavior has tests that can
+actually fail.
 
 **Every claim the change makes about behaviour is run, not imagined** —
 in your account, and in every doc comment, `doc.go` line, marker, test
