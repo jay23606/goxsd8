@@ -3,10 +3,26 @@ description: Reconcile GitHub issues with reality and keep the ready queue value
 ---
 
 **Claim the pass before anyone surveys** (#2010). `git fetch --prune
-origin` and read the age of every `origin/meta/backlog-*` tip: one younger
-than WORKFLOW's 2h claim TTL is a pass in flight, so stop. Otherwise cut
-`meta/backlog-<YYYYMMDD-HHMM>` from `origin/main`, commit an empty claim
-on it and push it; the pass lands from that branch.
+origin` and read every `origin/meta/backlog-*` tip:
+
+- **Younger than WORKFLOW's 2h claim TTL:** a pass in flight, so stop.
+- **Older, and its head is the bare claim commit:** a dead claim; claim
+  as below.
+- **Older, and its head is a `meta: backlog` commit:** this decides,
+  with the tip's committer date (`%cI`) as `<date>`:
+
+  ```sh
+  git log origin/main --since=<date> --grep='^meta: backlog' --format=%h
+  ```
+
+  A printed commit means the pass landed or a later one superseded it:
+  report the ref for deletion and claim as below. Nothing printed means a
+  finished pass never landed: push an empty claim commit to that branch,
+  merge `origin/main` forward, fill what it left, and land it as this
+  pass instead of starting another (#2610).
+
+To claim, cut `meta/backlog-<YYYYMMDD-HHMM>` from `origin/main`, commit an
+empty claim on it and push it; the pass lands from that branch.
 
 Delegate to the **cartographer** for its full /backlog pass: survey
 reality, reconcile the issue list against it, reconcile the branch

@@ -70,7 +70,12 @@ order (#2360).
 A diff review runs the gate in your own worktree, judging the named
 commit there, and returns the verdict, never a notice that you are
 waiting on a run (docs/WORKFLOW.md **One writer per checkout**, #2251,
-#2250).
+#2250). It checks every claim an exported identifier's doc makes — what
+each `ok` answers included — against the code that answers it in the
+tree under review; an earlier approval of identical text is not that
+check. A finding under a rule in **What you are accountable for** makes
+the verdict `revise`: `approve` carries no finding that names a defect
+(#2728).
 
 ```
 API REVIEW: approve | revise

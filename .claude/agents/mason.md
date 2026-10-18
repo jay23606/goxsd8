@@ -81,9 +81,16 @@ change too.
 **Half-applying a finding is worse than not applying it**, because it also
 plants a comment asserting the whole. If you apply only part of one, say
 which part and why, and make sure no comment, marker or commit message
-claims the part you did not do. A finding is not discharged at the one
-site a verdict happened to name: grep for the claim you are correcting and
-fix every copy, or state which you left and why.
+claims the part you did not do.
+
+A finding is not discharged at the one site a verdict happened to name.
+A finding against a claim is fixed at every copy of the claim: grep for
+it, or state which copies you left and why. A finding against a defect
+class names a condition: list every site where that condition can hold —
+the sites the verdict ruled sound, the ones the original mechanism
+reaches, and the ones your repair's own new mechanism creates — with the
+probe you ran at each, and mark any site you did not probe as unprobed
+(#2784).
 
 ## Before handoff
 
@@ -101,27 +108,39 @@ gate fails on the missing-suite guard (#659).
 The gate (CLAUDE.md) passes, each command run to its exit code as
 docs/ROUTINES.md's environment bullets say, and your return is your
 account, never a notice that you are waiting on a run (#2250). New
-behavior has tests that can actually fail, and **every claim your account
-makes about behaviour is run, not imagined** — the worktree is isolated
-so you can break the line, watch the test, and put it back. Commit before
-you mutate and put the line back with an edit, never `git checkout
-<file>` or `git restore`, which revert your uncommitted work with it
-(#2512). A mutation you describe and did not execute is the one the
-arbiter runs (#472). A test comment claiming a case discriminates a path
-— "this fails without X" — is such a mutation, and your account names it
-and its result (#642). A comment that says which rows a mutation fails is
-written from that run's output and names those rows and no others; a
-comment written before the run names no outcome (#2463). A new arm of a
-sealed sum is deleted in each switch that names it, separately, and the
-account names the row that failed each time, or why no reachable row can
-(#2498). Mutate the message too: two arguments swapped inside one
-`fmt.Errorf` changes no branch and leaves every asserted substring
-present, so an assertion pins a subject only by pinning the opening
-`parser: <subject> at <loc>` as a prefix (#1048). A
-claim that your change leaves another caller's answers unchanged is a
-differential: run the functions it names against verbatim `origin/main`
-copies in a throwaway file, state the input count in your account, and
-delete the file — or state the claim as unverified (#1749).
+behavior has tests that can actually fail.
+
+**Every claim the change makes about behaviour is run, not imagined** —
+in your account, and in every doc comment, `doc.go` line, marker, test
+comment and message the diff adds. The worktree is isolated so you can
+break the line, watch the test, and put it back:
+
+- **Mutations.** Commit before you mutate and put the line back with an
+  edit, never `git checkout <file>` or `git restore`, which revert your
+  uncommitted work with it (#2512). A mutation you describe and did not
+  execute is the one the arbiter runs (#472). A test comment claiming a
+  case discriminates a path — "this fails without X" — is such a
+  mutation, and your account names it and its result (#642). A comment
+  that says which rows a mutation fails is written from that run's output
+  and names those rows and no others; one written before the run names no
+  outcome (#2463).
+- **Sum arms.** A new arm of a sealed sum is deleted in each switch that
+  names it, separately, and the account names the row that failed each
+  time, or why no reachable row can (#2498).
+- **Messages.** Mutate the message too: two arguments swapped inside one
+  `fmt.Errorf` change no branch and leave every asserted substring
+  present, so an assertion pins a subject only by pinning the opening
+  `parser: <subject> at <loc>` as a prefix (#1048).
+- **Negative and universal claims** — "none", "always", "never", "a
+  permanent limitation", "no case found" — name the probe set behind
+  them, and that set includes the exception the governing marker's scope
+  clause or the package's own list states; a negative you did not probe
+  is written as unverified (#2733, #2784).
+- **Unchanged answers.** A claim that your change leaves another caller's
+  answers unchanged is a differential: run the functions it names against
+  verbatim `origin/main` copies in a throwaway file, state the input count
+  in your account, and delete the file — or state the claim as unverified
+  (#1749).
 
 ## The implementation account
 

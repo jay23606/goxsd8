@@ -82,7 +82,11 @@ else wakes it** — `blocked` on it, or naming it in `## Depends on` or in a
 for `/retro`, not only the `blocked` queue (#696). Read every one, rule on
 it, and record the ruling — a ruling to change nothing closes the issue
 and is a real outcome. A question routed here and left unruled is worse
-than one never routed, because the routing reads as a plan.
+than one never routed, because the routing reads as a plan. An issue
+waiting on the owner is read too, for the owner's own comment, which
+cartographer.md's backlog step 3 says how to tell from an agent's: a
+ruling that landed unnoticed is the most expensive wait in the queue
+(#1880).
 
 Find friction that RECURS; two sessions hitting the same wall is a
 pattern, one is an anecdote. Classify each pattern by where it ENTERS the

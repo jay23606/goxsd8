@@ -145,8 +145,10 @@ translate the local times above and mind DST drift. Keep develop slots
     with `-F body=@FILE` or `--input FILE`; feed a survey with `go tool
     issuefeed` (**Survey input**); run any other multi-step procedure
     as a script file invoked as a bare `python3 /abs/path` or `bash
-    /abs/path` that does its own `cd`, or as one literal command per step
-    (#2047).
+    /abs/path` that does its own `cd`. The guard refuses even that shape
+    at times: then try the other interpreter, and below it run one
+    literal command per step, which is the floor; name the refusal and
+    the shape run in your account (#2047, #2750).
   - **A refused command that a procedure assigns — a write, a test run or
     a read — is reported, and is never a reason to end the turn without a
     report.** The refusing agent — an arbiter's bank commit, a

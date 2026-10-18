@@ -17,19 +17,27 @@ ref ends the iteration, whatever the survey said when it ran (#1460). Then
 push the heartbeat WORKFLOW's lease invariant requires before a round.
 
 **A brief carries the issue and never narrows the delegate's own file.**
-Paste the body's `## Goal`, `## Spec` and `## Acceptance` and every thread
-comment that declares itself normative into the request verbatim: the
-oracle has no tool that reads GitHub (#2142). A judge round's brief also
-pastes the `GROUNDING:` comment and the latest `MASON:` account whole, and
-a round-2 judge brief the round-1 verdict whole, so the arbiter states its
-outcome with no GitHub read of the thread (#2449). A brief names the gate
-only as CLAUDE.md's gate, whole (#1959); never bars or reshapes a duty the
-delegate's agent file assigns it, the arbiter's ratchet run on accept
-above all (#1812); never asks a subagent to push, since its commits leave
-its worktree only through WORKFLOW's hand-off (#2133); and never names a
-`Co-Authored-By` model — each commit names the model that wrote it
-(#1996). Re-read a brief before sending it: a placeholder where pasted
-text belongs sends nothing (#2513).
+
+- **It pastes, verbatim and whole,** the body's `## Goal`, `## Spec` and
+  `## Acceptance` and every thread comment that declares itself
+  normative — the oracle has no tool that reads GitHub (#2142) — and, for
+  a mason or judge round, the `GROUNDING:` comment, the latest `MASON:`
+  account and the verdict a repair or round-2 judge follows, so the
+  delegate states its outcome with no GitHub read of the thread (#2449).
+- **Each pasted part is headed by its source** — the body section, or the
+  comment's `issuecomment-<id>` — and the brief ends with this line, which
+  makes the delegate the check an orchestrator's re-read alone has not
+  been (#2513, #2683): *"A part above that is missing or a placeholder is
+  a brief not delivered: return `BRIEF INCOMPLETE: <part>` before doing
+  anything else."* Answer that return by sending the brief again, whole;
+  it is not a round, and no cap counts it.
+- **It never reshapes a duty.** It names the gate only as CLAUDE.md's
+  gate, whole (#1959); never bars or reshapes a duty the delegate's agent
+  file assigns it, the arbiter's ratchet run on accept above all (#1812);
+  never asks a subagent to push, since its commits leave its worktree
+  only through WORKFLOW's hand-off (#2133); and never names a
+  `Co-Authored-By` model — each commit names the model that wrote it
+  (#1996).
 
 **Lost rounds.** A delegated round — mason's, the arbiter's, any agent's —
 is lost when it ends without its report: the agent returned without one,
@@ -169,7 +177,14 @@ counts.
    the orchestrator where a ruling states the replacement text (WORKFLOW's
    pen), by the **cartographer** otherwise (#1380). A re-statement carries
    every standing ruling on the bullets it keeps: a bar ruled unreachable
-   does not survive a re-scope unchanged (#1102).
+   does not survive a re-scope unchanged (#1102). Its writer checks it
+   before posting, because a grounding's error copied into the body is
+   what the mason builds to: every rule ID, clause number or Note locator
+   it carries is opened in `docs/specs/md/` and written as the spec reads
+   there, or dropped to the bare rule ID; and every bar is read against
+   the document that owns the convention it names and against the body's
+   other bars, since a file fence forbidding what a bar requires makes one
+   of them false (#2637).
 
    **SURFACE** — name what this change adds to or alters in the exported
    contract, taken from the tree: whether the contract moves, never where

@@ -32,7 +32,9 @@ Cheap and targeted, not a full backlog run. Three duties:
    filed when the log shows it a second time, or at its first sighting
    only when it cost a round; until then its record is the log entry's
    Friction bullet, which the `/retro` reads in full. Search the log for
-   an earlier sighting before deciding which this is.
+   an earlier sighting before deciding which this is: a sighting matches
+   by the step the defect entered at and the kind of defect it let
+   through, not by its mechanism.
 3. **Leave the pass's own signal on `main`** — a dated `post-land` entry
    in `docs/LOG/<year>-<month>.md` naming what was unblocked and how each
    follow-up was disposed of, including the zero case, in the chronicler's
@@ -90,10 +92,15 @@ already done, and the commit body says so.
 3. **Reconcile the issues**: close stale and obsolete, merge duplicates,
    split anything too big for one session, file `kind/gap` issues for
    untracked GAP sites. A stale premise in an open body is fixed by
-   editing that body, not by commenting only. **Fold bookkeeping into
-   sweeps**: comment corrections, marker repoints and reflows in one
-   package are one issue, taken in one landing, rather than one develop
-   loop each.
+   editing that body, not by commenting only. **Read the thread of every
+   `blocked` issue whose `## Depends on` names an owner's ruling.** Every
+   agent comment posts under the owner's login through the Claude app, so
+   the owner's own comment is the one whose REST `performed_via_github_app`
+   is `null`; one posted since the issue was blocked fires its trigger —
+   re-scope the body to the ruling and relabel it `ready` (#1880).
+   **Fold bookkeeping into sweeps**: comment corrections, marker repoints
+   and reflows in one package are one issue, taken in one landing, rather
+   than one develop loop each.
 4. **Order the ready queue by value** and publish the top band in
    docs/PLAN.md's Status section, so a session can pick the
    highest-value startable issue instead of scanning the whole queue.
