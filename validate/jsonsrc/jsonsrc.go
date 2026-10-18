@@ -80,6 +80,11 @@ func WithURI(uri string) Option {
 // marshals a struct whose child field is declared before an attribute field:
 // declare a struct's attribute fields first, or the document declines.
 //
+// One UTF-8 byte order mark (U+FEFF) opening r is ignored, as RFC 8259 §8.1
+// permits, and every location is the one the document without it gets; a
+// U+FEFF anywhere else is malformed JSON outside a string and content inside
+// one.
+//
 // Every error it returns is of one of four classes. Only a decline has a type
 // of its own; the other three are plain errors, by design, and no sentinel
 // value marks any of them:

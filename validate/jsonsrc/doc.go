@@ -442,8 +442,10 @@
 //
 // # Locations
 //
-// Every Loc is a line and a byte column from 1, at the member's key for an
-// element (at the item for an array's item), for an attribute member and for
-// a "$type" member's xsi:type, at the scalar token for its text, and at the
-// null token for a null value's xsi:nil, which has no key of its own.
+// Every Loc is a line and a byte column from 1, counted from the first byte
+// after the byte order mark [Validate] ignores where one opens the document,
+// at the member's key for an element (at the item for an array's item), for
+// an attribute member and for a "$type" member's xsi:type, at the scalar
+// token for its text, and at the null token for a null value's xsi:nil,
+// which has no key of its own.
 package jsonsrc
