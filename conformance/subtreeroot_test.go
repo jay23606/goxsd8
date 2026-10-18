@@ -1581,11 +1581,10 @@ func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
 
 // TestInstanceExecutorDeclinesVersionedSchema proves a schema document carrying
 // any attribute in the versioning namespace declines the valid observation,
-// even one §4.2.2 retains the element under: the gate is a superset of the
-// vc:maxVersion GAP(parser) (#1002) that lets VC/vc006.n1 walk clean. The
-// attribute counts in EVERY document the assembly read, not only the root one
-// — an <include>d or <import>ed document carrying it declines too (#1789) —
-// whatever the root holds.
+// even one §4.2.2 retains the element under, as closureVersioned's
+// GAP(conformance) marker states. The attribute counts in EVERY document the
+// assembly read, not only the root one — an <include>d or <import>ed document
+// carrying it declines too (#1789) — whatever the root holds.
 func TestInstanceExecutorDeclinesVersionedSchema(t *testing.T) {
 	const (
 		plain     = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`

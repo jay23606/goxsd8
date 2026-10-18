@@ -44,9 +44,13 @@ func declarationRetained(t *testing.T, doc string) bool {
 }
 
 // TestConditionalInclusionVersionBand pins the band this processor applies,
-// vc:minVersion ≤ V with V = 1.1, one boundary at a time — and the comparison
-// being over ·actual values· rather than lexicals, which is where "1.10" and
-// "1.1" have to be one value.
+// vc:minVersion ≤ V < vc:maxVersion with V = 1.1, one boundary at a time — and
+// the comparison being over ·actual values· rather than lexicals, which is where
+// "1.10" and "1.1" have to be one value.
+//
+// The row "maxVersion equal to V ignores" is the one that fails if the max arm
+// compares with > rather than >=; no suite case catches that once
+// VC/vc002/instance/vc002.n1.xml is banked fail.
 func TestConditionalInclusionVersionBand(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -64,6 +68,19 @@ func TestConditionalInclusionVersionBand(t *testing.T) {
 		{"an integral lexical is a legal decimal", `vc:minVersion="2"`, false},
 		{"whitespace around the value is collapsed away", `vc:minVersion="  1.2  "`, false},
 		{"an unrecognized vc: attribute is not one of the six", `vc:minversion="9.9"`, true},
+		{"maxVersion equal to V ignores, the end being exclusive", `vc:maxVersion="1.1"`, false},
+		{"maxVersion above V retains", `vc:maxVersion="1.2"`, true},
+		{"maxVersion below V ignores", `vc:maxVersion="1.0"`, false},
+		{"a trailing zero on maxVersion is no different value", `vc:maxVersion="1.10"`, false},
+		{"a leading zero on maxVersion is no different value", `vc:maxVersion="01.2"`, true},
+		{"a fraction-only maxVersion compares numerically", `vc:maxVersion=".9"`, false},
+		{"a signed maxVersion compares numerically", `vc:maxVersion="+2"`, true},
+		{"a negative maxVersion ignores", `vc:maxVersion="-1.5"`, false},
+		{"whitespace around maxVersion is collapsed away", `vc:maxVersion="  1.2  "`, true},
+		{"an unrecognized vc:maxversion is not one of the six", `vc:maxversion="0.1"`, true},
+		{"a band containing V retains", `vc:minVersion="1.0" vc:maxVersion="1.2"`, true},
+		{"a band with both ends at V is empty", `vc:minVersion="1.1" vc:maxVersion="1.1"`, false},
+		{"a band with maxVersion below minVersion is empty", `vc:minVersion="1.0" vc:maxVersion="0.9"`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := declarationRetained(t, markedDeclaration(tc.marked)); got != tc.retained {
@@ -94,26 +111,66 @@ func TestConditionalInclusionNoNamespaceNameIsNotVersioning(t *testing.T) {
 	}
 }
 
-// TestConditionalInclusionMaxVersionDoesNotPrune pins the declined arm
-// (parser/conditional.go's GAP(parser), #1002) as a fact rather than an
-// accident: an element §4.2.2 excludes through vc:maxVersion — V = 1.1 is
-// "greater than or equal to" every value here — is RETAINED, and the retained
-// band this processor applies is therefore vc:minVersion ≤ V alone. #1002 flips
-// each of these to false; until it does, a silent change of behaviour here
-// fails.
-func TestConditionalInclusionMaxVersionDoesNotPrune(t *testing.T) {
-	for _, marked := range []string{
-		`vc:maxVersion="1.0"`,
-		`vc:maxVersion="1.1"`,
-		`vc:minVersion="1.0" vc:maxVersion="1.0"`,
-		`vc:maxVersion="0.9"`,
-	} {
-		t.Run(marked, func(t *testing.T) {
-			if !declarationRetained(t, markedDeclaration(marked)) {
-				t.Fatalf("declaration %s was removed, but vc:maxVersion pruning is #1002's and declined here", marked)
-			}
-		})
+// TestConditionalInclusionMaxVersionRetiresOneOfTwoSiblings is the shape
+// §4.2.2's own example is written in: two declarations of ONE expanded name, one
+// for each side of the vc:maxVersion boundary. Exactly the vc:minVersion="1.1"
+// one survives, so sch-props-correct clause 2 sees no duplicate.
+func TestConditionalInclusionMaxVersionRetiresOneOfTwoSiblings(t *testing.T) {
+	s, err := produce(t, vcWrap("",
+		`<xs:element name="e" type="xs:string" vc:maxVersion="1.1"/>`+
+			`<xs:element name="e" type="xs:int" vc:minVersion="1.1"/>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
 	}
+	ed, ok := s.Element(xsd.QName{Local: "e"})
+	if !ok {
+		t.Fatalf("element e not found")
+	}
+	if got := declaredTypeName(t, ed.TypeDefinition()); got.Local != "int" {
+		t.Fatalf("surviving element type = %s, want xs:int — the declaration inside the retained band", got)
+	}
+}
+
+// TestConditionalInclusionReferenceToPrunedDeclaration pins what pruning costs
+// a retained construct: a reference to a declaration §4.2.2 removed resolves to
+// nothing in S2 and is treated as any unresolved QName is — an <element ref> is
+// charged src-resolve, while a substitutionGroup= naming it is kept as an
+// ·absent· {substitution group affiliations} member and the schema is accepted
+// (§5.3; xsd/resolve.go's resolveElementDecl).
+func TestConditionalInclusionReferenceToPrunedDeclaration(t *testing.T) {
+	t.Run("element ref", func(t *testing.T) {
+		_, err := produce(t, vcWrap("",
+			`<xs:element name="gone" type="xs:string" vc:maxVersion="1.1"/>`+
+				`<xs:element name="r"><xs:complexType><xs:sequence>`+
+				`<xs:element ref="gone"/>`+
+				`</xs:sequence></xs:complexType></xs:element>`))
+		var xerr *xsderr.Error
+		if !errors.As(err, &xerr) {
+			t.Fatalf("Produce error = %v, want an *xsderr.Error", err)
+		}
+		if xerr.Rule != "src-resolve" {
+			t.Fatalf("rule = %s, want src-resolve: %v", xerr.Rule, xerr)
+		}
+	})
+	t.Run("substitutionGroup", func(t *testing.T) {
+		s, err := produce(t, vcWrap("",
+			`<xs:element name="head" type="xs:string" vc:maxVersion="1.1"/>`+
+				`<xs:element name="m" type="xs:string" substitutionGroup="head"/>`))
+		if err != nil {
+			t.Fatalf("Produce: %v, want the dangling affiliation kept as ·absent· (§5.3)", err)
+		}
+		if _, ok := s.Element(xsd.QName{Local: "head"}); ok {
+			t.Fatalf("head reached the schema, but vc:maxVersion ignores it")
+		}
+		m, ok := s.Element(xsd.QName{Local: "m"})
+		if !ok {
+			t.Fatalf("element m not found")
+		}
+		names := m.SubstitutionGroupAffiliationNames()
+		if len(names) != 1 || names[0] != (xsd.QName{Local: "head"}) {
+			t.Fatalf("m's affiliation names = %v, want [head] kept as an ·absent· member", names)
+		}
+	})
 }
 
 // TestConditionalInclusionAvailability pins §4.2.2's four availability clauses
@@ -207,21 +264,68 @@ func TestConditionalInclusionIgnoresWholeSubtree(t *testing.T) {
 // <schema> element: S2 keeps the root with an empty [children], so the document
 // declares nothing and follows none of the directives it was written with. No
 // suite fixture reaches the carve-out through vc:minVersion — vc006.xsd reaches
-// it through vc:maxVersion, which is #1002's — so this is the only place the min
-// arm's stub is exercised. What the stub RETAINS is
+// it through vc:maxVersion — so the min row is the only place the min arm's stub
+// is exercised. What the stub RETAINS is
 // TestConditionalIncludeRootStubAttributes's, one layer down.
 func TestConditionalInclusionRootStub(t *testing.T) {
-	s, err := produce(t, vcWrap(`targetNamespace="urn:a" vc:minVersion="3.2"`,
-		`<xs:include schemaLocation="nowhere.xsd"/>`+
-			`<xs:element name="e" type="xs:string"/>`))
+	for _, marked := range []string{`vc:minVersion="3.2"`, `vc:maxVersion="0.9"`} {
+		t.Run(marked, func(t *testing.T) {
+			s, err := produce(t, vcWrap(`targetNamespace="urn:a" `+marked,
+				`<xs:include schemaLocation="nowhere.xsd"/>`+
+					`<xs:element name="e" type="xs:string"/>`))
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			if _, ok := s.Element(xsd.QName{Space: "urn:a", Local: "e"}); ok {
+				t.Fatalf("element {urn:a}e was declared, but its <schema> is ignored and S2's [children] is empty")
+			}
+			if _, ok := s.Element(xsd.QName{Local: "e"}); ok {
+				t.Fatalf("element e was declared in no namespace, but S2's [children] is empty")
+			}
+		})
+	}
+}
+
+// TestConditionalInclusionParseOverAStubRoot pins the contract parser/doc.go
+// states for Parse: a root document whose own <schema> vc:maxVersion ignores
+// assembles as the stub — the call succeeds, follows none of its directives and
+// yields none of its components.
+func TestConditionalInclusionParseOverAStubRoot(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": vcWrap(`targetNamespace="urn:a" vc:maxVersion="1.1"`,
+			`<xs:include schemaLocation="nowhere.xsd"/>`+
+				`<xs:element name="e" type="xs:int"/>`),
+	})
 	if err != nil {
-		t.Fatalf("Produce: %v", err)
+		t.Fatalf("Parse: %v, but the stub root has no children to fail on", err)
 	}
 	if _, ok := s.Element(xsd.QName{Space: "urn:a", Local: "e"}); ok {
 		t.Fatalf("element {urn:a}e was declared, but its <schema> is ignored and S2's [children] is empty")
 	}
-	if _, ok := s.Element(xsd.QName{Local: "e"}); ok {
-		t.Fatalf("element e was declared in no namespace, but S2's [children] is empty")
+}
+
+// TestConditionalInclusionMaxVersionInComposedDocument pins the max arm on the
+// documents a closure fetches: an <include> it ignores is never followed, and an
+// included document whose own <schema> it ignores contributes the stub and
+// nothing else.
+func TestConditionalInclusionMaxVersionInComposedDocument(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": vcWrap(`targetNamespace="urn:a"`,
+			`<xs:include schemaLocation="nowhere.xsd" vc:maxVersion="1.1"/>`+
+				`<xs:include schemaLocation="stub.xsd"/>`+
+				`<xs:element name="e" type="xs:int"/>`),
+		"stub.xsd": vcWrap(`targetNamespace="urn:a" vc:maxVersion="1.1"`,
+			`<xs:element name="e" type="xs:string"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:a", Local: "e"})
+	if !ok {
+		t.Fatalf("element {urn:a}e not found")
+	}
+	if got := declaredTypeName(t, ed.TypeDefinition()); got.Local != "int" {
+		t.Fatalf("surviving element type = %s, want xs:int — the root's own declaration", got)
 	}
 }
 
@@ -286,9 +390,9 @@ func TestConditionalInclusionIgnoredRedefineIsNotFollowed(t *testing.T) {
 // TestConditionalInclusionSrcCIP pins src-cip: an ill-formed value is a
 // schema-document error, never a silent prune or a silent keep. Each case would
 // otherwise be a legal-looking marking that quietly decides which declaration
-// survives. vc:maxVersion is among them although its verdict is discarded — the
-// rule constrains the attribute's ·initial value·, not what the transform does
-// with it (parser/conditional.go's GAP(parser)).
+// survives. An ill-formed vc:minVersion is charged although vc:maxVersion would
+// have ignored the element, since §4.2.2's conditions are read in the order it
+// states them and the first is unreadable.
 func TestConditionalInclusionSrcCIP(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -301,8 +405,12 @@ func TestConditionalInclusionSrcCIP(t *testing.T) {
 		{"minVersion in exponent notation", `vc:minVersion="1e1"`, "xs:decimal"},
 		{"minVersion a bare sign", `vc:minVersion="-"`, "xs:decimal"},
 		{"minVersion a bare point", `vc:minVersion="."`, "xs:decimal"},
-		{"maxVersion outside xs:decimal, though its verdict is #1002's", `vc:maxVersion="1.1.3"`, "xs:decimal"},
+		{"maxVersion outside xs:decimal", `vc:maxVersion="1.1.3"`, "xs:decimal"},
 		{"maxVersion empty", `vc:maxVersion=""`, "xs:decimal"},
+		{"maxVersion in exponent notation", `vc:maxVersion="1e1"`, "xs:decimal"},
+		{"minVersion ill-formed beside a pruning maxVersion", `vc:minVersion="x" vc:maxVersion="1.0"`, "vc:minVersion"},
+		{"maxVersion ill-formed beside a retaining minVersion", `vc:minVersion="1.0" vc:maxVersion="x"`, "vc:maxVersion"},
+		{"minVersion ill-formed after a pruning maxVersion in the tag", `vc:maxVersion="1.0" vc:minVersion="x"`, "vc:minVersion"},
 		{"typeAvailable item is no NCName", `vc:typeAvailable="xs:integer 23"`, "xs:QName"},
 		{"typeAvailable item has an empty local part", `vc:typeAvailable="xs:"`, "xs:QName"},
 		{"typeUnavailable item has an unbound prefix", `vc:typeUnavailable="vx:t"`, "in-scope namespace"},
@@ -333,12 +441,38 @@ func TestConditionalInclusionSrcCIP(t *testing.T) {
 // ·conditional-inclusion pre-processing·" — over src-cip itself: an ill-formed
 // vc: value inside a subtree the transform removes is not in S2 and is charged
 // nothing.
+//
+// The same holds on the ignored element itself: a condition that fires ends the
+// scan, so an ill-formed availability value LATER in §4.2.2's order is not read.
 func TestConditionalInclusionIgnoredSubtreeEscapesSrcCIP(t *testing.T) {
-	if _, err := produce(t, vcWrap("", `<xs:element name="gone" vc:minVersion="3.2">`+
-		`<xs:complexType><xs:sequence vc:minVersion="not-a-decimal"/></xs:complexType>`+
-		`</xs:element>`+
-		`<xs:element name="kept" type="xs:string"/>`)); err != nil {
-		t.Fatalf("Produce: %v, but the ill-formed value sits inside a subtree S2 does not contain", err)
+	for _, gone := range []string{`vc:minVersion="3.2"`, `vc:maxVersion="1.1"`} {
+		t.Run(gone, func(t *testing.T) {
+			if _, err := produce(t, vcWrap("", `<xs:element name="gone" `+gone+`>`+
+				`<xs:complexType><xs:sequence vc:minVersion="not-a-decimal"/></xs:complexType>`+
+				`</xs:element>`+
+				`<xs:element name="kept" type="xs:string"/>`)); err != nil {
+				t.Fatalf("Produce: %v, but the ill-formed value sits inside a subtree S2 does not contain", err)
+			}
+		})
+	}
+	for _, later := range []string{
+		`vc:typeAvailable="23"`, `vc:typeUnavailable="23"`,
+		`vc:facetAvailable="23"`, `vc:facetUnavailable="23"`,
+	} {
+		t.Run("maxVersion before "+later, func(t *testing.T) {
+			if declarationRetained(t, markedDeclaration(`vc:maxVersion="1.1" `+later)) {
+				t.Fatalf("the declaration was retained, but vc:maxVersion ignores it")
+			}
+		})
+	}
+	// §4.2.2's order, not the start tag's: written first, the ill-formed value
+	// still comes after the version attribute that ignores the element.
+	for _, gone := range []string{`vc:minVersion="2.0"`, `vc:maxVersion="1.1"`} {
+		t.Run(`vc:typeAvailable="23" before `+gone+" in the tag", func(t *testing.T) {
+			if declarationRetained(t, markedDeclaration(`vc:typeAvailable="23" `+gone)) {
+				t.Fatalf("the declaration was retained, but %s ignores it", gone)
+			}
+		})
 	}
 }
 

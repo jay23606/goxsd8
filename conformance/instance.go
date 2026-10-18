@@ -475,15 +475,12 @@ import (
 // never reaches it: Datatype Valid holds for every literal against a ·special·
 // datatype, and validate decides so itself (#1788).
 //
-// One more hazard sits outside the clauses altogether: the schema must be the
-// one the suite declared. The #1002 GAP(parser) retains elements vc:maxVersion
-// excludes, so a schema document carrying version conditionals can assemble
-// components a 1.1 processor must not see — VC/vc006.n1, suite-invalid, walks
-// clean for exactly that reason. The gate declines any assembly one of whose
-// documents carries an attribute in the versioning namespace, a conservative
-// superset of that GAP. It declines a DOCTYPE too whose DTD could default an
-// attribute the gate does not see: one with an external subset, an <!ATTLIST
-// or a parameter-entity reference (rootStart).
+// Two declines sit outside the clauses altogether. The gate declines any
+// assembly one of whose documents carries an attribute in the versioning
+// namespace, which no hazard now backs: closureVersioned's GAP(conformance)
+// marker owns that decline. It declines a DOCTYPE too whose DTD could default
+// an attribute the gate does not see: one with an external subset, an
+// <!ATTLIST or a parameter-entity reference (rootStart).
 //
 // The one shape that looks like case 1 and is not: a root with no top-level
 // declaration whose xsi:type ·resolves·. Its ·instance-specified type

@@ -71,12 +71,21 @@
 // Every schema document is ·conditional-inclusion pre-processed· as it is
 // read — root, <include>d, <import>ed, <override>n and <redefine>d alike,
 // and the document a caller hands [Produce] too. §4.2.2's transform removes
-// each element whose vc:minVersion, vc:typeAvailable, vc:typeUnavailable,
-// vc:facetAvailable or vc:facetUnavailable attribute excludes this processor
-// (V = 1.1), along with that element's attributes and its whole subtree; an
-// ignored <schema> root becomes the stub §4.2.2 prescribes, keeping only
-// targetNamespace and the two version attributes and no children at all. An
-// ill-formed value is charged src-cip, not guessed at.
+// each element whose vc:minVersion, vc:maxVersion, vc:typeAvailable,
+// vc:typeUnavailable, vc:facetAvailable or vc:facetUnavailable attribute
+// excludes this processor (V = 1.1), along with that element's attributes and
+// its whole subtree: the retained version band is vc:minVersion ≤ V <
+// vc:maxVersion. An ignored <schema> root becomes the stub §4.2.2 prescribes,
+// keeping only targetNamespace and the two version attributes and no children
+// at all, so [Parse] succeeds over such a root and assembles none of that
+// document's components. An ill-formed value is charged src-cip, not guessed
+// at, unless the element carrying it is already ignored — by an ancestor, or
+// by an attribute of its own earlier in the order listed above (§4.2.2's
+// order, not the start tag's) — since S2 does not carry it. A retained
+// construct that references a declaration §4.2.2 removed is a reference to
+// nothing, and is treated as any unresolved QName is: the §5.3 bullet under
+// Composition gaps states which slots reject it under src-resolve and which
+// one keeps it as an ·absent· member.
 //
 // It runs FIRST, before every other pre-processing kind and before any
 // directive of the document is followed, which is what makes a declaration
@@ -84,13 +93,6 @@
 // it removes a document never fetched. Everything the rest of this package
 // reads is S2, never the raw parsed document: "It is S2, not S1, which is
 // required to conform to this specification."
-//
-// One of the six attributes decides nothing here — GAP(parser): an element
-// excluded by vc:maxVersion is RETAINED, so the band this processor applies
-// is vc:minVersion ≤ V rather than §4.2.2's vc:minVersion ≤ V <
-// vc:maxVersion. The value is still read, and an ill-formed one still
-// charged src-cip. Owned by #1002, where the marker in
-// parser/conditional.go's ignoredElement records what the omission costs.
 //
 // # Composition
 //

@@ -46,8 +46,8 @@ import (
 // versioningNS is the XML Schema versioning namespace §4.2.2 reads vc:minVersion,
 // vc:maxVersion, vc:typeAvailable, vc:typeUnavailable, vc:facetAvailable and
 // vc:facetUnavailable from. parser keeps its own copy unexported; the lane
-// declares the name here rather than parser exporting it for a gate that exists
-// only because of a parser GAP (#1002).
+// declares the name here rather than parser exporting it for one harness gate,
+// closureVersioned, whose GAP(conformance) marker states why it is held.
 const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
 
 // assessedSubtreeRoot admits the instance document at doc, against schema as
@@ -1166,11 +1166,17 @@ func isLocationHint(a xml.Attr) bool {
 }
 
 // closureVersioned reports whether any schema document the assembly read
-// carries an attribute in versioningNS, on any element. It is a conservative
-// SUPERSET of the documents the #1002 GAP(parser) in parser/conditional.go can
-// mis-assemble — vc:maxVersion retained where §4.2.2 excludes it — because the
-// assembled components record nothing of which elements a version condition
-// touched: VC/vc006.n1 is suite-invalid and walks clean for exactly that reason.
+// carries an attribute in versioningNS, on any element.
+//
+// GAP(conformance): the harness declines every versioned assembly, and no
+// parser defect now backs the decline — parser applies all six of §4.2.2's
+// attributes, so the components it assembles are S2's. Its two consumers each
+// charge in the withhold direction alone, returning Fail with refuseVersioned:
+// assessedSubtreeRoot withholds the instance lane's "valid" reading, which it
+// is asked for only after the walk charged nothing, and execJSONCase withholds
+// the json lane's verdict either way, since it asks before validating. Neither
+// can produce a pass; each can cost one on a case the suite declares valid.
+// Owned by #2805, which retires the gate or re-justifies it.
 //
 // Each document is re-read from its parser.AssembledDocument.Location, which
 // for the pinnedResolver assembleCase uses is an on-disk path. An inline

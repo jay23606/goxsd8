@@ -24,10 +24,10 @@ func readDoc(t *testing.T, doc string) *Document {
 // targetNamespace, vc:minVersion and vc:maxVersion, "any attributes other than"
 // those three are removed, and [children] is the empty sequence.
 //
-// vc:maxVersion is on the fixture deliberately. The carve-out names it
-// unconditionally, so it survives on a stub this processor reached through the
-// MIN arm alone — declining the max arm (#1002, parser/conditional.go's
-// GAP(parser)) narrows which roots become stubs, never what one carries.
+// vc:maxVersion is on the fixture deliberately, at a value that retains. The
+// carve-out names it unconditionally, so it survives on a stub this processor
+// reached through the MIN arm alone: which arm ignored the root never changes
+// what the stub carries.
 func TestConditionalIncludeRootStubAttributes(t *testing.T) {
 	d := readDoc(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"`+
 		` xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning"`+

@@ -14870,7 +14870,7 @@ VC/vc003/schema/vc003.xsd pass
 VC/vc004/schema/vc004-11.xsd pass
 VC/vc005/schema/vc005.xsd pass
 VC/vc006/schema/vc006.xsd pass
-VC/vc007/schema/vc007.xsd fail
+VC/vc007/schema/vc007.xsd pass
 VC/vc008/schema/vc008.xsd pass
 VC/vc009/schema/vc009.xsd pass
 VC/vc010/schema/vc010.xsd pass
@@ -14888,7 +14888,7 @@ VC/vc903/schema/vc902.xsd pass
 VC/vc904/schema/vc904.xsd pass
 VC/vc905/schema/vc905.xsd pass
 VC/vc_001/schema/vc_001_1 pass
-VC/vc_003/schema/vc_003_1 fail
+VC/vc_003/schema/vc_003_1 pass
 VC/vc_005/schema/vc_005_1 pass
 VC/vc_007/schema/vc_007_1 pass
 VC/vc_008/schema/vc_008_1 pass

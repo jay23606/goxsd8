@@ -63,8 +63,7 @@ var processorVersion = decimal{integer: "1", fraction: "1"}
 // rebuilt whole, because an [Element]'s parent link is fixed at construction
 // and a rebuilt ancestor cannot keep an original child.
 //
-// Five of §4.2.2's six attributes decide the verdict here; vc:maxVersion does
-// not prune, for the reason recorded at [ignoredElement]'s GAP(parser) marker.
+// All six of §4.2.2's attributes decide the verdict, read by [ignoredElement].
 func conditionalInclude(doc *Document) (*Document, error) {
 	if !carriesVersioningAttr(doc.root) {
 		return doc, nil
@@ -149,9 +148,7 @@ func schemaStub(root *Element) *Element {
 //
 // vc:maxVersion is retained unconditionally, exactly as written: the carve-out
 // names the three attributes S2 keeps and conditions none of them on what the
-// verdict was reached over. That this processor's verdict never turns on
-// vc:maxVersion (see [ignoredElement]) narrows which roots become stubs, never
-// what a stub carries.
+// verdict was reached over.
 func retainedOnStub(name xmltree.Name) bool {
 	if name.Space() == "" {
 		return name.Local() == "targetNamespace"
@@ -184,8 +181,10 @@ func carriesVersioningAttr(el *Element) bool {
 //
 // The conditions are a disjunction, tested here in the order §4.2.2 states them
 // rather than in the order the author happened to write the attributes. That
-// choice is user-visible in exactly one place — an element carrying two
-// ill-formed values is charged src-cip for the first in SPEC order — and it
+// choice is user-visible wherever an ill-formed value shares an element with
+// another versioning attribute — whether src-cip is charged, and for which
+// attribute, follows SPEC order: a condition firing earlier in it ends the scan
+// (below), and of two ill-formed values the first in it is charged — and it
 // keeps the verdict independent of tag layout (STYLE D1).
 //
 // A condition that fires ends the scan, so the ill-formed value of a LATER
@@ -205,27 +204,12 @@ func carriesVersioningAttr(el *Element) bool {
 // attribute of §4.2.2's, which is the outcome the suite's own fixtures depend
 // on.
 //
-// GAP(parser): vc:maxVersion does not prune. §4.2.2's retained band is
-// vc:minVersion ≤ V < vc:maxVersion, and only the vc:minVersion end is read
-// here, so an element this processor's V = 1.1 EXCLUDES through
-// vc:maxVersion — "V is greater than or equal to the value of vc:maxVersion" —
-// is RETAINED, with its attributes and its whole subtree, and reaches the
-// producer as if unmarked. That over-retention can leave two declarations of
-// one expanded name where the author wrote one for each version band, which
-// sch-props-correct clause 2 then rejects; it can equally admit an element a
-// 1.1 processor must not see. Owned by #1002, which is blocked on a human
-// ruling: pruning vc:maxVersion removes the <xs:pattern> that a banked instance
-// case's `pass` rides on, leaving that case to an <xs:assertion> this processor
-// does not evaluate, and downgrading a banked case is not an agent's call
-// (CLAUDE.md's one rule). The value IS still read: an ill-formed vc:maxVersion
-// is charged src-cip below, because src-cip is a constraint on the attribute's
-// ·initial value· and is independent of what the transform does with the
-// verdict — the same rule text covers vc:minVersion and vc:maxVersion in one
-// clause, and declining the pruning arm is no licence to accept a value outside
-// xs:decimal. The one place that reading over-charges is an element the max arm
-// would have removed: its descendants stay in S2 here, so an ill-formed vc:
-// value inside one is charged where a full implementation charges nothing.
-// Measured against the W3C suite, no case turns on that.
+// The two version attributes are compared against V as ·actual values·, so
+// the retained band is vc:minVersion ≤ V < vc:maxVersion: minVersion is
+// inclusive and maxVersion exclusive, as §4.2.2 calls the semantics of the
+// vc:maxVersion attribute. A band with vc:maxVersion ≤ vc:minVersion retains
+// nothing, and needs no test of its own: whichever arm fires ignores the
+// element.
 func ignoredElement(el *Element) (bool, error) {
 	if lexical, ok := versioningAttr(el, "minVersion"); ok {
 		lower, err := conditionalDecimal(el, "minVersion", lexical)
@@ -239,10 +223,14 @@ func ignoredElement(el *Element) (bool, error) {
 		}
 	}
 	if lexical, ok := versioningAttr(el, "maxVersion"); ok {
-		// src-cip only, per the GAP above: the value is checked and its verdict
-		// discarded.
-		if _, err := conditionalDecimal(el, "maxVersion", lexical); err != nil {
+		upper, err := conditionalDecimal(el, "maxVersion", lexical)
+		if err != nil {
 			return false, err
+		}
+		// "… or if V is greater than or equal to the value of vc:maxVersion":
+		// maxVersion is EXCLUSIVE, so V = maxVersion ignores.
+		if decimalCmp(processorVersion, upper) >= 0 {
+			return true, nil
 		}
 	}
 	if lexical, ok := versioningAttr(el, "typeAvailable"); ok {
