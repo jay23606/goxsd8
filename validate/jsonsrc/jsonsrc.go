@@ -50,32 +50,32 @@ func WithURI(uri string) Option {
 // [validate.Result.Err]. Its faults are the four error classes listed below.
 // The inputs the mapping DECLINES are a top level that is not an object with
 // exactly one member, and, anywhere in the document, a member the implemented
-// arms do not map (a key whose colon makes no QName or whose prefix no
-// "$xmlns" in scope binds; a key no child element declaration and no attribute
-// use carries whose namespace neither a prefix nor the type's wildcards fix,
-// or whose kind a type with both an element wildcard and an {attribute
-// wildcard} leaves open, or which a wildcard puts in the xsi or xml namespace,
-// or a prefix in the xsi namespace or, as a child element, in the xml
-// namespace; a member of an object under a child no contained and no top-level
-// declaration names; an unprefixed key two expanded names carry, a key both a
-// child declaration and an attribute use carry, an attribute member after a
-// child member or repeated, an attribute member whose value is null, an object
-// or an array, a "$type" or "$xmlns" member out of its leading place or of the
-// wrong shape, a "$type" whose parent's ·governing type definition· the
-// mapping does not determine or that the types a {type table} whose selection
-// it does not read can select for it settle differently, any other
-// "$"-prefixed reserved member, a nested array, a member of an element whose
-// declaration carries a {type table} whose selection the mapping does not
-// read that its declared {type definition} and a type the table can select
-// classify differently, and, where it reads the selection, the leading
-// attribute members no run settles by the type the table ·conditionally
-// selects· for them; the package doc lists them all). A decline
-// names the arm it is not, and for an input with no XML twin the spelling the
-// mapping takes instead where one exists; it is never a silent drop or a
-// guessed mapping: a member the mapping cannot name is not part of the
-// document the assessment saw, so its result is discarded rather than
-// returned. The whole document is read either way, so a fault after the point
-// the assessment stopped at is still reported.
+// arms do not map (a key with no colon that is no NCName, such as "@kind"; a
+// key whose colon makes no QName or whose prefix no "$xmlns" in scope binds; a
+// key no child element declaration and no attribute use carries whose
+// namespace neither a prefix nor the type's wildcards fix, or whose kind a
+// type with both an element wildcard and an {attribute wildcard} leaves open,
+// or which a wildcard puts in the xsi or xml namespace, or a prefix in the xsi
+// namespace or, as a child element, in the xml namespace; a member of an
+// object under a child no contained and no top-level declaration names; an
+// unprefixed key two expanded names carry, a key both a child declaration and
+// an attribute use carry, an attribute member after a child member or
+// repeated, an attribute member whose value is null, an object or an array, a
+// "$type" or "$xmlns" member out of its leading place or of the wrong shape, a
+// "$type" whose parent's ·governing type definition· the mapping does not
+// determine or that the types a {type table} whose selection it does not read
+// can select for it settle differently, any other "$"-prefixed reserved
+// member, a nested array, a member of an element whose declaration carries a
+// {type table} whose selection the mapping does not read that its declared
+// {type definition} and a type the table can select classify differently, and,
+// where it reads the selection, the leading attribute members no run settles
+// by the type the table ·conditionally selects· for them; the package doc
+// lists them all). A decline names the arm it is not, and for an input with no
+// XML twin the spelling the mapping takes instead where one exists; it is
+// never a silent drop or a guessed mapping: a member the mapping cannot name
+// is not part of the document the assessment saw, so its result is discarded
+// rather than returned. The whole document is read either way, so a fault
+// after the point the assessment stopped at is still reported.
 //
 // An attribute member after a child member is the order encoding/json
 // marshals a struct whose child field is declared before an attribute field:
@@ -311,7 +311,7 @@ func (w *walker) root() (*element, error) {
 // which the mapping declines rather than give the unprefixed key either
 // meaning.
 func (w *walker) rootMember(key string, sc *scope, scalar bool, loc xsderr.Loc) (elementMember, error) {
-	k, err := w.keyName(key, sc, scalar, loc)
+	k, err := w.keyName(key, nil, sc, scalar, loc)
 	if err != nil {
 		return nil, err
 	}
@@ -367,18 +367,28 @@ func (k keyName) carries(n xsd.QName) bool {
 // the empty prefix is never consulted, so neither a "$xmlns" binding of "" nor
 // any default namespace reaches a key (Namespaces in XML §6.2).
 //
-// It DECLINES a key with a colon whose prefix or local part is empty or no
-// NCName, a second colon among them, and a prefix sc does not bind, "xmlns"
-// included. None has an XML twin, so no marker tracks them: such a name is not
-// namespace-well-formed (Namespaces in XML §7), and an xmlns:p attribute is a
-// namespace declaration, which a "$xmlns" member spells. The unbound-prefix
-// decline names the "$xmlns" member that would bind the prefix, except under
-// scalarRoot, a root whose value is a scalar or null: such a root has no
-// object of its own and no ancestor, so no "$xmlns" scopes it and "xml" is the
-// one prefix bound there; the decline names the "xml:" key and the unprefixed
-// key (rootMember) instead.
-func (w *walker) keyName(key string, sc *scope, scalarRoot bool, loc xsderr.Loc) (keyName, error) {
+// It DECLINES a key with no colon that is no NCName — the empty key, or one
+// whose first character is no NameStartChar, "@kind", "-kind" and "1bad"
+// among them, or a later one no NameChar (XML 1.0 §2.3 [4]-[5]) — a key with
+// a colon whose prefix or local part is empty or no NCName, a second colon
+// among them, and a prefix sc does not bind, "xmlns" included. None has an XML
+// twin, so no marker tracks them: such a name is not namespace-well-formed
+// (Namespaces in XML §7), and an xmlns:p attribute is a namespace declaration,
+// which a "$xmlns" member spells. Where the key is "@" or "-" before a local
+// name that maps, under o, the object the member is classified against, and
+// each type o's owner's {type table} can select alike, to an attribute use of
+// o's, the no-NCName decline names that local name as the key the use is
+// named by (notNCName); o is nil at the root (rootMember), where it names
+// none. The unbound-prefix decline names the "$xmlns" member that would bind
+// the prefix, except under scalarRoot, a root whose value is a scalar or null:
+// such a root has no object of its own and no ancestor, so no "$xmlns" scopes
+// it and "xml" is the one prefix bound there; the decline names the "xml:" key
+// and the unprefixed key (rootMember) instead.
+func (w *walker) keyName(key string, o *object, sc *scope, scalarRoot bool, loc xsderr.Loc) (keyName, error) {
 	prefix, local, prefixed := strings.Cut(key, ":")
+	if !prefixed && !xmlname.IsNCName(key) {
+		return keyName{}, w.notNCName(key, o, loc)
+	}
 	if !prefixed {
 		return keyName{name: xsd.QName{Local: key}}, nil
 	}
@@ -396,6 +406,31 @@ func (w *walker) keyName(key string, sc *scope, scalarRoot bool, loc xsderr.Loc)
 		return keyName{}, w.declinef(loc, "member %q: no \"$xmlns\" in scope binds its prefix %q; a prefixed key names the expanded name its prefix's binding gives it, so bind %q in a \"$xmlns\" member, {%q:\"<namespace name>\"}, leading the object of the element the key names or is an attribute of, or of an ancestor", key, prefix, prefix, prefix)
 	}
 	return keyName{name: xsd.QName{Space: space, Local: local}, prefixed: true}, nil
+}
+
+// notNCName declines key, at loc, a key with no colon that is no NCName
+// (walker.keyName). Where key is "@" or "-" before a local name that
+// walker.classifyKey maps, under o and each of o.selectable alike, to an
+// attribute use among o.uses, it names that local name as the key the use is
+// named by, as the package doc's "The mapping" spells an attribute member; it
+// names no key at the root, o being nil, and none where classifyKey declines
+// the local name or maps it to anything else, a use's name being an NCName.
+func (w *walker) notNCName(key string, o *object, loc xsderr.Loc) error {
+	const base = "member %q is no NCName; a key with no colon is the local name of the element or attribute it names, an NCName (XML 1.0 §2.3, Namespaces in XML §7)"
+	if o == nil || (!strings.HasPrefix(key, "@") && !strings.HasPrefix(key, "-")) {
+		return w.declinef(loc, base, key)
+	}
+	local := key[1:]
+	m, err := w.classifyKey(o, local, keyName{name: xsd.QName{Local: local}}, loc, true)
+	if err != nil {
+		return w.declinef(loc, base, key)
+	}
+	a, ok := m.(attributeMember)
+	if !ok || !slices.ContainsFunc(o.uses, func(u xsd.AttributeUse) bool { return u.DeclarationName() == a.name }) {
+		return w.declinef(loc, base, key)
+	}
+	return w.declinef(loc, base+", and an attribute member's key takes no \"@\" or \"-\": the attribute use %s of the type of %s is named by the key %q",
+		key, a.name, o.owner, local)
 }
 
 // object is what an object-valued element's members are classified against,
@@ -726,10 +761,16 @@ func (b bareElement) object(*walker, *element, *attribute, placement, xsderr.Loc
 // the xsi-namespace, two-expanded-name and simple-content declines among the
 // uses useNamed's, each under its function's GAP(jsonsrc) markers.
 func (w *walker) classify(o *object, key string, sc *scope, loc xsderr.Loc, scalar bool) (member, error) {
-	k, err := w.keyName(key, sc, false, loc)
+	k, err := w.keyName(key, o, sc, false, loc)
 	if err != nil {
 		return nil, err
 	}
+	return w.classifyKey(o, key, k, loc, scalar)
+}
+
+// classifyKey is classify's arms past keyName: it classifies the key, read as
+// k, at loc, under o and each of o.selectable alike.
+func (w *walker) classifyKey(o *object, key string, k keyName, loc xsderr.Loc, scalar bool) (member, error) {
 	ms, err := w.membersOf(append([]*object{o}, o.selectable...), key, k, loc)
 	if err != nil {
 		return nil, err
@@ -2270,7 +2311,7 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 		next := &runMember{key: key, loc: loc, val: v}
 		var unsettled error
 		if v.tok != json.Delim('[') {
-			if next.k, err = w.keyName(key, v.scope, false, loc); err != nil {
+			if next.k, err = w.keyName(key, r.owner, v.scope, false, loc); err != nil {
 				return nil, nil, nil, err
 			}
 			if unsettled, err = w.candidates(r, next); err != nil {
@@ -2760,7 +2801,7 @@ func (w *walker) lookAhead(r *attributeRun, next *runMember, sc *scope) (lookahe
 		}
 		rm := &runMember{key: key, loc: loc, val: v}
 		if v.tok != json.Delim('[') {
-			if rm.k, err = w.keyName(key, v.scope, false, loc); err != nil {
+			if rm.k, err = w.keyName(key, r.owner, v.scope, false, loc); err != nil {
 				return lookahead{}, err
 			}
 		}

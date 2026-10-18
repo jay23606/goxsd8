@@ -89,7 +89,8 @@
 //     unprefixed attribute name none). Extending "$xmlns" from QName-valued
 //     content to names is the mapping's own design: no spec text maps a JSON
 //     key to an expanded name, and cvc-resolve-instance resolves content, not
-//     names. A key whose colon makes no QName and a prefix no binding in scope
+//     names. A key with no colon that is no NCName ("@kind", "-kind", "1bad",
+//     ""), a key whose colon makes no QName and a prefix no binding in scope
 //     binds decline.
 //   - A member whose key a child element declaration the enclosing element's
 //     type contains carries — directly, indirectly or implicitly,
@@ -322,6 +323,8 @@
 //
 //	top level not {"<root>":value}        one member, keyed by the root's name
 //	root value an array                   an object, a scalar or null
+//	key with no colon that is no NCName   an NCName; an attribute's own name,
+//	                                        with no "@" or "-"
 //	key whose colon makes no QName        local or p:local
 //	prefix no "$xmlns" in scope binds     bind it in a "$xmlns" in scope
 //	unprefixed key two names carry        prefix it; for a name in no namespace
@@ -373,12 +376,13 @@
 // classify tracks the mapping's own choice of a declaration or use over a
 // wildcard, under "The mapping". A repeated attribute member, an attribute
 // member whose value is null, an object or an array, an array item that is
-// itself an array, a key whose colon makes no QName, a prefix no "$xmlns" in
-// scope binds, a repeated "$xmlns" or "$type", a reserved member other than
-// those two or at the top level, the malformed "$xmlns" and "$type" values
-// below, and the top-level shapes and array root value that "The validation
-// root" declines have no XML twin, and no marker; the error for each names the
-// spelling the mapping takes instead, where one exists:
+// itself an array, a key with no colon that is no NCName, a key whose colon
+// makes no QName, a prefix no "$xmlns" in scope binds, a repeated "$xmlns" or
+// "$type", a reserved member other than those two or at the top level, the
+// malformed "$xmlns" and "$type" values below, and the top-level shapes and
+// array root value that "The validation root" declines have no XML twin, and no
+// marker; the error for each names the spelling the mapping takes instead, where
+// one exists:
 //
 //   - an unprefixed key two expanded names carry: among the top-level
 //     declarations at the root, among the declarations a type contains, or
