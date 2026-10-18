@@ -3,6 +3,8 @@ package validate
 import (
 	"context"
 	"log/slog"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/kud360/goxsd8/value"
@@ -451,6 +453,13 @@ func (c *contentCheck) element(w *walk, child Element) (a xsd.Attribution, undec
 // ·valid· with respect to {open content}.{wildcard} — which is clause 2 or
 // clause 3 failing as a whole.
 //
+// The charge names what the content model would have ·attributed· an item to
+// at that position ([xsd.Matcher.Admissible], rendered by expected through
+// declining), the {open content} included where it is present. Every listed
+// arm was offered the item and declined it, so a wildcard arm whose {namespace
+// constraint} allows the item's namespace declined it under its {disallowed
+// names}, and is named as disallowing the item.
+//
 // Its two results are [contentCheck.element]'s, undecided only for the nil
 // matcher.
 func (c *contentCheck) match(w *walk, child Element) (xsd.Attribution, bool) {
@@ -469,13 +478,13 @@ func (c *contentCheck) match(w *walk, child Element) (xsd.Attribution, bool) {
 	}
 	if c.openContent() != nil {
 		c.charge(w, ruleCvcComplexContent, clause, child.Loc(),
-			"the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], and its ·expanded name· is not ·valid· with respect to that {content type}'s {open content} wildcard either, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause %s requires (Item Valid (Wildcard), §3.10.4.1)",
-			child.Name(), c.e.Name(), clause)
+			"the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], and its ·expanded name· is not ·valid· with respect to that {content type}'s {open content} wildcard either, where the content model expects %s, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause %s requires",
+			child.Name(), c.e.Name(), expected(c.matcher.Admissible(), declining(child.Name())), clause)
 		return nil, false
 	}
 	c.charge(w, ruleCvcComplexContent, "1", child.Loc(),
-		"the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 1 requires (Element Sequence Accepted (Particle), §3.9.4.3)",
-		child.Name(), c.e.Name())
+		"the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], where the content model expects %s, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 1 requires",
+		child.Name(), c.e.Name(), expected(c.matcher.Admissible(), declining(child.Name())))
 	return nil, false
 }
 
@@ -756,6 +765,17 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 // items were all admitted still fails where the particle they were interleaved
 // with is left short of its {min occurs}.
 //
+// The charge names what the {particle} would have taken next
+// ([xsd.Matcher.Admissible], rendered by expected) with the {open content}
+// arm filtered out: an item the open wildcard takes is S2's and never advances
+// S1, so it pays none of the {min occurs} that clauses 2.2 and 3.2 find owed.
+// The charge says the {particle} expects the list, not the content model, since
+// the {open content} may still take items the list leaves out. The list can be
+// empty — under {mode} suffix once an item has begun S2 (clause 2.1's S = S1 +
+// S2 being a concatenation), and where what is owed is a choice with no
+// members, which accepts nothing — and expected then says the {particle}
+// expects no further element information item, which is true of both.
+//
 // Under a nil matcher clause 1.4 is undecided for the sequence as a whole, the
 // EMPTY sequence included: whether a {content type} accepts no element
 // information item at all is the matcher's to say, and a particle whose {min
@@ -777,9 +797,13 @@ func (c *contentCheck) sequenceEnd(w *walk) {
 		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcComplexContent, clause, "accepted")
 		return
 	}
+	owed := slices.DeleteFunc(c.matcher.Admissible(), func(a xsd.Attribution) bool {
+		_, open := a.(*xsd.OpenContent)
+		return open
+	})
 	c.charge(w, ruleCvcComplexContent, clause, c.e.Loc(),
-		"the [[children]] of %s end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause %s requires (Element Sequence Accepted (Particle), §3.9.4.3)",
-		c.e.Name(), clause)
+		"the [[children]] of %s end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, where that {content type}'s {particle} expects %s, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause %s requires",
+		c.e.Name(), expected(owed, attributedTo), clause)
 }
 
 // charge records one violation and closes the element to any further content
@@ -812,28 +836,123 @@ func (c *contentCheck) log(w *walk, name xsd.QName, loc xsderr.Loc, rule xsderr.
 	w.logDecision("assessing content", name, loc, rule, clause, outcome)
 }
 
-// attributedTo names what an item was ·attributed to· (§3.4.4.4) for the log,
-// switching over the three variants [xsd.Attribution] seals (STYLE T2's
-// closed-sum exception). The {open content} arm is spelled apart from the
-// ·wildcard particle· one because that is the distinction the log exists to
-// show: a reader asking why e-validity clause 1.1.3 charged one unresolvable
-// child and not another reads the answer off these two lines. What the descent
-// reads off the same Attribution — the child's ·governing element declaration·,
-// including the ·substituting declaration· a substituting item carries rather
-// than the particle's own — is [walk.childGoverning]'s, and the two are
-// deliberately separate: a log line names what consumed the item, which is a
-// fact about the PARENT's content model.
+// maxExpectedListed is how many particle arms of [xsd.Matcher.Admissible] a
+// content charge names before it counts the rest: past it, expected adds "and K
+// more", K the exact number of particle arms left unnamed, so a wide choice or
+// all group cannot make one violation as long as its model. The {open content}
+// arm is outside the bound and always named.
+const maxExpectedListed = 5
+
+// expected renders the arms a content charge names as what is expected at the
+// charged position, each by name — attributedTo, or declining at a rejected
+// item. The particle arms are named in the order they come in, at most
+// maxExpectedListed of them and then "and K more"; an [*xsd.OpenContent] arm,
+// which Admissible puts last, is always named, after them. One arm is named by
+// itself, several as "one of" a comma-separated list — the {open content} arm
+// joined by ", or" after an "and K more" — and none as "no further element
+// information item", never an empty list.
+func expected(arms []xsd.Attribution, name func(xsd.Attribution) string) string {
+	if len(arms) == 0 {
+		return "no further element information item"
+	}
+	last := arms[len(arms)-1]
+	particles := arms
+	_, hasOpen := last.(*xsd.OpenContent)
+	if hasOpen {
+		particles = arms[:len(arms)-1]
+	}
+	listed := particles[:min(len(particles), maxExpectedListed)]
+	names := make([]string, 0, len(listed)+1)
+	for _, a := range listed {
+		names = append(names, name(a))
+	}
+	if rest := len(particles) - len(listed); rest > 0 {
+		list := "one of " + strings.Join(names, ", ") + " and " + strconv.Itoa(rest) + " more"
+		if !hasOpen {
+			return list
+		}
+		return list + ", or " + name(last)
+	}
+	if hasOpen {
+		names = append(names, name(last))
+	}
+	if len(names) == 1 {
+		return names[0]
+	}
+	return "one of " + strings.Join(names, ", ")
+}
+
+// attributedTo names what an item was or could be ·attributed to· (§3.4.4.4),
+// for the log line [contentCheck.match] writes and for the arms a content charge
+// names (expected), switching over the three variants [xsd.Attribution] seals
+// (STYLE T2's closed-sum exception). An element declaration is named by its
+// ·expanded name· in the notation the charged item's own name is rendered in,
+// and a wildcard by its namespace constraint (namespaceConstraint), behind the
+// word "wildcard" so neither reads as an element's name. The {open content} arm
+// is spelled apart from the ·wildcard particle· one because that is the
+// distinction the log exists to show: a reader asking why e-validity clause
+// 1.1.3 charged one unresolvable child and not another reads the answer off
+// these two lines. What the descent reads off the same Attribution — the child's
+// ·governing element declaration·, including the ·substituting declaration· a
+// substituting item carries rather than the particle's own — is
+// [walk.childGoverning]'s, and the two are deliberately separate: a log line
+// names what consumed the item, which is a fact about the PARENT's content
+// model.
 func attributedTo(a xsd.Attribution) string {
 	switch t := a.(type) {
 	case xsd.ElementDeclaration:
 		return "element declaration " + t.Name().String()
 	case xsd.Wildcard:
-		return "wildcard " + t.NamespaceConstraint().Variety().String()
+		return "wildcard " + namespaceConstraint(t.NamespaceConstraint())
 	case *xsd.OpenContent:
-		return "open content wildcard " + t.Wildcard().NamespaceConstraint().Variety().String()
+		return "open content wildcard " + namespaceConstraint(t.Wildcard().NamespaceConstraint())
 	default:
 		return "particle"
 	}
+}
+
+// declining names an arm [contentCheck.match] offered child to and that
+// declined it, as attributedTo does, followed by ", which disallows <child>" for
+// a ·wildcard particle· or {open content} arm whose {namespace constraint}
+// allows child's namespace: such an arm declined child under its {disallowed
+// names} — a QName member (cvc-wildcard-name clause 2) or the defined or
+// sibling keyword (cvc-wildcard clauses 2 and 3) — which namespaceConstraint
+// does not render. The switch is over the two wildcard-bearing variants
+// [xsd.Attribution] seals (STYLE T2's closed-sum exception).
+func declining(child xsd.QName) func(xsd.Attribution) string {
+	ns := xsd.NamespaceName(child.Space)
+	return func(a xsd.Attribution) string {
+		var nc xsd.NamespaceConstraint
+		switch t := a.(type) {
+		case xsd.Wildcard:
+			nc = t.NamespaceConstraint()
+		case *xsd.OpenContent:
+			nc = t.Wildcard().NamespaceConstraint()
+		default:
+			return attributedTo(a)
+		}
+		if !nc.AllowsNamespace(ns) {
+			return attributedTo(a)
+		}
+		return attributedTo(a) + ", which disallows " + child.String()
+	}
+}
+
+// namespaceConstraint renders a wildcard's {namespace constraint} (§3.10.1) as
+// its {variety} followed by its {namespaces} in their own order, each quoted or
+// ·absent·: "any", `enumeration "urn:a" ·absent·`, `not "urn:a"`. {disallowed
+// names} is not rendered.
+func namespaceConstraint(nc xsd.NamespaceConstraint) string {
+	s := nc.Variety().String()
+	for _, ns := range nc.Namespaces() {
+		uri, present := ns.URI()
+		if !present {
+			s += " ·absent·"
+			continue
+		}
+		s += " " + strconv.Quote(uri)
+	}
+	return s
 }
 
 // xmlWhitespace is white space as XML 1.1 defines it (S ::= (#x20 | #x9 | #xD

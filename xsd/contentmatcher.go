@@ -805,10 +805,10 @@ func (m *Matcher) Next(name QName) (Attribution, bool) {
 	if m.inS2 {
 		return m.openNext(name)
 	}
-	if a, ok := m.step(name, admitElements); ok {
+	if a, ok := m.step(nameTest{name, admitElements}); ok {
 		return a, true
 	}
-	if a, ok := m.step(name, admitWildcards); ok {
+	if a, ok := m.step(nameTest{name, admitWildcards}); ok {
 		return a, true
 	}
 	return m.openNext(name)
@@ -862,6 +862,65 @@ func (m *Matcher) Accepting() bool {
 	return false
 }
 
+// Admissible reports what the next element information item could be
+// ·attributed to· (§3.4.4.4) where the sequence stands: the {term} of every
+// leaf particle [Matcher.Next]'s walk offers a name to, across every live
+// partition, before it reports (nil, false), and then the {open content} where
+// Next would offer it the name too. It is the expected set a caller names when
+// it charges cvc-complex-content (§3.4.4.3) at a rejected item or at a
+// sequence that ended short; neither that rule nor cvc-accept (§3.9.4.3)
+// prescribes message content, and this prescribes none either.
+//
+// Next(n) succeeds exactly where some returned arm admits n: an
+// [ElementDeclaration] by its ·expanded name· or a member of its ·substitution
+// group· (cvc-accept clause 2.3), a [Wildcard] and the [*OpenContent]'s
+// {wildcard} by cvc-wildcard (§3.10.4.1). A non-empty result does not mean some
+// name is accepted — a wildcard's {disallowed names} can leave it admitting
+// none — and an [ElementDeclaration] is the particle's own declaration D, never
+// the ·substitution group· members it stands for.
+//
+// What the result holds follows from Next's own walk and from no rule stated
+// here: a member of an all group is listed while it is short of its {max
+// occurs}, through the gate every leaf Next reaches passes; the [*OpenContent]
+// is listed under {mode} interleave always, under {mode} suffix alongside the
+// particles until an item has started clause 2's S2, and alone once one has
+// (clause 2.1's S = S1 + S2 being a concatenation).
+//
+// The particles are in ascending order of their place in the content model —
+// the preorder of its flattened {particles}, which is document order — with the
+// [*OpenContent] last. A particle reached from several live partitions is
+// listed once, and no two listed element particles share an ·expanded name·:
+// both would ·compete· for it, which cos-nonambig (§3.8.6.4) has already
+// rejected. The result is empty where the content model admits no further item.
+//
+// It is read-only: [Matcher.Next] and [Matcher.Accepting] answer identically
+// before and after it. Each call returns a fresh slice the caller may keep; its
+// elements are the schema's immutable components on [Attribution]'s terms, the
+// [*OpenContent] being the pointer [ElementContent] carries. One call walks
+// every live region once, which is what one rejected name costs Next, so it is
+// priced for a charge and not for every item.
+func (m *Matcher) Admissible() []Attribution {
+	var out []Attribution
+	if !m.inS2 {
+		f := &frontierTest{}
+		for i := range m.live {
+			m.advance(&m.live[i], f)
+		}
+		slices.Sort(f.hits)
+		for _, i := range slices.Compact(f.hits) {
+			a, isLeaf := m.nodes[i].term.(Attribution)
+			if !isLeaf {
+				panic("xsd: Matcher.Admissible: a model group is not a leaf of a flattened content model")
+			}
+			out = append(out, a)
+		}
+	}
+	if m.open != nil {
+		out = append(out, m.open)
+	}
+	return out
+}
+
 // accepts reports whether one partition closes where the sequence stopped:
 // every node on the live path can be left with that partition's counters
 // (canExit), or no item was taken at all and the model is ·emptiable·.
@@ -900,12 +959,12 @@ const (
 // caller can see. The pass therefore reads the live path throughout and
 // installs the one advance reached at the end of it, where a name no region
 // took leaves it as it stood ([Matcher.Next]).
-func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) step(test leafTest) (Attribution, bool) {
 	var taken Attribution
 	m.reached = m.reached[:0]
 	next := make([]region, 0, 2*len(m.live))
 	for i := range m.live {
-		a, cs := m.advance(&m.live[i], name, kind)
+		a, cs := m.advance(&m.live[i], test)
 		if len(cs) == 0 {
 			continue
 		}
@@ -924,13 +983,13 @@ func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
 	return taken, true
 }
 
-// advance collects every region reachable from c by consuming name. It works
-// outward exactly as one greedy walk does — the particle the last item was
-// attributed to, then the rest of the iteration containing it, then a further
-// iteration of that particle's group, then the same three questions one level
-// out — and moving out is legal only while the level being left can be closed
-// (canExit), which is where an unsatisfied {min occurs} stops the search rather
-// than being noticed later.
+// advance collects every region reachable from c by consuming the item test
+// takes. It works outward exactly as one greedy walk does — the particle the
+// last item was attributed to, then the rest of the iteration containing it,
+// then a further iteration of that particle's group, then the same three
+// questions one level out — and moving out is legal only while the level being
+// left can be closed (canExit), which is where an unsatisfied {min occurs}
+// stops the search rather than being noticed later.
 //
 // What the set adds to that walk is confined to an ·ambiguous· node, where BOTH
 // answers are kept: the region that stays in the open iteration and the region
@@ -945,11 +1004,16 @@ func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
 // The walk it drives reads the live path and writes the scratch one, so every
 // attempt below starts from the path as the last item left it (probeFromPath)
 // and an attempt that fails is abandoned rather than unwound.
-func (m *Matcher) advance(c *region, name QName, kind admitKind) (Attribution, []region) {
+//
+// A pass whose test takes nothing (frontierTest) fails every attempt, so it
+// walks every leaf a rejected name is offered and leaves c, the live path and
+// Matcher.reached as it found them: every region it would change is a clone,
+// and keepProbe runs only for an attempt that took an item.
+func (m *Matcher) advance(c *region, test leafTest) (Attribution, []region) {
 	if len(m.path) == 0 {
 		t := c.clone()
 		m.probeFromPath()
-		a, ok := m.enter(&t, 0, name, kind)
+		a, ok := m.enter(&t, 0, test)
 		if !ok {
 			return nil, nil
 		}
@@ -961,14 +1025,14 @@ func (m *Matcher) advance(c *region, name QName, kind admitKind) (Attribution, [
 	for d := len(m.path) - 1; d >= 0; d-- {
 		t := c.clone()
 		m.probeFromPath()
-		if a, ok := m.continueIn(&t, d, name, kind); ok {
+		if a, ok := m.continueIn(&t, d, test); ok {
 			m.keepProbe()
 			taken, out = a, append(out, t)
 		}
 		if len(out) == 0 || m.nodes[m.path[d]].ambiguous {
 			r := c.clone()
 			m.probeFromPath()
-			if a, ok := m.repeat(&r, d, name, kind); ok {
+			if a, ok := m.repeat(&r, d, test); ok {
 				m.keepProbe()
 				taken, out = a, append(out, r)
 			}
@@ -1015,32 +1079,33 @@ func (m *Matcher) widensAbove(d int) bool {
 	return false
 }
 
-// continueIn consumes name inside the OPEN occurrence of the node at depth d of
-// the live path, whose own deeper position has already failed to consume it and
-// been closed: one more occurrence of a leaf, or a later member of a group's
-// open iteration. A leaf is the path's last node, so one more occurrence of one
-// leaves the path where it stands and the attempt's scratch copy of it
-// untouched.
-func (m *Matcher) continueIn(c *region, d int, name QName, kind admitKind) (Attribution, bool) {
+// continueIn consumes the item test takes inside the OPEN occurrence of the
+// node at depth d of the live path, whose own deeper position has already
+// failed to consume it and been closed: one more occurrence of a leaf, or a
+// later member of a group's open iteration. A leaf is the path's last node, so
+// one more occurrence of one leaves the path where it stands and the attempt's
+// scratch copy of it untouched.
+func (m *Matcher) continueIn(c *region, d int, test leafTest) (Attribution, bool) {
 	i := m.path[d]
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
-		a, ok := m.admits(c, i, name, kind)
+		a, ok := m.admits(c, i, test)
 		if !ok {
 			return nil, false
 		}
 		m.count(c, i)
 		return a, true
 	}
-	return m.continueIteration(c, d, g, m.slotOf(i, m.path[d+1]), name, kind)
+	return m.continueIteration(c, d, g, m.slotOf(i, m.path[d+1]), test)
 }
 
-// repeat consumes name as the first item of a FRESH iteration of the group at
-// depth d of the live path, which needs that group's open iteration to be a
-// whole word of its language already (iterationComplete) and its {max occurs} to
-// admit another (cvc-accept clause 3.2). A leaf has no iteration to close — its
-// occurrences are continueIn's counter — so it never repeats this way.
-func (m *Matcher) repeat(c *region, d int, name QName, kind admitKind) (Attribution, bool) {
+// repeat consumes the item test takes as the first item of a FRESH iteration of
+// the group at depth d of the live path, which needs that group's open
+// iteration to be a whole word of its language already (iterationComplete) and
+// its {max occurs} to admit another (cvc-accept clause 3.2). A leaf has no
+// iteration to close — its occurrences are continueIn's counter — so it never
+// repeats this way.
+func (m *Matcher) repeat(c *region, d int, test leafTest) (Attribution, bool) {
 	i := m.path[d]
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
@@ -1054,7 +1119,7 @@ func (m *Matcher) repeat(c *region, d int, name QName, kind admitKind) (Attribut
 	}
 	m.clearSubtree(c, i)
 	m.probe = m.probe[:d+1]
-	a, ok := m.enterBody(c, i, g, name, kind)
+	a, ok := m.enterBody(c, i, g, test)
 	if !ok {
 		return nil, false
 	}
@@ -1062,15 +1127,15 @@ func (m *Matcher) repeat(c *region, d int, name QName, kind admitKind) (Attribut
 	return a, true
 }
 
-// continueIteration consumes name later in the OPEN iteration of the group at
-// depth d, whose member at slot has just been closed. Each compositor offers
-// what §3.8.4.1 says follows: a sequence its remaining members while each
-// skipped one is ·emptiable· (§3.8.4.1.1), a choice nothing at all, since an
-// iteration of a choice is one member (§3.8.4.1.2), and an all group any member
-// that can still take the item — one short of its {max occurs}, or a nested all
-// group with an occurrence open to resume (offerAllMembers) — since
-// S1 × … × Sn interleaves them (§3.8.4.1.3).
-func (m *Matcher) continueIteration(c *region, d int, g ModelGroup, slot int, name QName, kind admitKind) (Attribution, bool) {
+// continueIteration consumes the item test takes later in the OPEN iteration of
+// the group at depth d, whose member at slot has just been closed. Each
+// compositor offers what §3.8.4.1 says follows: a sequence its remaining
+// members while each skipped one is ·emptiable· (§3.8.4.1.1), a choice nothing
+// at all, since an iteration of a choice is one member (§3.8.4.1.2), and an all
+// group any member that can still take the item — one short of its {max
+// occurs}, or a nested all group with an occurrence open to resume
+// (offerAllMembers) — since S1 × … × Sn interleaves them (§3.8.4.1.3).
+func (m *Matcher) continueIteration(c *region, d int, g ModelGroup, slot int, test leafTest) (Attribution, bool) {
 	children := m.nodes[m.path[d]].children
 	switch g.Compositor() {
 	case CompositorChoice:
@@ -1078,11 +1143,11 @@ func (m *Matcher) continueIteration(c *region, d int, g ModelGroup, slot int, na
 	case CompositorAll:
 		i := m.path[d]
 		m.probe = m.probe[:d+1]
-		return m.offerAllMembers(c, i, name, kind)
+		return m.offerAllMembers(c, i, test)
 	case CompositorSequence:
 		m.probe = m.probe[:d+1]
 		for _, ch := range children[slot+1:] {
-			if a, ok := m.enter(c, ch, name, kind); ok {
+			if a, ok := m.enter(c, ch, test); ok {
 				return a, true
 			}
 			if !m.emptiable(ch) {
@@ -1095,7 +1160,7 @@ func (m *Matcher) continueIteration(c *region, d int, g ModelGroup, slot int, na
 	}
 }
 
-// offerAllMembers offers name to each member of the all group at i in turn,
+// offerAllMembers offers test to each member of the all group at i in turn,
 // which §3.8.4.1.3 licenses whatever member the last item went to: L(M) is
 // S1 × … × Sn, the INTERLEAVE of the members' own sequences, so nothing
 // requires one member's items to be contiguous.
@@ -1106,32 +1171,32 @@ func (m *Matcher) continueIteration(c *region, d int, g ModelGroup, slot int, na
 // is the whole of that discriminator: clause 1.3 pins the member to
 // {min occurs} = {max occurs} = 1, so a non-zero count is the one open
 // occurrence it will ever have.
-func (m *Matcher) offerAllMembers(c *region, i int, name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) offerAllMembers(c *region, i int, test leafTest) (Attribution, bool) {
 	for _, ch := range m.nodes[i].children {
 		if _, isGroup := m.nodes[ch].term.(ModelGroup); isGroup && c.counts[ch].lo > 0 {
-			if a, ok := m.resumeAll(c, ch, name, kind); ok {
+			if a, ok := m.resumeAll(c, ch, test); ok {
 				return a, true
 			}
 			continue
 		}
-		if a, ok := m.enter(c, ch, name, kind); ok {
+		if a, ok := m.enter(c, ch, test); ok {
 			return a, true
 		}
 	}
 	return nil, false
 }
 
-// resumeAll consumes name inside the occurrence of the nested all group at i
-// that an earlier item already opened, putting i back on the attempt's path with its
-// counters as they stand and offering the name to its own members — to whatever
-// depth clause 1.3's exactly-once nesting reaches. Neither the occurrence
-// counter nor the subtree beneath it moves: this is the same occurrence
-// suspended by an item that went to a sibling, not a new one. It leaves the
-// attempt's path where it found it when the name is not admitted, as enter
-// does, so the sibling tried next descends from the right node.
-func (m *Matcher) resumeAll(c *region, i int, name QName, kind admitKind) (Attribution, bool) {
+// resumeAll consumes the item test takes inside the occurrence of the nested
+// all group at i that an earlier item already opened, putting i back on the
+// attempt's path with its counters as they stand and offering test to its own
+// members — to whatever depth clause 1.3's exactly-once nesting reaches.
+// Neither the occurrence counter nor the subtree beneath it moves: this is the
+// same occurrence suspended by an item that went to a sibling, not a new one.
+// It leaves the attempt's path where it found it when test takes nothing, as
+// enter does, so the sibling tried next descends from the right node.
+func (m *Matcher) resumeAll(c *region, i int, test leafTest) (Attribution, bool) {
 	m.probe = append(m.probe, i)
-	a, ok := m.offerAllMembers(c, i, name, kind)
+	a, ok := m.offerAllMembers(c, i, test)
 	if !ok {
 		m.probe = m.probe[:len(m.probe)-1]
 		return nil, false
@@ -1139,14 +1204,14 @@ func (m *Matcher) resumeAll(c *region, i int, name QName, kind admitKind) (Attri
 	return a, true
 }
 
-// enter consumes name as the FIRST item of a fresh occurrence of the node at i,
-// appending the nodes it descended through to the attempt's path. It leaves the
-// walk state untouched when the name is not admitted, so a caller may try
-// members in turn.
-func (m *Matcher) enter(c *region, i int, name QName, kind admitKind) (Attribution, bool) {
+// enter consumes the item test takes as the FIRST item of a fresh occurrence of
+// the node at i, appending the nodes it descended through to the attempt's
+// path. It leaves the walk state untouched when test takes nothing, so a caller
+// may try members in turn.
+func (m *Matcher) enter(c *region, i int, test leafTest) (Attribution, bool) {
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
-		a, ok := m.admits(c, i, name, kind)
+		a, ok := m.admits(c, i, test)
 		if !ok {
 			return nil, false
 		}
@@ -1158,7 +1223,7 @@ func (m *Matcher) enter(c *region, i int, name QName, kind admitKind) (Attributi
 		return nil, false
 	}
 	m.probe = append(m.probe, i)
-	a, ok := m.enterBody(c, i, g, name, kind)
+	a, ok := m.enterBody(c, i, g, test)
 	if !ok {
 		m.probe = m.probe[:len(m.probe)-1]
 		return nil, false
@@ -1167,15 +1232,16 @@ func (m *Matcher) enter(c *region, i int, name QName, kind admitKind) (Attributi
 	return a, true
 }
 
-// enterBody consumes name as the first item of one iteration of the group at i:
-// the first member of a sequence that admits it, while every member skipped
-// before it is ·emptiable· (§3.8.4.1.1), or any member of a choice (§3.8.4.1.2)
-// or an all group (§3.8.4.1.3). Members are tried in document order, which
-// decides nothing a second member could have decided differently — cos-nonambig
-// has already rejected a group where two of them admit one name.
-func (m *Matcher) enterBody(c *region, i int, g ModelGroup, name QName, kind admitKind) (Attribution, bool) {
+// enterBody consumes the item test takes as the first item of one iteration of
+// the group at i: the first member of a sequence that admits it, while every
+// member skipped before it is ·emptiable· (§3.8.4.1.1), or any member of a
+// choice (§3.8.4.1.2) or an all group (§3.8.4.1.3). Members are tried in
+// document order, which decides nothing a second member could have decided
+// differently — cos-nonambig has already rejected a group where two of them
+// admit one name.
+func (m *Matcher) enterBody(c *region, i int, g ModelGroup, test leafTest) (Attribution, bool) {
 	for _, ch := range m.nodes[i].children {
-		if a, ok := m.enter(c, ch, name, kind); ok {
+		if a, ok := m.enter(c, ch, test); ok {
 			return a, true
 		}
 		if g.Compositor() == CompositorSequence && !m.emptiable(ch) {
@@ -1185,9 +1251,30 @@ func (m *Matcher) enterBody(c *region, i int, g ModelGroup, name QName, kind adm
 	return nil, false
 }
 
-// admits reports what the leaf particle at i attributes an item named name to,
-// under one search pass's kind, or false when the particle is exhausted or does
-// not admit the name.
+// admits reports what the leaf particle at i attributes an item to under one
+// search pass's test, or false when the particle is exhausted or the test does
+// not take it. The {max occurs} gate is the particle's and is asked here, before
+// the test, so a pass of either kind reaches exactly the leaves that still have
+// an occurrence to give.
+func (m *Matcher) admits(c *region, i int, test leafTest) (Attribution, bool) {
+	if !m.canRepeat(c, i) {
+		return nil, false
+	}
+	return test.take(m, i)
+}
+
+// leafTest is what one pass of the walk asks of each leaf particle it reaches
+// with an occurrence left (admits). The walk — advance and everything it calls
+// — is the same for every pass, so the two passes it serves differ in this
+// question alone: nameTest takes one ·expanded name·, which is [Matcher.Next],
+// and frontierTest takes nothing and records every leaf it was offered, which
+// is [Matcher.Admissible]. A pass whose test never takes a leaf walks exactly
+// the leaves a rejected name is offered.
+type leafTest interface {
+	take(m *Matcher, i int) (Attribution, bool)
+}
+
+// nameTest takes the leaf at i where it admits name under kind.
 //
 // The element case takes cvc-accept clause 2.3.1 before clause 2.3.2, which is
 // what makes the reported declaration the particle's own D and not the
@@ -1199,35 +1286,53 @@ func (m *Matcher) enterBody(c *region, i int, g ModelGroup, name QName, kind adm
 // The wildcard case is cvc-wildcard (§3.10.4.1) in full, including the
 // defined/sibling {disallowed names} keywords, which need the containing
 // complex type — the reason ContentMatcher takes one.
-func (m *Matcher) admits(c *region, i int, name QName, kind admitKind) (Attribution, bool) {
-	if !m.canRepeat(c, i) {
-		return nil, false
-	}
-	switch t := m.nodes[i].term.(type) {
+type nameTest struct {
+	name QName
+	kind admitKind
+}
+
+// take reports what the leaf at i attributes an item named t.name to; see the
+// nameTest doc comment.
+func (t nameTest) take(m *Matcher, i int) (Attribution, bool) {
+	switch leaf := m.nodes[i].term.(type) {
 	case ElementDeclaration:
-		if kind != admitElements {
+		if t.kind != admitElements {
 			return nil, false
 		}
-		if t.Name() == name {
-			return t, true
+		if leaf.Name() == t.name {
+			return leaf, true
 		}
-		if m.s.nameInSubstitutionGroupOf(name, t) {
-			return t, true
+		if m.s.nameInSubstitutionGroupOf(t.name, leaf) {
+			return leaf, true
 		}
 		return nil, false
 	case Wildcard:
-		if kind != admitWildcards {
+		if t.kind != admitWildcards {
 			return nil, false
 		}
-		if !m.s.allowsElementWildcardName(t, m.ct, name) {
+		if !m.s.allowsElementWildcardName(leaf, m.ct, t.name) {
 			return nil, false
 		}
-		return t, true
+		return leaf, true
 	case ModelGroup:
-		panic("xsd: Matcher.admits: a model group is not a leaf of a flattened content model")
+		panic("xsd: nameTest.take: a model group is not a leaf of a flattened content model")
 	default:
-		panic("xsd: Matcher.admits: non-exhaustive Term switch")
+		panic("xsd: nameTest.take: non-exhaustive Term switch")
 	}
+}
+
+// frontierTest takes no leaf and appends the node index of every leaf it is
+// offered to hits, in the order the walk offers them, duplicates included: one
+// leaf is reached once per live region that reaches it.
+type frontierTest struct {
+	hits []int
+}
+
+// take records the leaf at i and declines it, so the walk goes on to every
+// other leaf a rejected name would have been offered.
+func (t *frontierTest) take(_ *Matcher, i int) (Attribution, bool) {
+	t.hits = append(t.hits, i)
+	return nil, false
 }
 
 // canRepeat reports whether the node at i may take one more occurrence

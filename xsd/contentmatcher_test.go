@@ -9,12 +9,12 @@ import (
 )
 
 // These tests drive Matcher through the exported entry points alone —
-// Schema.ContentMatcher, Matcher.Next, Matcher.Accepting — but live in the
-// package because the fixtures they share (uq, uOccurs, uGroup, uLocal, …) are
-// particleattribution_test.go's. Every schema below is FINALIZED, which is what
-// makes the models cos-nonambig-clean: a fixture that stopped being
-// unambiguous would fail at cmSchema rather than silently exercise a model the
-// walk is not licensed over.
+// Schema.ContentMatcher, Matcher.Next, Matcher.Accepting, Matcher.Admissible —
+// but live in the package because the fixtures they share (uq, uOccurs, uGroup,
+// uLocal, …) are particleattribution_test.go's. Every schema below is
+// FINALIZED, which is what makes the models cos-nonambig-clean: a fixture that
+// stopped being unambiguous would fail at cmSchema rather than silently
+// exercise a model the walk is not licensed over.
 
 // cmSchema finalizes a schema whose complex type {urn:upa}ct has p as its
 // {content type} particle, and returns it with that type.
@@ -1419,4 +1419,255 @@ func cmProbeFeeds() [][]string {
 		[]string{"a", "a", "a", "a", "b", "a", "a", "a", "a"},
 		[]string{"d", "c", "b", "a", "d", "c", "b", "a"},
 	)
+}
+
+// cmAdmissible renders m.Admissible() as one token per arm: an element
+// declaration by its local name, a ·wildcard particle· as "wildcard", the {open
+// content} as "open". It fails on a declaration outside the fixtures' namespace,
+// which a token would otherwise hide.
+func cmAdmissible(t *testing.T, m *Matcher) []string {
+	t.Helper()
+	var out []string
+	for _, a := range m.Admissible() {
+		switch v := a.(type) {
+		case ElementDeclaration:
+			if v.Name().Space != uns {
+				t.Fatalf("Admissible listed %s, outside the fixtures' namespace", v.Name())
+			}
+			out = append(out, v.Name().Local)
+		case Wildcard:
+			out = append(out, "wildcard")
+		case *OpenContent:
+			out = append(out, "open")
+		default:
+			t.Fatalf("Admissible listed %T, which Attribution does not seal", a)
+		}
+	}
+	return out
+}
+
+// cmWantAdmissible asserts what Admissible lists after feed, which must be
+// taken whole.
+func cmWantAdmissible(t *testing.T, m *Matcher, feed []string, want ...string) {
+	t.Helper()
+	if i := cmFeed(t, m, feed...); i != len(feed) {
+		t.Fatalf("Next rejected %s at position %d of %v, want the whole feed taken", feed[i], i, feed)
+	}
+	if got := cmAdmissible(t, m); !slices.Equal(got, want) {
+		t.Errorf("Admissible() after %v = %v, want %v", feed, got, want)
+	}
+}
+
+// cmAdmissibleCase is one row of the tables below: a feed and what Admissible
+// lists after it.
+type cmAdmissibleCase struct {
+	feed []string
+	want []string
+}
+
+// A sequence offers its next member and every ·emptiable· member after it up
+// to the first one that is not (§3.8.4.1.1), in the model's order, and the
+// sequence's end offers nothing: the empty result.
+func TestMatcherAdmissibleFollowsASequence(t *testing.T) {
+	model := func() Particle {
+		return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, 1)),
+			cmLeaf(t, "b", uOccurs(t, 0, 1)),
+			cmLeaf(t, "c", uOccurs(t, 1, 2)),
+			cmLeaf(t, "d", uOccurs(t, 1, 1)))
+	}
+	for _, tc := range []cmAdmissibleCase{
+		{nil, []string{"a"}},
+		{[]string{"a"}, []string{"b", "c"}},
+		{[]string{"a", "b"}, []string{"c"}},
+		{[]string{"a", "c"}, []string{"c", "d"}},
+		{[]string{"a", "c", "c"}, []string{"d"}},
+		{[]string{"a", "c", "d"}, nil},
+	} {
+		cmWantAdmissible(t, cmMatcher(t, model(), nil), tc.feed, tc.want...)
+	}
+
+	// The walk offers b, later in the open iteration, before it offers a, the
+	// first item of a fresh one, and the list is in the model's order anyway.
+	repeating := cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+		cmGroup(t, uOccurs(t, 1, 2), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, 1)),
+			cmLeaf(t, "b", uOccurs(t, 0, 1))))
+	cmWantAdmissible(t, cmMatcher(t, repeating, nil), []string{"a"}, "a", "b")
+}
+
+// A choice offers every member at once (§3.8.4.1.2), and once one is taken
+// the iteration is over, so what follows the choice is offered and no other
+// member is.
+func TestMatcherAdmissibleOffersEveryMemberOfAChoice(t *testing.T) {
+	model := func() Particle {
+		return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmGroup(t, uOccurs(t, 1, 1), CompositorChoice,
+				cmLeaf(t, "a", uOccurs(t, 1, 1)),
+				cmLeaf(t, "b", uOccurs(t, 1, 1)),
+				cmLeaf(t, "c", uOccurs(t, 1, 1))),
+			cmLeaf(t, "d", uOccurs(t, 1, 1)))
+	}
+	for _, tc := range []cmAdmissibleCase{
+		{nil, []string{"a", "b", "c"}},
+		{[]string{"b"}, []string{"d"}},
+	} {
+		cmWantAdmissible(t, cmMatcher(t, model(), nil), tc.feed, tc.want...)
+	}
+}
+
+// An all group offers every member short of its {max occurs}, a nested all
+// group's members included, whatever member the last item went to
+// (§3.8.4.1.3): a spent member drops out and the rest stay, in the model's
+// order — a, c, d, b for all(a, all(c, d), b), not the order they were taken.
+func TestMatcherAdmissibleOffersTheUnspentMembersOfAnAllGroup(t *testing.T) {
+	for _, tc := range []cmAdmissibleCase{
+		{nil, []string{"a", "c", "d", "b"}},
+		{[]string{"b"}, []string{"a", "c", "d"}},
+		{[]string{"a", "c"}, []string{"d", "b"}},
+		{[]string{"d", "b", "c"}, []string{"a"}},
+		{[]string{"d", "b", "c", "a"}, nil},
+	} {
+		cmWantAdmissible(t, cmMatcher(t, cmNestedAll(t), nil), tc.feed, tc.want...)
+	}
+}
+
+// One particle is listed ONCE however many live partitions reach it. After "a
+// a", (a{1,2}, b?){2,2} holds two partitions — (a a) still in the first
+// iteration and (a)(a) in the second — and both offer b, while a is the second
+// iteration's next a for one and its first for the other.
+func TestMatcherAdmissibleListsAParticleOnceAcrossLivePartitions(t *testing.T) {
+	m := cmMatcher(t, cmNested(t), nil)
+	cmWantAdmissible(t, m, []string{"a", "a"}, "a", "b")
+	if len(m.live) < 2 {
+		t.Fatalf("the feed left %d live regions, want the two partitions the test is about", len(m.live))
+	}
+}
+
+// Under {mode} interleave the {open content} is offered at every position,
+// after the particles, and is the whole offer once the {particle} is done
+// (cvc-complex-content clause 3).
+func TestMatcherAdmissibleOffersInterleavedOpenContentLast(t *testing.T) {
+	model := func() *Matcher {
+		return cmOpenMatcher(t, OpenContentInterleave, cmOpenWildcard(t),
+			cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+				cmLeaf(t, "a", uOccurs(t, 1, 1)),
+				cmLeaf(t, "b", uOccurs(t, 1, 1))))
+	}
+	for _, tc := range []cmAdmissibleCase{
+		{nil, []string{"a", "open"}},
+		{[]string{"a", "x"}, []string{"b", "open"}},
+		{[]string{"a", "x", "b"}, []string{"open"}},
+	} {
+		cmWantAdmissible(t, model(), tc.feed, tc.want...)
+	}
+}
+
+// Under {mode} suffix the {open content} is offered beside the particles until
+// an item starts S2, and alone after that, though the {particle} is still owed
+// b: S = S1 + S2 is a concatenation (cvc-complex-content clause 2.1).
+func TestMatcherAdmissibleOffersSuffixOpenContentAloneInsideS2(t *testing.T) {
+	model := func() *Matcher {
+		return cmOpenMatcher(t, OpenContentSuffix, cmOpenWildcard(t),
+			cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+				cmLeaf(t, "a", uOccurs(t, 1, 1)),
+				cmLeaf(t, "b", uOccurs(t, 1, 1))))
+	}
+	for _, tc := range []cmAdmissibleCase{
+		{nil, []string{"a", "open"}},
+		{[]string{"a"}, []string{"b", "open"}},
+		{[]string{"a", "x"}, []string{"open"}},
+	} {
+		cmWantAdmissible(t, model(), tc.feed, tc.want...)
+	}
+}
+
+// A ·wildcard particle· is listed in its place in the model like an element
+// particle, and an element particle and a wildcard that admit one name — the
+// competition 1.1 permits — are both listed.
+func TestMatcherAdmissibleListsAWildcardParticleInItsPlace(t *testing.T) {
+	m := cmMatcher(t, cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+		cmLeaf(t, "a", uOccurs(t, 0, 1)),
+		uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uWildcard(t, NamespaceConstraintAny, nil, ProcessLax)}),
+		cmLeaf(t, "b", uOccurs(t, 1, 1))), nil)
+	cmWantAdmissible(t, m, nil, "a", "wildcard", "b")
+}
+
+// cmClone is m with every live region copied, so Next can be asked of the copy
+// without moving m. It shares m.nodes, which no walk step writes, and no
+// scratch (Matcher.probe).
+func cmClone(m *Matcher) *Matcher {
+	c := *m
+	c.live = make([]region, len(m.live))
+	for i := range m.live {
+		c.live[i] = m.live[i].clone()
+	}
+	c.path = slices.Clone(m.path)
+	c.probe, c.reached = nil, nil
+	return &c
+}
+
+// cmArmAdmits reports whether one Admissible arm admits name, on the terms
+// Next decides it: an element declaration by name or ·substitution group·
+// membership (cvc-accept clause 2.3), a wildcard or the {open content}'s by
+// cvc-wildcard.
+func cmArmAdmits(m *Matcher, a Attribution, name QName) bool {
+	switch v := a.(type) {
+	case ElementDeclaration:
+		return v.Name() == name || m.s.nameInSubstitutionGroupOf(name, v)
+	case Wildcard:
+		return m.s.allowsElementWildcardName(v, m.ct, name)
+	case *OpenContent:
+		return m.s.allowsElementWildcardName(v.Wildcard(), m.ct, name)
+	default:
+		panic("cmArmAdmits: non-exhaustive Attribution switch")
+	}
+}
+
+// Admissible is exactly the set Next decides by, at every position of every
+// model in cmProbeModels' grid over every cmProbeFeeds feed, the end of the
+// feed included: Next takes a name iff some listed arm admits it, for each of
+// the grid's names and one no model uses. It is read-only as well: the call
+// leaves the walk state as it found it, and a twin matcher fed the same items
+// and never asked answers every Next and Accepting identically.
+func TestMatcherAdmissibleIsTheSetNextDecidesBy(t *testing.T) {
+	models, feeds := cmProbeModels(t), cmProbeFeeds()
+	for _, pm := range models {
+		s, ct := cmProbeSchema(t, pm.name, pm.model())
+		for _, feed := range feeds {
+			m, _ := s.ContentMatcher(ct)
+			twin, _ := s.ContentMatcher(ct)
+			for k, n := range feed {
+				cmCheckAdmissible(t, m, fmt.Sprintf("%s: over %v at item %d", pm.name, feed, k))
+				_, took := m.Next(uq(n))
+				_, twinTook := twin.Next(uq(n))
+				if took != twinTook || m.Accepting() != twin.Accepting() {
+					t.Fatalf("%s: over %v at item %d, the matcher asked Admissible answers differently from its twin",
+						pm.name, feed, k)
+				}
+			}
+			cmCheckAdmissible(t, m, fmt.Sprintf("%s: at the end of %v", pm.name, feed))
+		}
+	}
+}
+
+// cmCheckAdmissible asserts, where m stands, that m.Admissible() leaves the
+// walk state untouched and that Next takes each of a, b, c, d and e exactly
+// where some arm it lists admits that name.
+func cmCheckAdmissible(t *testing.T, m *Matcher, where string) {
+	t.Helper()
+	before := cmClone(m)
+	arms := m.Admissible()
+	sameRegion := func(x, y region) bool { return slices.Equal(x.counts, y.counts) }
+	if !slices.EqualFunc(m.live, before.live, sameRegion) || !slices.Equal(m.path, before.path) || m.inS2 != before.inS2 {
+		t.Fatalf("%s, Admissible changed the walk state", where)
+	}
+	for _, probe := range []string{"a", "b", "c", "d", "e"} {
+		_, took := cmClone(m).Next(uq(probe))
+		listed := slices.ContainsFunc(arms, func(a Attribution) bool { return cmArmAdmits(m, a, uq(probe)) })
+		if took != listed {
+			t.Fatalf("%s, Next(%s) = %t but the arms Admissible lists, %v, admit it: %t",
+				where, probe, took, cmAdmissible(t, m), listed)
+		}
+	}
 }

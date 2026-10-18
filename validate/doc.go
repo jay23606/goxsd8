@@ -278,11 +278,16 @@
 // cannot take goes to that record's {wildcard} instead and is charged
 // only where the wildcard does not admit it either — clause 2 for {mode}
 // suffix and clause 3 for interleave, which is the clause each charge
-// names. Clause 1.2 additionally reads a VALUE, through the same backend the
-// attribute charges use: a simple {content type} has the root's ·initial
-// value· — every character information item [[child]] concatenated in order
-// — validated against its {simple type definition} per String Valid, charged
-// against the root's own Loc. Clause 5 asks each element [[child]]'s
+// names. Each such charge names what the content model expected at that
+// position — the first few element declarations and wildcards in content-model
+// order, then a count of the rest, and at a rejected item the {open content}
+// wildcard, if present, always named and last — and no later child of a charged
+// element is matched, so a second misplaced child goes unreported until the
+// first is fixed. Clause 1.2 additionally reads a VALUE, through the same
+// backend the attribute charges use: a simple {content type} has the root's
+// ·initial value· — every character information item [[child]] concatenated in
+// order — validated against its {simple type definition} per String Valid,
+// charged against the root's own Loc. Clause 5 asks each element [[child]]'s
 // ·governing type definition· to be the same as, or ·validly substitutable·
 // ·without limitation· for, its ·locally declared type· within the root's type
 // (key-ldt-elem, xsd.Schema.LocallyDeclaredElementType), charged against the
