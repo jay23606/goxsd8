@@ -2018,11 +2018,10 @@ func (r *attributeRun) attributes() []validate.Attribute {
 	return attrs
 }
 
-// has reports whether r already holds an attribute named name.
+// has reports whether a member of r's run is the attribute named name. r.typ
+// is never that attribute: the mapping names no member an attribute in the
+// xsi namespace (walker.classify's declines).
 func (r *attributeRun) has(name xsd.QName) bool {
-	if r.typ != nil && r.typ.name == name {
-		return true
-	}
 	return slices.ContainsFunc(r.run, func(m *runMember) bool { return m.attributeName() == name })
 }
 
@@ -2118,7 +2117,11 @@ func (m *runMember) attribute() bool {
 // GAP(jsonsrc): the same decline stands where the engine withholds the type
 // one of those readings selects, a {test} it reaches being outside its
 // §3.12.6 compiler's subset, the mapping then not knowing which type governs
-// that reading. Owned by #2702.
+// that reading. RULED permanent by #2702: key-cta-select tries the Type
+// Alternatives in order and selects the first whose {test} succeeds, and
+// key-cta-ta-select clause 2 makes a {test} false only where it raises an
+// error, which a {test} outside the subset does not, so no alternative after
+// the withheld one is tried and dropping the candidate would select past it.
 func (w *walker) candidates(r *attributeRun, next *runMember) (unsettled, err error) {
 	if r.table == nil {
 		ms, err := w.membersOf(r.live, next.key, next.k, next.loc)
@@ -2315,12 +2318,11 @@ func (w *walker) extend(r *attributeRun, next *runMember) (unsettled, err error)
 // classifies as it reads has no XML twin — that type takes the member after
 // the reading's attributes as an attribute while its value is no scalar,
 // which the mapping declines as an attribute (notScalar), or the reading's
-// attributes, xsi:type among them, repeat an expanded name (XML 1.0 §3.1,
-// Unique Att Spec; Namespaces in XML §6.3) — even where another reading
-// stands, though the engine assesses that other reading's XML twin. RULED
-// permanent by #2700: a reading with no XML twin cannot be assessed by the
-// engine and so cannot be excluded, and nothing in Structures ranks the
-// readings.
+// attributes repeat an expanded name (XML 1.0 §3.1, Unique Att Spec;
+// Namespaces in XML §6.3) — even where another reading stands, though the
+// engine assesses that other reading's XML twin. RULED permanent by #2700:
+// a reading with no XML twin cannot be assessed by the engine and so cannot
+// be excluded, and nothing in Structures ranks the readings.
 //
 // GAP(jsonsrc): the root declines where a candidate type takes no member of a
 // reading otherwise than the reading does but declines so many of its
@@ -2333,7 +2335,12 @@ func (w *walker) extend(r *attributeRun, next *runMember) (unsettled, err error)
 // GAP(jsonsrc): the root declines where the engine withholds the type a
 // reading selects, a {test} it reaches being outside its §3.12.6 compiler's
 // subset, the mapping then not knowing whether that reading stands, though
-// the engine assesses each XML twin. Owned by #2702.
+// the engine assesses each XML twin. RULED permanent by #2702: key-cta-select
+// tries the Type Alternatives in order and selects the first whose {test}
+// succeeds, and key-cta-ta-select clause 2 makes a {test} false only where it
+// raises an error, which a {test} outside the subset does not, so no
+// alternative after the withheld one is tried and standing the reading or
+// ruling it out would select past it.
 //
 // GAP(jsonsrc): the root declines where no reading stands, though the engine
 // assesses each XML twin, whichever members it takes as attributes: the
@@ -2591,10 +2598,9 @@ func assignments(table xsd.TypeTable, items []*runMember, names []xsd.QName, fre
 // member of the run and each of those items, which the type must take as the
 // attributes the reading does (walker.fitsAttribute), and of the item after
 // them, which it must take as no attribute (walker.fitsChild). A reading that
-// fits but repeats an expanded name among its attributes, xsi:type among
-// them, is undecided: it has no XML twin, and walker.readAhead's GAP(jsonsrc)
-// marker RULED permanent by #2700 tracks the decline, another reading
-// standing or not.
+// fits but repeats an expanded name among its attributes is undecided: it has
+// no XML twin, and walker.readAhead's GAP(jsonsrc) marker RULED permanent by
+// #2700 tracks the decline, another reading standing or not.
 func (w *walker) judge(r *attributeRun, la lookahead, k int, names []xsd.QName) (reading, fit) {
 	attrs := r.attributes()
 	for i, it := range la.items[:k] {
@@ -2624,7 +2630,7 @@ func (w *walker) judge(r *attributeRun, la lookahead, k int, names []xsd.QName) 
 	if k < len(la.items) && la.items[k].val.tok != json.Delim('[') {
 		f = max(f, w.fitsChild(so, la.items[k]))
 	}
-	if f == consistent && (repeats(taken) || r.typ != nil && slices.Contains(taken, r.typ.name)) {
+	if f == consistent && repeats(taken) {
 		return rd, undecided
 	}
 	return rd, f
@@ -2727,16 +2733,21 @@ func (w *walker) take(r *attributeRun, la lookahead, rd reading) ([]validate.Att
 // the root is assessed under classifies it as one, and here none does. RULED
 // permanent by #2701: Structures assesses an element whose [attributes] are
 // given, each reading is an element of its own, and no clause ranks the
-// readings (key-selected-type clause 1 ranks Type Alternatives within one),
-// so the mapping has no reading to name.
+// readings (key-selected-type clause 1 defers to the Type Alternative
+// key-cta-select ranks first within one), so the mapping has no reading to
+// name.
 //
 // GAP(jsonsrc): where the engine withholds the type a root's {type table}
 // ·conditionally selects·, a {test} it reaches being outside its §3.12.6
 // compiler's subset (validate's walk.conditionallySelected, recorded
 // Unevaluated under key-cta-ta-select), the members of the root decline
 // unless every type the table can select classifies them alike, where the
-// engine assesses the XML twin under no ·governing type definition·. Owned by
-// #2702.
+// engine assesses the XML twin under no ·governing type definition·. RULED
+// permanent by #2702: key-cta-select tries the Type Alternatives in order and
+// selects the first whose {test} succeeds, and key-cta-ta-select clause 2
+// makes a {test} false only where it raises an error, which a {test} outside
+// the subset does not, so no alternative after the withheld one is tried and
+// classifying the members under any one candidate would select past it.
 func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (final *object, unsettled, err error) {
 	if r.table == nil {
 		return w.unselected(r, next)
