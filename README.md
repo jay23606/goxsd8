@@ -93,6 +93,18 @@ and this instance as `order.json`:
 goxsd8 validate -schema order.xsd order.json    # exit 0
 ```
 
+This is not arbitrary JSON and not JSON Schema: the instance is read as the
+XML document `validate/jsonsrc`'s mapping defines, where the top-level
+object's one member names the root element and, in an element's object,
+every member but `"$xmlns"` and `"$type"` is an attribute or a child. The root
+key `"o:order"` is prefixed through `"$xmlns"` so its namespace is spelled,
+though an unprefixed `"order"` also matches the top-level declaration of that
+local name, targetNamespace or not, unless two top-level declarations carry
+it (jsonsrc's "The validation root"). A number's lexical form is its source
+digits, never a float64 round trip (`1.0` stays `1.0`, `1e2` stays `1e2`),
+and `true` and `false` are those literals, so a JSON boolean is an
+`xs:boolean` lexical form.
+
 A child key may repeat in one object: each member is one more child, in
 member order, which is how a model interleaving repeats (a, b, a) is
 spelled. A repeated attribute key, `"$xmlns"` or `"$type"` is declined
@@ -238,7 +250,8 @@ for _, u := range res.Unevaluated() { // no String method: this is the CLI's for
 ```
 
 A JSON instance validates through the same `v` today: `validate/jsonsrc`
-maps it onto the infoset and hands it to the same engine, so its violations
+maps it onto the infoset, read as the CLI section's JSON example says, and
+hands it to the same engine, so its violations
 carry the same `cvc-` rule IDs, located by jsonsrc's line and byte column.
 `go doc github.com/kud360/goxsd8/validate/jsonsrc` opens on the JSON shape in
 brief. Continuing the program, add `github.com/kud360/goxsd8/validate/jsonsrc`

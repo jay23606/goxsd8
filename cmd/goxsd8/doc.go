@@ -113,7 +113,10 @@
 //	    "@kind", "_kind" or "-kind" — and lead the object, before
 //	    every child member. A scalar is the element's simple content,
 //	    null is xsi:nil="true", and an array is one child per item,
-//	    for repeated children. A child key may repeat in one object:
+//	    for repeated children. A number's lexical form is its source
+//	    digits, never a float64 round trip (1.0 stays 1.0, 1e2 stays
+//	    1e2), and true and false are those literals, so a JSON boolean
+//	    is an xs:boolean lexical form. A child key may repeat in one object:
 //	    each member is one more child, in member order, which is how a
 //	    model interleaving repeats (a, b, a) is spelled. A repeated
 //	    attribute key, "$xmlns" or "$type" is declined (exit 4).
