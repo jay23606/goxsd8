@@ -17,23 +17,23 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-18 (`/backlog`, on `main` at `3a8126e`)
+## Status — 2026-10-18 (post-land for #1880, on `main` at `f3cb9b2f`)
 
-**North star: the `instance` lane's `VC` `<versioned>` cluster, 16 cases, the
-largest W3C cluster no ruling holds.** The owner ruled #1880 on 2026-10-10,
-and the thirteenth retro found it on 2026-10-18. #1880 is now `ready` and
-leads the band, and #1002 starts when it lands. **`json`, M8, is the second
-track, and its rows now bank curated cases.** The retro found that `json` had
-not moved since `8dc1293` across fourteen M8 landings. #2795, #2699's
-re-plan, names the curated rows it banks. **Lean: product.** The retro's
-product share fell from 76% to 54%, and W3C yield was 4 cases in 54 sessions.
-The band is lane work first. Persona documentation and process sit below it.
+**North star: the `instance` lane's `VC` cluster, through #1002, which is now
+`ready` and leads the band.** #1880 landed the route-2 gate path (`f3cb9b2f`),
+and #1002 lands its one banked loss, `vc002.n1.xml`, through it. #1880's
+arbiter measured #1002's arm on `248abbef`: `schema` +2, `instance` +2/−1.
+**That run moved none of the 16 `VC` declined-valid cases** the last
+stamp attributed to #1002, so what holds them is unattributed; the next
+partition answers it. **`json`, M8, is the second track.** **Lean: product**,
+unchanged from the `3a8126e` stamp: the retro's product share fell from 76% to
+54%, and W3C yield was 4 cases in 54 sessions.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `3a8126e`.**
-It is the committed expectations census, which `docs/WORKFLOW.md` names as the
-lane score (#1120).
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at
+`f3cb9b2f`.** It is the committed expectations census, which `docs/WORKFLOW.md`
+names as the lane score (#1120).
 
 | Lane | Pass | Fail | Total |
 |---|---:|---:|---:|
@@ -44,20 +44,19 @@ lane score (#1120).
 | `schema` | 15300 | 98 | 15398 |
 | `xpath` | — | — | 0 |
 
-**No lane moved since the `c41c173` stamp.** None of the 23 commits since
-changed an expectations file. **`datatypes ⊆ instance` is intended** (#1507).
-**An em dash means a lane with no cases yet, not a lane scoring zero.**
-`datatypes` is M3 and complete. `schema` is M4, `instance` is M5, and `json`
-is M8, and all three are active. `json`'s cases are curated in
-`conformance/testdata/json/`, so it moves only by curated cases a landing
-adds. `xpath` waits on M7 and `ber` on M11.
+**No lane moved since the `3a8126e` stamp.** The two commits since, `248abbef`
+and `f3cb9b2f`, touch only `docs/` and `.claude/`. **`datatypes ⊆ instance` is
+intended** (#1507). **An em dash means a lane with no cases yet, not a lane
+scoring zero.** `datatypes` is M3 and complete. `schema` is M4, `instance` is
+M5, and `json` is M8, and all three are active. `json` moves only by curated
+cases a landing adds. `xpath` waits on M7 and `ber` on M11.
 
 ### What holds each active lane's failures
 
 **Measured on `1eada09` by the thirteenth retro** (a read-only
-`GOXSD_DECLINES=1` run fed to `go tool lanepartition`). It was not re-run
-here, because no lane moved since then. Every figure is a part of the banked
-fails and a bound from above.
+`GOXSD_DECLINES=1` run fed to `go tool lanepartition`). Not re-run, because no
+lane moved since. Every figure is a part of the banked fails and a bound from
+above.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
@@ -65,9 +64,11 @@ fails and a bound from above.
 | `schema` | 98 | 1 | 11 | 86 |
 | `datatypes` | 10 | 6 | — | 4 |
 
-- **`VC` `<versioned>` 16 declined-valid, plus `vc002.n1.xml`, is #1002.** It
-  waits on #1880 alone (owner ruling issuecomment-6101825813). `vc002.v1`, the
-  last assertion decline (#1042), follows it.
+- **`VC`:** 21 `instance` and 2 `schema` fails are banked. #1002 targets
+  `vc007.xsd` and `vc_003_1` (`schema`) and `vc006.n1.xml` and `vc_003_2`
+  (`instance`), and banks `vc002.n1.xml` as a superseded pass. `vc002.v1`
+  follows through #1042. No open issue targets the 16 declined-valid cases;
+  every case #1002 moves is one the suite declares invalid.
 - **Every other `instance` cluster is ruled or recorded.** `MS-Regex` 18 is
   ruled by #1899, `MS-Attribute`'s 11 by #2151, and `MS-Particles`' ceiling by
   #1601. `MS-Additional`'s 5 are named in #2171. `MS-Schema`'s 4 and 3 match
@@ -81,28 +82,21 @@ fails and a bound from above.
 
 ### Branch namespace, `origin` (report-only; containers cannot delete a ref)
 
-**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 2794 distinct 2794
-min 1 max 2794 no gaps`, taken before this pass's writes). Nothing is LIVE or
-CLAIMED.
+**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 2800 distinct 2800
+min 1 max 2800 no gaps`). Nothing is LIVE or CLAIMED. `wip/issue-1880` is gone,
+as a landing leaves it.
 
-- **RETIRED, deletable now:** `wip/issue-2013` and `wip/issue-2332` (both
-  closed `not_planned`, contents accounted for), and `wip/issue-2722` (closed
-  `not_planned`, re-planned into #2780–#2783).
-- **RETIRED, keep until its replacement lands:** `wip/issue-2699` (closed
-  `not_planned` by this pass) is #2795's prior art, `d0b9f4a..29127f3`. Its tip
-  `5812f283` also holds #2699's park entry, which never reached `main`.
-  `wip/issue-2696` is #2703's cited attempt. #2703 has landed, so it is
-  deletable.
+- **RETIRED, deletable now:** `wip/issue-2013`, `wip/issue-2332`,
+  `wip/issue-2722` and `wip/issue-2696` (each issue closed, contents accounted
+  for).
+- **RETIRED, keep until its replacement lands:** `wip/issue-2699` is #2795's
+  prior art, `d0b9f4a..29127f3`. Its tip `5812f283` also holds #2699's park
+  entry, which never reached `main`.
 - **EXPIRED:** `wip/issue-2081`, a parked grounding with no code, on an issue
   `blocked` on the owner.
-- **Landed passes `wipsurvey` prints STRANDED** (a squash landing never clears
-  ancestry, #2610): `meta/backlog-2026-10-01-b` (PR #2011, `a0adf07`) and
-  `meta/backlog-20261013-0808` (#2609, `8d91fcf`). The later landed passes
-  `022d9fe3` and `bfa7ac1a` supersede both. Delete both. `meta/backlog-20261018-1405` is
-  this pass's claim.
-- **Certified for deletion and still standing:** `chronicler-345`,
-  `meta/post-land-1816`, `meta/post-land-1908`, `postland-2099` and
-  `postland/issue-2284`.
+- **Certified for deletion and still standing:** `meta/backlog-2026-10-01-b`,
+  `meta/backlog-20261013-0808`, `chronicler-345`, `meta/post-land-1816`,
+  `meta/post-land-1908`, `postland-2099` and `postland/issue-2284`.
 - **For human triage:** `parked/untriaged-20260930-110432`,
   `parked/untriaged-20260930-215455`, and eight subagent branches the survey
   skips: `wip/issue-1861-{mason,chronicler}`, `wip/issue-1926-{mason,chronicler}`,
@@ -111,20 +105,19 @@ CLAIMED.
 
 ### Marker census
 
-**`go tool gapaudit` on `3a8126e`, fed the same walk:** 181 markers across 11
+**`go tool gapaudit` on `f3cb9b2f`, fed the same walk:** 181 markers across 11
 areas (xpath 63, xsd 32, jsonsrc 29, validate 23, value 11, parser 8,
-conformance 7, xml 3, landcheck 2, regex 2, cmd 1). jsonsrc grew by 6 with
-#2700–#2703. **Group 1 has the same 11 rows as at `c41c173`, and 0 dead
-ends.** Eight are #2719's. The other three have an owner written into the body:
-`xsd/derivation.go:1293` (#555), `value/valuespace.go:152` (#462) and
-`tools/landcheck/keywords.go:48` (#2541). **Group 2 has 27 rows**, all kind/gap
-trackers that carry no marker by design. Closing #2699 leaves three jsonsrc
-markers citing a closed issue. #2795's Acceptance lifts them, and until then
-gapaudit reads them as dead ends.
+conformance 7, xml 3, landcheck 2, regex 2, cmd 1). **Group 1 has the same 11
+rows as at `3a8126e`.** Eight are #2719's. Three are jsonsrc markers citing
+#2699, closed; #2795's Acceptance lifts them. The other three have an owner
+written into the body: `xsd/derivation.go:1293` (#555),
+`value/valuespace.go:152` (#462) and `tools/landcheck/keywords.go:48` (#2541).
+**Group 2 has 28 rows**, all kind/gap trackers that carry no marker by design.
+#1002's marker, `parser/conditional.go:208`, is live and goes with #1002.
 
 ### Milestones and queue
 
-**Read from GitHub after this pass: 340 open issues.**
+**Read from GitHub after this pass: 339 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -132,78 +125,41 @@ gapaudit reads them as dead ends.
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 13 | complete |
 | **M4 — Schema parsing** | **61** | **180** | active |
-| **M5 — Instance validation (XML)** | **9** | **136** | active; north star via #1002 |
+| **M5 — Instance validation (XML)** | **9** | **136** | active; north star #1002 |
 | **M6 — XPath required subset** | **6** | **45** | active |
 | M7 — XPath 2.0 growth | 1 | 1 | #2619 open |
 | **M8 — JSON instance adapter** | **11** | **36** | active; `json` 41 |
 | M9–M12 | 0 | 0 | not started |
 
-The open issues are **322 `ready`, 16 `blocked` and 2 `epic`**, which sums to
-340. No issue is `needs-replan` or unlabelled. Open `kind/process` is 1
-(#1885). M8's eleven are #2670 (`blocked`), #2723, #2757, #2769, #2780–#2783
-(#2783 `blocked` on #2781), #2795, #2796 and #2798.
+The open issues are **322 `ready`, 15 `blocked` and 2 `epic`**, which sums to
+339. No issue is `needs-replan` or unlabelled. Open `kind/process` is 1
+(#1885).
 
-- **This pass filed #2795–#2798 and closed #2699 `not_planned`.**
-  - #2795 re-plans #2699 (parked 2026-10-17 at its second reject, no post-land
-    pass).
-  - #2796 is the `instanceUnder` hypothesis #2699's mason named.
-  - #2797 and #2798 are persona findings.
-- **`blocked` is 16:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1885, #2022, #2081, #2376, #2533, #2670, #2749 and #2783. **Nothing
-  unblocked.**
-  - #1002 waits on #1880, #2783 on #2781, #2376 on #2370, and #1051 on #1183
+- **This pass unblocked #1002** and restated its body: route 2 replaces the
+  read-only-gate section, and the prediction is by name from #1880's run.
+- **`blocked` is 15:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885,
+  #2022, #2081, #2376, #2533, #2670, #2749 and #2783.
+  - #1042 waits on #1002, #2783 on #2781, #2376 on #2370, and #1051 on #1183
     and #1196. All are open.
   - #1609's arms read 98 and 15398, and no landing edited
     `xsd/contentrestricts.go`.
   - #2670 waits on #1601's ruling reopening. #2533 waits on an
-    evaluation-time CTA decline. #1042 waits on #1002.
-  - **The owner's REST `performed_via_github_app: null` check found no owner
-    comment** on #1885, #2081, #1790, #2022 or #2749. #1002's one owner comment
-    (2026-09-28) predates its re-block on #1880.
-- **Measured refactors, re-run on `3a8126e`. Every figure is flat, and none
-  grew:**
-  - #363 2, #848 2 and 0, #1080 8, #1865 2, #1958 2, #2101 1 and 1, #2205 2.
-  - #2237 24, #2239 2, #2329 1, #2359 14.
-  - #2370 32, #2372 27, #2373 16, #2374 22, #2375 1 and 1.
-  - #2595 1 and 1, #2599 186, #2600 2, #2601 0, #2663 4, #2675 5.
-  - The audit's new four, at their filing figures: #2790 3, #2791 6, #2792 5
-    and 2, #2793 3.
+    evaluation-time CTA decline.
+  - **#1885 gained gap (c) this pass** (arbiter.md's "Empty: the run found no
+    movement." against a refused route-2 bank run); its ask is otherwise
+    unchanged by #1880. No owner comment is on its thread.
+- **Measured refactors were re-run at `3a8126e`, and no code has changed
+  since.** Every figure stands: #363 2, #848 2 and 0, #1080 8, #1865 2, #1958
+  2, #2101 1 and 1, #2205 2, #2237 24, #2239 2, #2329 1, #2359 14, #2370 32,
+  #2372 27, #2373 16, #2374 22, #2375 1 and 1, #2595 1 and 1, #2599 186, #2600
+  2, #2601 0, #2663 4, #2675 5, #2790 3, #2791 6, #2792 5 and 2, #2793 3.
 
 ### Persona consultations
 
-**Both personas were consulted at this stamp, `3a8126e`.** The earlier round's
-findings #2756–#2759 had all landed (`f31db4b`, `1154b0f`, `c29b245`), and
-#1898 too, so none stood unconsumed. libuser's three stories passed first try, cliuser
-found the CLI as documented with no exit-code drift, and neither found a
-blocker. Every claim below was
-checked against the tree, and the CLI ones were re-run.
-
-- **Filed:** #2797 (cliuser 5: the skipped-directive line omits the location)
-  and #2798 (libuser 1: README's example list omits
-  `ExampleValidator_ConditionallySelected`, and empty `inherited` is
-  unstated).
-- **Folded:**
-  - cliuser 1 into #2370 and #1409;
-  - cliuser 3 into #2402;
-  - cliuser 4 into #2723, reproduced (`2:1` after a trailing LF);
-  - cliuser 5's `-strict` into #1845;
-  - cliuser 8 into #1570, and cliuser 9 into #1144;
-  - libuser 3 into #688, and libuser 4 into #1430;
-  - libuser 5 and 8 into #1088, whose stale "zero Examples" premise is
-    corrected;
-  - libuser 7 into #2313.
-- **Dismissed:**
-  - cliuser 2: #2310 ruled that a lexical failure is charged to the built-in
-    pattern of the type on the base chain that declares it, and the outer
-    clause names the declared type.
-  - cliuser 3's byte column, which README, `cmd/goxsd8/doc.go` and jsonsrc's
-    doc all state.
-  - cliuser 6: the message says the flag stands after a positional, which is
-    the cause, and the synopsis puts flags first.
-  - cliuser 7: the `-help` route line is deliberate.
-  - libuser's `Attribute` constructor and one-step resolved-type wishes have
-    no consumer (STYLE headline 8).
-- The next round is due when the published surface next changes.
+**Both personas were consulted at `3a8126e`.** Their findings are filed or
+folded: #2797 and #2798 filed; folds on #2370, #1409, #2402, #2723, #1845,
+#1570, #1144, #688, #1430, #1088 and #2313. The published surface has not
+changed since, so no round is due. The next is due when it next changes.
 
 ### Working band
 
@@ -215,7 +171,7 @@ row's state. Each row names one issue (#1636).
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #1880 | **Frees #1002's 16 `VC` cases**, the largest W3C cluster no ruling holds. The owner ruled route 2 on 2026-10-10. It edits `arbiter.md`'s Ratchet integrity section under that ruling, which a develop session may do and a retro may not. Its three demonstrations run before landing. `Ratchet: unchanged`. #1002 then leaves `blocked` and leads the next band. |
+| 1 | #1002 | **The `vc:maxVersion` arm**, measured on #1880's run: `schema` +2 (#732's two false rejects), `instance` +2/−1. Its one loss, `vc002.n1.xml`, lands by arbiter.md's route 2, proven on this arm. Prior art on `wip/issue-732` at `6334ffc`. It unblocks #1042. |
 
 **Tier B: M8, banking curated `json` rows.**
 
@@ -224,14 +180,14 @@ row's state. Each row names one issue (#1636).
 | 2 | #2795 | **#2699 re-planned.** A below-root {type table} selects. Prior art on `wip/issue-2699` passed every gate part. It needs round 2's pinning row and four prose fixes, and `json` rises by the curated rows it adds. Read #2791's Notes on ordering. |
 | 3 | #2782 | **A false accept.** An unprefixed non-NCName key (`"@kind"`) maps to an element with no XML twin, and exits 0 under a `##local` skip wildcard. It declines instead. |
 | 4 | #2781 | **#2722's "object expected" clause**, with the round-2 REPAIR DIRECTION as its bar. It unblocks #2783. |
-| 5 | #2723 | **Reproduced this pass:** a truncated document with a trailing LF is located on a line it does not have. Small, one offset index. |
+| 5 | #2723 | **A truncated document with a trailing LF** is located on a line it does not have. Small, one offset index. |
 | 6 | #2796 | **A grounding first.** It either produces a twin-divergent probe for `instanceUnder` or closes `not_planned`. |
 
 **Tier C: tooling.**
 
 | # | issue | why here |
 |---|---|---|
-| 7 | #2789 | **The fired-trigger blind spot that hid #1880 for eight days.** It lists `blocked` issues whose thread carries an owner comment, which this pass checked by hand. |
+| 7 | #2789 | **The fired-trigger blind spot that hid #1880 for eight days.** It lists `blocked` issues whose thread carries an owner comment, which each pass checks by hand. |
 | 8 | #2748 | **`issuefeed -comments`.** It closes #1153 and #1217. |
 
 **Named below the band, on purpose.**
@@ -245,8 +201,7 @@ row's state. Each row names one issue (#1636).
     would also retire #2796, and its ordering with #2795 is in both bodies.
   - #2792 (needs a warden pre-flight, 5 and 2).
 - **Persona documentation, behind lane work by the retro's bar:**
-  - #2797, #1088, #1144, #1430, #688 and #2313. Each carries this round's
-    sighting.
+  - #2797, #1088, #1144, #1430, #688 and #2313.
   - `cmd/goxsd8`'s `usage` family: #1407, #1089, #1433, #1571 and #1570.
   - README: #1143 and #1003.
 - **Marker bookkeeping:** #2719 (gapaudit's 8 Group 1 rows). A session in
@@ -259,8 +214,8 @@ row's state. Each row names one issue (#1636).
 - **M6:** #2663 (flat at 4) and #2662 share `validate/cvcassertion.go`. #2455,
   #2437 and #2394 are in `xpath/assertion.go`, one at a time with #2370, #2314
   and #889.
-- **STYLE E5 sweeps,** measured flat: #2370 (re-sighted again), #2372, #2373,
-  #2374 and #2375. #2376 waits on #2370.
+- **STYLE E5 sweeps,** measured flat: #2370, #2372, #2373, #2374 and #2375.
+  #2376 waits on #2370.
 - **M5 residue:** #2764 (a repeated attribute name, `parser/xmltree`), #2494,
   #1825, #1382, #1257, #1250, #920 and #2419.
 - **M4, where `Ratchet: unchanged` is expected or the bound is small:** #2087,
@@ -276,13 +231,14 @@ row's state. Each row names one issue (#1636).
 
 ### Next planning action
 
-1. **Post-land for #1880.** Relabel #1002 `ready` when #1880 closes, and
-   confirm that its three demonstrations are quoted on the thread.
-2. **Post-land for #2795.** Record the curated rows it banked. Relabel
-   nothing unless a body names it. Re-measure #2796 if #2795's port touched
-   `instanceUnder`.
+1. **Post-land for #1002.** Relabel #1042 `ready` only if its body names
+   nothing else open. Then partition the `instance` lane's `VC` cluster on a
+   `GOXSD_DECLINES=1` run: name the decision holding the 16 declined-valid
+   cases, and file it if no open issue targets it.
+2. **Post-land for #2795.** Record the curated rows it banked. Re-measure
+   #2796 if #2795's port touched `instanceUnder`.
 3. **Owed to a human:**
-   - #1885, #2081, #1790, #2022 and #2749 (CLAUDE.md edits).
+   - #1885 (arbiter.md's Ratchet integrity), #2081, #1790, #2022 and #2749.
    - The ref deletions under Branch namespace.
 
 ## Milestones
