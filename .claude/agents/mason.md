@@ -27,6 +27,11 @@ module, doc comments, test comments and package docs, for the prose it
 leaves stale: grep the owning identifier and its file name, then read the
 prose around every hit and search again by the operation itself, since
 most stale sites paraphrase the old state and name neither (#1167, #1361).
+When your diff writes the one statement that owns a fact (STYLE D3, "One
+fact, one encoding — no derivable state."), mechanism change or none, grep
+the package's docs — doc comments and `doc.go` — for every other place
+that states that fact, by the fact's words and by its identifiers, then
+delete each copy or point it at the owner (#2739).
 
 Before writing: read the issue, its whole thread and its `GROUNDING:`
 comment. If the grounding lacks the rule IDs your change must implement,
