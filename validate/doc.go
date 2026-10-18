@@ -26,7 +26,7 @@
 // A later infoset property arrives as a NEW optional capability
 // interface the engine narrows to, and NEVER as a method added to
 // Element, Attribute or Text (PRINCIPLES 3). Those three are implemented
-// by adapter packages outside this module, so a method added to one
+// by adapter packages in this module and outside it, so a method added to one
 // breaks every adapter at once. [UnparsedEntities] and
 // [DeclarationsProcessed] are the capabilities that have shipped: the
 // document's [unparsedEntities] and [all declarations processed], each
@@ -62,21 +62,15 @@
 //     only at the ·validation root·.
 //   - Conditional type assignment: a declaration's {type table}
 //     ·conditionally selects· the ·selected type definition· an xsi:type
-//     then ·overrides· or does not, through xpath's §3.12.6
-//     required-subset evaluator (cta.go). A {test} reads the element's own
-//     [[attributes]] and, behind them, its [inherited attributes]
-//     (§3.3.5.6), which the descent computes top-down and threads to every
-//     child it does not skip (inherited.go). A {test} the evaluator
-//     declines withholds the element's ·governing type definition·
-//     instead of falling back to the declared type, and is recorded as an
-//     [Unevaluated] under key-cta-ta-select (§3.12.4) — nothing else
-//     in the [Result] reports it, since a withheld type charges the
-//     element nothing. A dynamic or type error inside a {test} the
-//     evaluator DOES compile is recorded by nothing: clause 2 of that rule
-//     makes it a decided false, so the alternative was tried and the scan
-//     continues. [Validator.ConditionallySelected] exports that one scan,
-//     withhold and all, for an adapter that settles which members of its
-//     source are attributes by the type the selection gives.
+//     then ·overrides· or does not, through xpath's §3.12.6 required-subset
+//     evaluator (cta.go). A {test} reads the element's own [[attributes]] and,
+//     behind them, its [inherited attributes] (§3.3.5.6), which the descent
+//     computes top-down and threads to every child it does not skip
+//     (inherited.go). The scan is exported as [Validator.ConditionallySelected],
+//     whose doc says which {test}s withhold the selection, which count as false,
+//     and what Assess records for a withheld one; nothing else in the [Result]
+//     reports a withheld selection, since a withheld type charges the element
+//     nothing.
 //   - Identity constraints: node tables propagate UPWARD — a keyref on
 //     element E resolves only against key sequences sourced within E's
 //     own subtree; selector/field paths honor xpathDefaultNamespace for

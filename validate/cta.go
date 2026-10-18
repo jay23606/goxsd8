@@ -183,24 +183,49 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 // or, where none does, the slot of its {default type definition}, with ok
 // true. The slot is unresolved; [SchemaView]'s ResolvedType resolves it.
 //
+// table is the {type table} of E's ·governing element declaration·, as
+// [xsd.ElementDeclaration.TypeTable] returns it. Where that reports false, do
+// not call this method: the table returned then selects a nil slot with ok
+// true, which ResolvedType does not resolve, whereas key-selected-type clause 2
+// makes the declaration's own {type definition} E's ·selected type
+// definition· outright. [Attribute] is an interface the caller implements, and
+// this package exports no constructor for it.
+//
 // Each {test} reads E's attributes, then each of inherited whose ·expanded
 // name· no member of attributes has (key-cta-ta-select clauses 1.1.2 and
 // 1.1.3); inherited is required, and nil only where E has no [inherited
 // attributes], as at the validation root (§3.3.5.6, key-p-inherited clause 1).
+// inherited holds only attributes whose {inheritable} is true (key-p-inherited
+// clause 3; [xsd.Schema.ResolvedInheritable] answers it for a use), and at most
+// one per ·expanded name·, its nearest ancestor's (e-inherited_attributes clause
+// 2): this method filters neither, and a {test} reads every duplicate it is
+// handed, so raw ancestor attributes can select differently from Assess.
 // It is the selection [Validator.Assess] makes for E, by the same scan: a
 // dynamic or type error inside a {test} counts as false (key-cta-ta-select
-// clause 2), and ok is false exactly where that scan withholds the selection —
-// an alternative tried before any succeeds has a {test} this engine's §3.12.6
-// compiler declines — never where no alternative succeeds.
+// clause 2), and ok is false exactly where the scan reaches an alternative
+// whose {test} the engine cannot evaluate before any succeeds — which {test}s
+// it compiles is [xpath.CompileCTATest]'s to say — never where no alternative
+// succeeds.
+//
+// ok false is an undecided selection, not a false one: the type is withheld,
+// meaning no answer is given at all — neither the alternative's type nor the
+// {default type definition}'s. Assess records such an E as an [Unevaluated]
+// under key-cta-ta-select in [Result.Unevaluated] and leaves E with no
+// ·governing type definition·; a caller must not fall back to the
+// declaration's own {type definition} either.
 //
 // ok true does not promise a type: the slot may resolve to none (nil, or a
 // substitution-group head that names no declaration or whose own slot does
 // not resolve), where ResolvedType answers false. Assess, resolving that same
-// slot, then withholds E's ·selected type definition· under cvc-elt clause 1,
-// or charges that clause where the head is ·absent· (§5.3).
+// slot, then records E's ·selected type definition· as undetermined, an
+// [Unevaluated] under cvc-elt clause 1, or charges that clause where the head
+// is ·absent· (§5.3).
 //
-// The one consumer is validate/jsonsrc, which settles which members of a JSON
-// object are attributes by the type their selection gives.
+// The method is exported for a source adapter that settles which members of
+// its source are attributes by the type the selection gives; validate/jsonsrc
+// is the in-module instance. The result is the ·selected type definition·,
+// which a valid xsi:type ·overrides· (key-governing-type-elem clause 3); the
+// adapter applies that override itself, as validate/jsonsrc does for $type.
 func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inherited []Attribute) (xsd.TypeDefinitionOrRef, bool) {
 	copied := make([]inheritedAttribute, 0, len(inherited))
 	for _, a := range inherited {
