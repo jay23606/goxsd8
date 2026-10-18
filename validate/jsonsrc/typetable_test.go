@@ -70,15 +70,14 @@ const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // TestTypeTable pins an element whose declaration carries a {type table},
 // each of whose members every type the table can select classifies alike
 // (walker.alike) — a scalar or null child by its name alone, whatever
-// declarations it is under: at the root the mapping classifies them under the
-// type the table selects (walker.settled), below it under its declared {type
-// definition}, a "$type" on its child is settled under the selected type at
-// the root and alike under every one below it (walker.instanceGoverned), and
-// the engine assesses it under the type the table selects. The rows marked
-// "selected" discriminate the selection: under typeTableSchema with its
-// <xs:alternative>s removed, the first, the particle's first and the "$type"
-// on a child charge cvc-complex-type, and the other four charge nothing. The
-// rest pin behaviour that schema shares.
+// declarations it is under: the mapping classifies them under the type the
+// table selects (walker.settled), a "$type" on its child is settled under
+// the selected type (walker.instanceGoverned), and the engine assesses it
+// under the type the table selects. The rows marked "selected" discriminate
+// the selection: under typeTableSchema with its <xs:alternative>s removed,
+// the first, the particle's first and the "$type" on a child charge
+// cvc-complex-type, and the other four charge nothing. The rest pin
+// behaviour that schema shares.
 func TestTypeTable(t *testing.T) {
 	v := validatorOver(t, typeTableSchema)
 	const c = `xmlns="urn:c" `
@@ -227,14 +226,22 @@ const runSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
 </xs:schema>`
 
+// TestTypeTableBelowRoot pins an element below the root whose {type table}'s
+// types classify a member differently: the mapping reads the type the table
+// ·conditionally selects· for it (walker.selector, walker.settled), as at the
+// root, its parent p handing it no [inherited attributes]: under T, m is a
+// child, and a = "u" selects U, under which m is an attribute.
+func TestTypeTableBelowRoot(t *testing.T) {
+	v := validatorOver(t, runSchema)
+	twin(t, v, `{"p":{"tu":{"a":"u","m":"x"}}}`, `<p xmlns="urn:s"><tu a="u" m="x"/></p>`, none)
+}
+
 // TestTypeTableRunDeclines pins the declines the selection leaves, each
-// beside the verdict the engine gives its XML twin: below the root, where the
-// mapping computes no [inherited attributes] (selection's GAP(jsonsrc)
-// marker); a run no selection settles: under T, a = "u" selects U, which
-// takes m as an attribute, and under U, m selects T, which does not
-// (walker.settled's); and a {test} the engine withholds the selection at,
-// after a candidate dropped or where the candidates classify a member
-// differently (walker.settled's).
+// beside the verdict the engine gives its XML twin: a run no selection
+// settles: under T, a = "u" selects U, which takes m as an attribute, and
+// under U, m selects T, which does not (walker.settled's); and a {test} the
+// engine withholds the selection at, after a candidate dropped or where the
+// candidates classify a member differently (walker.settled's).
 func TestTypeTableRunDeclines(t *testing.T) {
 	v := validatorOver(t, runSchema)
 	for _, tc := range []struct {
@@ -243,9 +250,6 @@ func TestTypeTableRunDeclines(t *testing.T) {
 		withheld        bool
 		opens           string
 	}{
-		{"below the root", `{"p":{"tu":{"a":"u","m":"x"}}}`,
-			`<p xmlns="urn:s"><tu a="u" m="x"/></p>`, none, false,
-			`jsonsrc: instance.json:1:21: member "m" of {urn:s}tu is not classified alike`},
 		{"no run settled", `{"tn":{"a":"u","m":"x"}}`,
 			`<tn xmlns="urn:s" a="u" m="x"/>`, complexType, false,
 			`jsonsrc: instance.json:1:23: the members of {urn:s}tn settle no type`},

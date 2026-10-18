@@ -203,22 +203,34 @@
 //     over the siblings before it ([xsd.Schema.ContentMatcher]) — and not
 //     from the declaration its members are classified under; the root takes
 //     the type it names, which ·overrides· its declaration's or is charged.
-//     Under an element with no declaration the members decline as every
+//     Its children are ·attributed·, and handed its [inherited attributes],
+//     under the type the engine governs it by: the type it names only where
+//     that ·overrides· the type the element would otherwise take — its
+//     ·governing element declaration·'s, the one a {type table} there
+//     selects, or its ·locally declared type· — and that type where it does
+//     not. Under an element with no declaration the members decline as every
 //     member there does. The type is resolved through the engine's own
 //     resolver (cvc-resolve-instance, §3.17.6.3), so the two agree on it. A
 //     "$type" rides an object value only: a scalar or null element carries no
 //     xsi:type. On an element with a declaration it declines where the
-//     mapping determines no type governing the parent, and where, below the
-//     root, the types a {type table} can select for the parent settle it
-//     differently (Declines).
+//     mapping determines no type governing the parent, and where the types a
+//     {type table} whose selection it does not read can select for the parent
+//     settle it differently (Declines).
 //   - An object value under a declaration carrying a {type table} is
 //     classified under each type it may be assessed under: the declaration's
 //     {type definition} and every type the table can select — each
 //     alternative's {type definition} and the {default type definition}'s.
-//     At the validation root, which has no [inherited attributes]
-//     (key-p-inherited), the mapping reads the ·selected type definition·
-//     itself (key-selected-type clause 1, key-cta-select), through the
-//     engine's own selection, validate.Validator.ConditionallySelected: a
+//     The mapping reads the ·selected type definition· itself
+//     (key-selected-type clause 1, key-cta-select), through the engine's own
+//     selection, validate.Validator.ConditionallySelected, off the {type
+//     table} of the element's ·governing element declaration·, its {test}s
+//     reading the element's attributes and then its [inherited attributes]
+//     (key-cta-ta-select clause 1.1.3): none at the validation root
+//     (key-p-inherited clause 1), and below it each attribute, specified or
+//     ·defaulted·, of an ancestor whose attribute use, or for one attributed
+//     to none its top-level declaration, is {inheritable}, the nearest
+//     ancestor's of each ·expanded name· (e-inherited_attributes), as the
+//     mapping computes them under the type that governs each ancestor. A
 //     member is an attribute only where the type the element is assessed under
 //     takes it as one, and the attributes decide that type, so the leading
 //     run of attribute members ends at the first member that the type the
@@ -233,25 +245,34 @@
 //     mapping reads on and takes the one reading the type it selects
 //     classifies as it reads. Where no run is so settled, where two readings
 //     are, and where the engine withholds the selection while the candidate
-//     types classify the members differently, the root's members decline
+//     types classify the members differently, the element's members decline
 //     (Declines); where it withholds the selection and every candidate
-//     classifies them alike, they map as below the root. Below the root each
-//     member maps only where every candidate classifies it alike: an attribute
-//     of one expanded name; a child of one expanded name whose value is a
-//     scalar or null, whatever declarations it is under, its element being
-//     built from its name alone; and, under any other value, a declaration-less
-//     child of one expanded name, or a child under declarations of one expanded
-//     name and one type — of one name, or an anonymous complex type of one
-//     declaration's {context} — neither carrying a {type table}; the engine
-//     selects the type from the attributes the mapping presents, xsi:type
-//     included, and the infoset is the one any candidate gives. Its "$type" arm
-//     reads no table, the type it names ·overriding· the selected one or being
-//     charged cvc-elt clause 4. A "$type" on its child or below it is settled
-//     under the type the root's table selects, and below the root under every
-//     type the table can select, its children ·attributed· under each, so it
-//     maps where every one settles on one type; where every type the table can
-//     select is one named type, that type governs the element. A scalar or null
-//     value classifies no member.
+//     classifies them alike, they map as where it reads none. The mapping
+//     reads none where it determines no [inherited attributes], which is only
+//     below an element whose ·governing type definition· the engine does not
+//     determine — one whose selection it withholds, or one a content model
+//     [xsd.Schema.ContentMatcher] declines leaves unattributed — and
+//     none for an element its parent's ·governing type definition· leaves with
+//     no ·governing element declaration· (a ·locally declared type· governing
+//     it, or a skip wildcard ·skipping· it), whose members are classified
+//     under its declaration's {type definition} alone. Where it reads none of
+//     a {type table}'s selection, each member maps only where every candidate
+//     classifies it alike: an attribute of one expanded name; a child of one
+//     expanded name whose value is a scalar or null, whatever declarations it
+//     is under, its element being built from its name alone; and, under any
+//     other value, a declaration-less child of one expanded name, or a child
+//     under declarations of one expanded name and one type — of one name, or an
+//     anonymous complex type of one declaration's {context} — neither carrying
+//     a {type table}; the engine selects the type from the attributes the
+//     mapping presents, xsi:type included, and the infoset is the one any
+//     candidate gives. Its "$type" arm reads no table, the type it names
+//     ·overriding· the selected one or being charged cvc-elt clause 4. A
+//     "$type" on its child or below it is settled under the type the table
+//     selects, and, where the mapping reads none, under every type the table
+//     can select, its children ·attributed· under each, so it maps where every
+//     one settles on one type; where every type the table can select is one
+//     named type, that type governs the element. A scalar or null value
+//     classifies no member.
 //   - No DTD-shaped declaration exists in JSON, so the adapter does not
 //     implement [validate.UnparsedEntities] and every ·ENTITY value· fails
 //     cvc-simple-type clause 3, as that interface's doc states.
@@ -289,9 +310,10 @@
 // it is settled under — and the engine assesses the infoset built under the
 // type the mapping classified by, attributes included; where its declaration
 // carries a {type table}, it is governed by the type the table selects, under
-// which its members are classified at the root and alike below it ("The
-// mapping"). One with a "$type" is classified under the type that governs it
-// wherever its verdict stands uncharged, as "The mapping" says.
+// which its members are classified, or alike under every type the table can
+// select where the mapping reads no selection ("The mapping"). One with a
+// "$type" is classified under the type that governs it wherever its verdict
+// stands uncharged, as "The mapping" says.
 //
 // # Declines
 //
@@ -326,13 +348,19 @@
 //	"$type" or "$xmlns" value malformed   a string "$type"; a "$xmlns" binding
 //	                                        each NCName prefix once, not xml or
 //	                                        xmlns, to a non-empty name
-//	"$type" a {type table} settles        none in the input; an open gap
-//	  differently, or under a parent
-//	  whose type is undetermined
+//	"$type" a {type table} settles        none: a permanent limitation
+//	  differently below a withheld
+//	  selection
+//	"$type" under a parent whose type     none in the input; an open gap
+//	  is undetermined
 //	other "$" member                      key it by its own name, with no "$"
 //	array item that is an array           an object, a scalar or null item
+//	member a {type table}'s types         none: a permanent limitation
+//	  classify differently, at or below
+//	  a withheld selection
 //	member a {type table}'s types         none in the input; an open gap
-//	  classify differently
+//	  classify differently, below an
+//	  unattributed element
 //	unresolved {type definition}          none: a permanent limitation
 //
 // An input the implemented arms do not map is a [*DeclineError] from
@@ -340,7 +368,7 @@
 // guessed mapping. [Validate]'s doc states every error class it returns. Each
 // entry below whose XML twin the engine assesses is tracked by a GAP(jsonsrc)
 // marker at the function that declines it — rootMember, childNamed, useNamed,
-// wildcardMember, classify, selection, attributes, candidates, readAhead,
+// wildcardMember, classify, attributes, candidates, readAhead,
 // settled, members.key, reserved, instanceGoverned and declaredType; one more at
 // classify tracks the mapping's own choice of a declaration or use over a
 // wildcard, under "The mapping". A repeated attribute member, an attribute
@@ -408,22 +436,30 @@
 //     object of strings, which binds a non-empty prefix that is no NCName (no
 //     xmlns:prefix attribute declares one), binds a prefix twice, binds "xml"
 //     or "xmlns", or binds a non-empty prefix to "";
-//   - a "$type" naming a type, below the root, that the types a {type table}
-//     of its parent's declaration, or of an ancestor's below the root, can
-//     select settle on different types: below the root the mapping reads no
-//     ·selected type definition·, computing no [inherited attributes] for a
-//     {test} to read, so it maps only what settles alike whichever type is
-//     selected; and one whose parent's ·governing type definition· the mapping does not
-//     determine, where [xsd.Schema.ContentMatcher] declines the content model
-//     the parent is attributed by, whose engine twin is walked undecided;
+//   - a "$type" naming a type that the types a {type table} of its parent's
+//     declaration, or of an ancestor's, can select settle on different types,
+//     where the mapping reads no ·selected type definition· for that table:
+//     below an element whose selection the engine withholds, where the
+//     mapping reads a selection only as the member entry below says, so it
+//     maps only what settles alike whichever type is selected; and one whose
+//     parent's ·governing type definition· the mapping does not determine,
+//     where [xsd.Schema.ContentMatcher] declines the content model the parent
+//     is attributed by. The engine walks the twin of either undecided;
 //   - any other "$"-prefixed reserved member, "$" being no XML NameStartChar;
 //   - an array item that is itself an array;
-//   - a member of an object under a declaration carrying a {type table}, below
-//     the root, that the declaration's {type definition} and a type the table
-//     can select classify differently, or that one of them declines: there the
-//     mapping reads no ·selected type definition·, so it maps only what
-//     classifies alike whichever type is selected; and, at the root, a member
-//     of the attribute run a candidate type still reading attributes
+//   - a member of an object under a declaration carrying a {type table} that
+//     the declaration's {type definition} and a type the table can select
+//     classify differently, or that one of them declines, where the mapping
+//     reads no ·selected type definition· for the table: below an element
+//     whose selection the engine withholds, where it determines the
+//     [inherited attributes] an element hands its children only where every
+//     type that may govern that element hands down the same ones, and reads a
+//     selection only where it determines them and one type may govern the
+//     parent; and below an element whose parent's content model
+//     [xsd.Schema.ContentMatcher] declines, where it determines none. There
+//     it maps only what classifies alike whichever type is selected, and the
+//     engine walks the twin undecided; and, where it reads the selection, a
+//     member of the attribute run a candidate type still reading attributes
 //     declines, where the type some reading of the run selects — one ending
 //     the run at or before it, or, for a scalar member, the one taking it as
 //     an attribute too — declines it, or that selection is withheld, the

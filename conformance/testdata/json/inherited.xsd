@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The inherited group's schema, for the validate/jsonsrc {type table} arm
+     below the root. T has an optional child m of xs:int, the attribute a
+     and a lax ##local {attribute wildcard}; U restricts T to no child and
+     the attribute m of xs:string. tu is of type T and selects U where its
+     a is "u", so a key "m" is tu's child under T, whose "x" charges
+     cvc-type, and its attribute under U. p carries a, inheritable, and
+     holds an optional tu. Z0 holds an optional tu, and Z1 extends it with
+     a, inheritable, defaulting to "z"; z is of type Z0 and selects Z1 where
+     its a is "u", and pa carries a, inheritable, and holds an optional z.
+     Local declarations are qualified. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:goxsd8:json:inherited" xmlns:n="urn:goxsd8:json:inherited"
+           elementFormDefault="qualified">
+  <xs:complexType name="T">
+    <xs:sequence>
+      <xs:element name="m" type="xs:int" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:anyAttribute namespace="##local" processContents="lax"/>
+  </xs:complexType>
+  <xs:complexType name="U">
+    <xs:complexContent>
+      <xs:restriction base="n:T">
+        <xs:sequence/>
+        <xs:attribute name="m" type="xs:string"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="tu" type="n:T">
+    <xs:alternative test="@a = 'u'" type="n:U"/>
+  </xs:element>
+  <xs:element name="p">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="n:tu" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attribute name="a" type="xs:string" inheritable="true"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="Z0">
+    <xs:sequence>
+      <xs:element ref="n:tu" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Z1">
+    <xs:complexContent>
+      <xs:extension base="n:Z0">
+        <xs:attribute name="a" type="xs:string" default="z" inheritable="true"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="z" type="n:Z0">
+    <xs:alternative test="@a = 'u'" type="n:Z1"/>
+  </xs:element>
+  <xs:element name="pa">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="n:z" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attribute name="a" type="xs:string" inheritable="true"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

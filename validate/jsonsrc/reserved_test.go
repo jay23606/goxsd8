@@ -613,7 +613,7 @@ func TestUngovernedParentType(t *testing.T) {
 // of type L and then a lax wildcard, Gq restricts it to the q alone, and the
 // top-level gw is of type Gw and selects Gq where it has an attribute a; the
 // top-level q is of type Qo, which has a lax {open content} and declares k of
-// xs:string.
+// xs:string. hold holds an optional gd and then an optional gw.
 const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
   <xs:complexType name="L"><xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>
@@ -767,6 +767,9 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:element name="gw" type="t:Gw">
     <xs:alternative test="@a" type="t:Gq"/>
   </xs:element>
+  <xs:element name="hold">
+    <xs:complexType><xs:sequence><xs:element ref="t:gd" minOccurs="0"/><xs:element ref="t:gw" minOccurs="0"/></xs:sequence></xs:complexType>
+  </xs:element>
 </xs:schema>`
 
 // TestAncestrySelected pins a "$type" below a root whose {type table}'s types
@@ -794,6 +797,27 @@ func TestAncestrySelected(t *testing.T) {
 			`<gd ` + x + `><x/><x xsi:type="t:X"><k>zz</k></x></gd>`, none},
 		{"a type table's types governing a child differently", `{"gw":{"q":[{},{"k":{"$xmlns":{"t":"urn:t"},"$type":"t:X"}}]}}`,
 			`<gw ` + x + `><q/><q><k xsi:type="t:X"/></q></gw>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestAncestrySelectedBelowRoot pins TestAncestrySelected's rows one level
+// down, gd and gw under hold: the mapping reads the type each one's {type
+// table} ·conditionally selects· below the root (walker.selector), which
+// alone governs it, and settles the "$type" under that type, as the engine
+// assesses each XML twin.
+func TestAncestrySelectedBelowRoot(t *testing.T) {
+	v := validatorOver(t, ancestrySchema)
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"a type table's types settling a child's $type differently", `{"hold":{"gd":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}}`,
+			`<hold ` + x + `><gd><x/><x xsi:type="t:X"><k>zz</k></x></gd></hold>`, none},
+		{"a type table's types governing a child differently", `{"hold":{"gw":{"q":[{},{"k":{"$xmlns":{"t":"urn:t"},"$type":"t:X"}}]}}}`,
+			`<hold ` + x + `><gw><q/><q><k xsi:type="t:X"/></q></gw></hold>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
@@ -843,13 +867,14 @@ func TestUnattributedParentTypeDeclines(t *testing.T) {
 // of which is one named type gives that type: the second z of zw is ·laxly
 // assessed·, so g is ·attributed to· xs:anyType's wildcard and governed by
 // the top-level g's Ta, whichever alternative is selected, under whose {open
-// content} the second x takes L, of which k is a child (walker.resolvedType);
-// the second yt of wt is governed by the top-level yt's Tt, whose x selects
-// Lr either way, of which k is a child, where its members are classified under
-// Ta's x of type L (walker.declarationType). gd has no a, so its table selects
-// Ta (walker.settled), which, as Tn would, ·attributes· its one x to the
-// element particle of type L, so L governs x and k's "$type" is settled under
-// it (walker.governing). Each row agrees with its XML twin.
+// content} the second x takes L, of which k is a child (walker.resolved); the
+// second yt of wt is governed by the top-level yt's Tt, whose x selects Lr
+// either way, of which k is a child, where its members are classified under
+// Ta's x of type L, the mapping reading the selection of Tt's x
+// (walker.selector). gd has no a, so its table selects Ta (walker.settled),
+// which, as Tn would, ·attributes· its one x to the element particle of type L,
+// so L governs x and k's "$type" is settled under it (walker.governing). Each
+// row agrees with its XML twin.
 func TestAncestryTypeMaps(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
