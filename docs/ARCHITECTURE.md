@@ -84,7 +84,8 @@ Value implementations, parsing, validation, and generation live above them.
                  validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc) [2]
                  codegen  codec  (generation; dataset ser/de)               [1]
                  conformance     (harness + ratchet; repo infrastructure)
-                 cmd/goxsd8      (the CLI; help, parse and validate ship, gen does not)
+                 cmd/goxsd8      (the CLI; help, parse and validate ship — validate
+                                  over XML and JSON instances — gen does not)
 ```
 
 **[1] These boxes are DESTINATIONS, not shipped layers.**
@@ -99,7 +100,7 @@ and imports `xsd`, `value`, `regex` and
 `xsderr` for real (its section says which tiers are shipped).
 
 **[2] The infoset seam, the assessment skeleton, the XML adapter and the
-first two slices of the JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views,
+JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views,
 `New`/`Validator`/`Result` and `Validator.ConditionallySelected`, the
 key-cta-select scan its walk makes, and imports `xsd`, `xsderr`, `value`, `xpath`,
 `icpath` and `internal/xmlqname` — no longer `regex` directly, whose NCName class left with the
@@ -111,7 +112,7 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and imports
 `parser/xmltree`, `validate`, `xsd` and `xsderr` — and neither `loader` nor
 `parser`, which an imports test pins; `validate/jsonsrc` exports
-`Validate`/`Option`/`WithURI`, imports `validate`, `xsd`, `xsderr`,
+`Validate`/`Option`/`WithURI` and `DeclineError`, imports `validate`, `xsd`, `xsderr`,
 `internal/xmlname`, `internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
 view `Validator.Schema` returns, to name the root and classify members, and
 reads `xsd.Schema.LocallyDeclaredElementType`, `ValidlySubstitutable` and
@@ -623,8 +624,7 @@ it charges nothing, under the `GAP(xpath)` marker on `validate`'s
 
 **Status: the engine ships the seam and charges the cvc- rules
 `validate/doc.go` names, at the ·validation root· and at every descendant the
-descent types; the XML adapter and the JSON adapter's first two slices ship over
-it.**
+descent types; the XML adapter and the JSON adapter ship over it.**
 `validate` exports the infoset views (`Element`, `Attribute`, `Text`,
 `Children`, `Child`, with `ElementChild`/`TextChild` constructing the sum),
 the two optional document-level capabilities an adapter may implement
@@ -646,8 +646,8 @@ charges reach a `value.Backend` through `New`'s required second parameter,
 which must be the backend the schema was compiled with.
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and drives that walk
 over an XML instance decoded by `parser/xmltree`; `validate/jsonsrc`
-exports the same three and drives it over a JSON instance, on the arms its
-`doc.go` names as implemented (M8, first two slices); `validate/bersrc` is
+exports the same three and `DeclineError`, and drives it over a JSON instance
+on the arms its `doc.go` names as implemented (M8); `validate/bersrc` is
 `doc.go`-only (M11). Everything below not covered
 by that seam is the destination, stated in present tense because it is a
 design contract.
@@ -656,7 +656,8 @@ design contract.
   - `validate/xmlsrc` — XML instances via `parser/xmltree` (first; ships),
   - `validate/jsonsrc` — JSON instances mapped onto the same infoset
     (schema-aware member classification, scalar shorthand for simple
-    content, arrays as repeated elements, null as `xsi:nil`),
+    content, arrays as repeated elements, null as `xsi:nil`; ships, on the
+    arms its `doc.go` names),
   - `validate/bersrc` — BER-encoded instances (last; same infoset, TLV
     decode).
   The engine never imports a source's decoder; adapters build infoset
@@ -798,19 +799,18 @@ compiles, is documented, and has **zero** callers module-wide.
   canonicalization and the `<xs:notation>` content check), so the annotation
   deletion left it a type with a job, and whether it stays EXPORTED is
   #1051's question alone.
-- **`xsd.Occurs.Permits`, `xsd.Namespace.IsAbsent`,
-  `xsd.NamespaceConstraint.AllowsNamespace`** — no non-test caller outside
-  `xsd`; the first two have none inside it either. `Permits` answers a
-  closed `min <= n <= max` question no caller asks, every occurrence site
-  reading `Min`/`Max` for a one-sided bound instead; `IsAbsent` is `URI`'s
-  second result spelled a second way (D3); `AllowsNamespace` sits, like
-  `NamespaceConstraint.AllowsName` beside it, beneath the wildcard-admission
-  entry points as the {namespace constraint} property's own accessor —
-  `xsd/doc.go`'s Walk API section redirects a caller admitting a name to
-  `Schema.ContentMatcher` or `Schema.AllowsAttributeWildcardName` instead of
-  either. `AllowsName` stands the same way — in-package callers and
-  `parser`'s tests only — and settles with it.
-  Filed at the 2026-09-06 audit as #1287. `Notation.SystemIdentifier`,
+- **`xsd.Occurs.Permits`, `xsd.Namespace.IsAbsent`** — no non-test caller
+  anywhere. `Permits` answers a closed `min <= n <= max` question no caller
+  asks, every occurrence site reading `Min`/`Max` for a one-sided bound
+  instead; `IsAbsent` is `URI`'s second result spelled a second way (D3).
+  Filed at the 2026-09-06 audit as #1287.
+  `xsd.NamespaceConstraint.AllowsNamespace` left this list when `validate`'s
+  content charges began reading it to say whether a wildcard arm declined a
+  child by namespace or by {disallowed names} (#1898): that explains a
+  decline rather than admitting a name, so `xsd/doc.go`'s Walk API redirect
+  does not reach it. `NamespaceConstraint.AllowsName` still has in-package
+  callers and `parser`'s tests only, and stands with it as the {namespace
+  constraint} property's own accessor. `Notation.SystemIdentifier`,
   `Notation.PublicIdentifier` and `xmltree.CharData.Offset` are callerless
   too and are NOT filed: the first two are §3.14.1 component properties the
   model contracts to expose, and the third is the byte offset `codec`'s M10
