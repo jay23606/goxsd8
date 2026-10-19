@@ -361,6 +361,14 @@ const repeatSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:element name="d" type="p:X"><xs:alternative test="@p:y" type="p:B"/><xs:alternative type="p:D"/></xs:element>
 </xs:schema>`
 
+// measured is an XML twin's verdict: the rules it charges, and whether it
+// leaves any check unevaluated.
+type measured struct {
+	doc      string
+	want     []xsderr.Rule
+	withheld bool
+}
+
 // TestTypeTableReadAheadDeclines pins walker.readAhead's declines, each
 // beside the verdicts the engine gives the twins of the readings in play,
 // withheld saying whether it withholds a selection for one: under runSchema,
@@ -382,11 +390,6 @@ func TestTypeTableReadAheadDeclines(t *testing.T) {
 	run := validatorOver(t, runSchema)
 	lax := validatorOver(t, laxExtensionSchema)
 	rep := validatorOver(t, repeatSchema)
-	type measured struct {
-		doc      string
-		want     []xsderr.Rule
-		withheld bool
-	}
 	const undetermined = ` is declined under a type its {type table} can select`
 	for _, tc := range []struct {
 		name  string
@@ -585,21 +588,22 @@ func TestTypeTableCandidateDrops(t *testing.T) {
 // a member of a root's attribute run that one live candidate type declines
 // declines the whole root where a reading of the run may select that type,
 // each twin's verdict measured beside the decline; xml is the child reading's
-// twin and attr the attribute reading's, which attrWant measures. Under
-// anyWildcardSchema, y declines under T, the declared {type definition},
-// whose element wildcard of variety any fixes no namespace for it, alone
-// through wildcardMember's own exit, and T is the type the reading that takes
-// no attribute selects. Under laxExtensionSchema, y declines under U alone
-// (walker.undetermined): r3 to r6 select U under the reading that takes y as
-// an attribute, each where y is in one class of names attributeNames gives
-// it; r7 selects U under the reading that takes no attribute, though that
-// reading is inconsistent, U taking a as an attribute, and the one reading
-// that is, T's taking a alone, would map; r10 selects U under the reading
-// that takes y alone as an attribute, though another member follows and that
-// reading is inconsistent, U taking a as an attribute, and the one reading
-// that is, the children's, would map; r9's {test} is outside the §3.12.6
-// compiler's subset, so the engine withholds every reading's selection, and
-// charges neither twin. Under unboundSchema, r8 selects the type that
+// twin and attr the attribute reading's, which attrWant and attrWithheld
+// measure. Under anyWildcardSchema, y declines under T, the declared {type
+// definition}, whose element wildcard of variety any fixes no namespace for
+// it, alone through wildcardMember's own exit, and T is the type the reading
+// that takes no attribute selects. Under laxExtensionSchema, y declines under
+// U alone (walker.undetermined): r3 to r6 select U under the reading that
+// takes y as an attribute, each where y is in one class of names
+// attributeNames gives it; r7 selects U under the reading that takes no
+// attribute, though that reading is inconsistent, U taking a as an attribute,
+// and the one reading that is, T's taking a alone, would map; r10 selects U
+// under the reading that takes y alone as an attribute, though another member
+// follows and that reading is inconsistent, U taking a as an attribute, and
+// the one reading that is, the children's, would map; r9's {test} is outside
+// the §3.12.6 compiler's subset, so the engine withholds every reading's
+// selection, charges neither twin, and leaves each with a check unevaluated,
+// which no other twin here does. Under unboundSchema, r8 selects the type that
 // declines y where y is in a namespace no {test} binds, and the declared
 // xs:anyType, which no reading selects, declines first. Under settleSchema,
 // every live candidate declines y, X alone having taken both a and b as
@@ -615,60 +619,59 @@ func TestTypeTableCandidateDeclines(t *testing.T) {
 	const wildcardDecline = `names no child element declaration and no attribute use of the type of `
 	const undetermined = ` is declined under a type its {type table} can select`
 	for _, tc := range []struct {
-		name     string
-		v        *validate.Validator
-		json     string
-		xml      string
-		want     []xsderr.Rule
-		attr     string
-		attrWant []xsderr.Rule
-		opens    string
+		name         string
+		v            *validate.Validator
+		json         string
+		xml          string
+		want         []xsderr.Rule
+		withheld     bool
+		attr         string
+		attrWant     []xsderr.Rule
+		attrWithheld bool
+		opens        string
 	}{
 		{"the declared type declines a member alone", anyWildcard, `{"r":{"y":"x"}}`,
-			`<r><y>x</y></r>`, none, `<r y="x"/>`, []xsderr.Rule{"cvc-attribute"},
+			`<r><y>x</y></r>`, none, false, `<r y="x"/>`, []xsderr.Rule{"cvc-attribute"}, false,
 			`jsonsrc: instance.json:1:7: member "y" ` + wildcardDecline + `r, and its element wildcard set includes one of variety any`},
 		{"the declared type declines a member alone, beside two alternatives", anyWildcard, `{"r2":{"y":"x"}}`,
-			`<r2><y>x</y></r2>`, none, `<r2 y="x"/>`, []xsderr.Rule{"cvc-attribute"},
+			`<r2><y>x</y></r2>`, none, false, `<r2 y="x"/>`, []xsderr.Rule{"cvc-attribute"}, false,
 			`jsonsrc: instance.json:1:8: member "y" ` + wildcardDecline + `r2, and its element wildcard set includes one of variety any`},
 		{"the attribute reading selects the declining type", lax, `{"r3":{"y":"1"}}`,
-			`<r3><y>1</y></r3>`, content, `<r3 y="1"/>`, content,
+			`<r3><y>1</y></r3>`, content, false, `<r3 y="1"/>`, content, false,
 			`jsonsrc: instance.json:1:8: member "y" of r3` + undetermined},
 		{"the attribute reading selects it in a namespace the test binds", lax, `{"r4":{"y":"1"}}`,
-			`<r4><y>1</y></r4>`, content, `<r4 xmlns:p="urn:p" p:y="1"/>`, content,
+			`<r4><y>1</y></r4>`, content, false, `<r4 xmlns:p="urn:p" p:y="1"/>`, content, false,
 			`jsonsrc: instance.json:1:8: member "y" of r4` + undetermined},
 		{"the attribute reading selects it in a namespace the test binds none to", lax, `{"r5":{"y":"1"}}`,
-			`<r5><y>1</y></r5>`, content, `<r5 xmlns:q="urn:q" q:y="1"/>`, content,
+			`<r5><y>1</y></r5>`, content, false, `<r5 xmlns:q="urn:q" q:y="1"/>`, content, false,
 			`jsonsrc: instance.json:1:8: member "y" of r5` + undetermined},
 		{"the attribute reading selects it in the xml namespace", lax, `{"r6":{"y":"1"}}`,
-			`<r6><y>1</y></r6>`, content, `<r6 xml:y="1"/>`, content,
+			`<r6><y>1</y></r6>`, content, false, `<r6 xml:y="1"/>`, content, false,
 			`jsonsrc: instance.json:1:8: member "y" of r6` + undetermined},
 		{"the attribute reading selects it in a namespace no test binds", unbound, `{"r8":{"y":"1"}}`,
-			`<r8><y>1</y></r8>`, content, `<r8 xmlns:q="urn:q" q:y="1"/>`, content,
+			`<r8><y>1</y></r8>`, content, false, `<r8 xmlns:q="urn:q" q:y="1"/>`, content, false,
 			`jsonsrc: instance.json:1:8: member "y" names no child element declaration and no attribute use of the type of r8, which has both`},
 		{"an earlier reading selects the declining type", lax, `{"r7":{"a":"t","y":"1"}}`,
-			`<r7 a="t"><y>1</y></r7>`, content, `<r7 a="t" y="1"/>`, complexType,
+			`<r7 a="t"><y>1</y></r7>`, content, false, `<r7 a="t" y="1"/>`, complexType, false,
 			`jsonsrc: instance.json:1:16: member "y" of r7` + undetermined},
 		{"the attribute reading selects the declining type, another member following", lax, `{"r10":{"y":"1","a":"t"}}`,
-			`<r10><y>1</y><a>t</a></r10>`, content, `<r10 y="1"><a>t</a></r10>`, none,
+			`<r10><y>1</y><a>t</a></r10>`, content, false, `<r10 y="1"><a>t</a></r10>`, none, false,
 			`jsonsrc: instance.json:1:9: member "y" of r10` + undetermined},
 		{"the engine withholds a reading's selection", lax, `{"r9":{"y":"1"}}`,
-			`<r9><y>1</y></r9>`, none, `<r9 y="1"/>`, none,
+			`<r9><y>1</y></r9>`, none, true, `<r9 y="1"/>`, none, true,
 			`jsonsrc: instance.json:1:8: member "y" of r9` + undetermined},
 		{"every live candidate declines the member", settle, `{"q":{"a":"1","b":"2","y":"3"}}`,
-			`<q a="1" b="2"><y>3</y></q>`, twoComplexType, `<q a="1" b="2" y="3"/>`, twoComplexType,
+			`<q a="1" b="2"><y>3</y></q>`, twoComplexType, false, `<q a="1" b="2" y="3"/>`, twoComplexType, false,
 			`jsonsrc: instance.json:1:23: the members of q settle no type`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, x := range []struct {
-				doc  string
-				want []xsderr.Rule
-			}{{tc.xml, tc.want}, {tc.attr, tc.attrWant}} {
+			for _, x := range []measured{{tc.xml, tc.want, tc.withheld}, {tc.attr, tc.attrWant, tc.attrWithheld}} {
 				xres, err := xmlsrc.Validate(tc.v, strings.NewReader(x.doc), xmlsrc.WithURI("instance.xml"))
 				if err != nil || xres.Err() != nil {
 					t.Fatalf("xmlsrc.Validate(%s): %v / %v", x.doc, err, xres.Err())
 				}
-				if got := rules(xres); !slices.Equal(got, x.want) {
-					t.Fatalf("XML twin %s charges %v, want %v", x.doc, got, x.want)
+				if got := rules(xres); !slices.Equal(got, x.want) || (len(xres.Unevaluated()) > 0) != x.withheld {
+					t.Fatalf("XML twin %s charges %v, %d unevaluated; want %v, withheld %t", x.doc, got, len(xres.Unevaluated()), x.want, x.withheld)
 				}
 			}
 			res, err := Validate(tc.v, strings.NewReader(tc.json), WithURI(jsonURI))
