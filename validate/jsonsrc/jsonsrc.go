@@ -735,7 +735,7 @@ func (d declaredElement) object(w *walker, e *element, typ *attribute, at placem
 	}
 	if typ != nil {
 		if instance, ok := w.instanceType(e, typ.value); ok {
-			td, err := w.instanceGoverned(e, typ, instance, at.parent)
+			td, err := w.instanceGoverned(e, typ, instance, at)
 			if err != nil {
 				return nil, err
 			}
@@ -1970,18 +1970,20 @@ func openContent(t xsd.ComplexType) bool {
 // its xsi:type typ names instance: the ·governing type definition· e takes
 // wherever its verdict stands uncharged. At the root, which has a ·governing
 // element declaration·, that is instance, which ·overrides· its type or is
-// charged under cvc-elt clause 4. Below it, it is the type instanceUnder
-// settles on under each of parent.governing, the types that may be the
-// parent's ·governing type definition·, and instance under each where every
-// ·attribution· it may give e charges it — the cvc-elt clause 4 and
-// cvc-complex-type clause 5 branches included — where every one settles on one
-// type (oneType). The engine selects the one that governs the parent, so
-// whichever it is, e's members are classified under that type. The types e's
-// children are ·attributed· and handed down under, which the engine
-// determines whatever e's verdict, are walker.instanceGoverning's.
+// charged under cvc-elt clause 4. Below it, where at says e stands, it is the
+// type instanceUnder settles on under each of at.parent.governing, the types
+// that may be the parent's ·governing type definition·, told whether that
+// type's content model ·attributes· e to nothing (at.a, where at.attributed
+// says the mapping computed it), and instance under each where instanceUnder
+// finds e charged — the cvc-elt clause 4 and cvc-complex-type clause 5
+// branches included — where every one settles on one type (oneType). The
+// engine selects the one that governs the parent, so whichever it is, e's
+// members are classified under that type. The types e's children are
+// ·attributed· and handed down under, which the engine determines whatever
+// e's verdict, are walker.instanceGoverning's.
 //
-// It DECLINES typ where parent.governing is empty, the mapping determining no
-// type that governs the parent, and where two of parent.governing settle on
+// It DECLINES typ where at.parent.governing is empty, the mapping determining no
+// type that governs the parent, and where two of at.parent.governing settle on
 // different types, which a {type table} whose selection the mapping does not
 // read makes several (walker.declarationType, walker.selector); where it reads
 // the selection, the parent's is the one type the table selects
@@ -2016,7 +2018,8 @@ func openContent(t xsd.ComplexType) bool {
 // walks the parent undecided (its GAP(validate) marker in walk.child), so the
 // engine assigns the twin's subtree no ·governing type definition· either.
 // Owned by #2670, which retires with #1601's ruling.
-func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeDefinition, parent *object) (xsd.TypeDefinition, error) {
+func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeDefinition, at placement) (xsd.TypeDefinition, error) {
+	parent := at.parent
 	if parent == nil {
 		return instance, nil
 	}
@@ -2027,7 +2030,8 @@ func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeD
 	}
 	var settled xsd.TypeDefinition
 	for i, p := range parent.governing {
-		td, uncharged, err := w.instanceUnder(g, p.typ, e.name, instance)
+		rejected := at.attributed && at.a[i] == nil
+		td, uncharged, err := w.instanceUnder(g, p.typ, e.name, instance, rejected)
 		if err != nil {
 			return nil, w.declinef(typ.loc, "the \"$type\" member of %s: whether the type it names ·overrides· the one %s would otherwise take could not be settled: %v",
 				e.name, e.name, err)
@@ -2189,9 +2193,13 @@ func (w *walker) overridden(e *element, typ *attribute, g governor, instance xsd
 // whose xsi:type names instance takes under p, its parent's ·governing type
 // definition·, and true; or false where every ·attribution· p may give it
 // charges it, the element particle's, the ·wildcard particle·'s and the {open
-// content}'s alike. It reads none of them off the element's actual
-// ·attribution·, so it settles the type of a charged element as of an
-// uncharged one:
+// content}'s alike. Of the element's actual ·attribution· it reads only
+// rejected, p's content model ·attributing· it to nothing — it or a sibling
+// before it rejected, which charges the parent (cvc-complex-content) —
+// which walk.childGoverning governs as an {open content}'s child
+// (walk.localOrResolvedGovernance); rejected is false where the mapping
+// computes no ·attribution· (placement.attributed). Otherwise it settles the
+// type of a charged element as of an uncharged one:
 //
 //   - with a non-·absent· ·locally declared type· L within p (key-ldt-elem):
 //     instance where it ·overrides· L ·validly substitutable without
@@ -2205,9 +2213,9 @@ func (w *walker) overridden(e *element, typ *attribute, g governor, instance xsd
 //     ·overrides· the type it selects or clause 4 is charged, and governs
 //     where it does. A ·wildcard particle·'s top-level declaration is
 //     ·overridden· by instance or clause 4 is charged. Where instance does not
-//     ·override· L: L under a non-skip {open content} (key-governing-ed clause
-//     4.3 leaves no declaration to charge clause 4 against,
-//     key-governing-type-elem clause 7), and false otherwise — an element
+//     ·override· L: L where rejected or under a non-skip {open content}
+//     (key-governing-ed clause 4.3 leaves no declaration to charge clause 4
+//     against, key-governing-type-elem clause 7), and false otherwise — an element
 //     particle charges cvc-elt clause 4, and a ·wildcard particle· clause 4,
 //     or, wherever instance governs, a tabled element particle's included,
 //     cvc-complex-type clause 5 is charged against L;
@@ -2222,7 +2230,7 @@ func (w *walker) overridden(e *element, typ *attribute, g governor, instance xsd
 //
 // Under a simple p it is false: the element is charged as its child (cvc-type
 // clause 3.1.2). The error is ValidlySubstitutable's.
-func (w *walker) instanceUnder(g governor, p xsd.TypeDefinition, name xsd.QName, instance xsd.TypeDefinition) (xsd.TypeDefinition, bool, error) {
+func (w *walker) instanceUnder(g governor, p xsd.TypeDefinition, name xsd.QName, instance xsd.TypeDefinition, rejected bool) (xsd.TypeDefinition, bool, error) {
 	ct, ok := p.(xsd.ComplexType)
 	if !ok {
 		return nil, false, nil
@@ -2235,7 +2243,7 @@ func (w *walker) instanceUnder(g governor, p xsd.TypeDefinition, name xsd.QName,
 		if overrides {
 			return instance, true, nil
 		}
-		if openContent(ct) {
+		if rejected || openContent(ct) {
 			return ldt, true, nil
 		}
 		return nil, false, nil

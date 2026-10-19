@@ -195,7 +195,8 @@
 //     uncharged: where the type it names resolves, that type where it
 //     ·overrides· the element's ·locally declared type· ·without limitation·,
 //     or where the element has none, and the ·locally declared type· where it
-//     does not and an {open content} may take the element, which leaves it no
+//     does not and the parent's content model rejects the element, or an
+//     {open content} may take it, either of which leaves it no
 //     ·governing element declaration· to charge cvc-elt clause 4 against
 //     (key-governing-type-elem clauses 6 to 8), and the type it names again
 //     where every reading charges the element; and the declared type where it

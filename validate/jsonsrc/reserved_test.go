@@ -341,8 +341,9 @@ func TestOpenContentTypeMaps(t *testing.T) {
 }
 
 // governedSchema gives x the ·locally declared type· L, an optional child k
-// and an attribute a, under p's lax {open content}, and under pb's, where the
-// declaration blocks extension. Xe extends L with the attribute b; Xo
+// and an attribute a, under p's lax {open content}, under pb's, where the
+// declaration blocks extension, and in q, which has no {open content}, so
+// that a second x is rejected. Xe extends L with the attribute b; Xo
 // restricts L, dropping k; X, unrelated to L, has the attribute k. Each row
 // of TestGovernedType that a curated json case mirrors names it.
 const governedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -370,6 +371,9 @@ const governedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
       <xs:sequence><xs:element name="x" type="t:L" minOccurs="0" block="extension"/></xs:sequence>
     </xs:complexType>
   </xs:element>
+  <xs:element name="q">
+    <xs:complexType><xs:sequence><xs:element name="x" type="t:L" minOccurs="0"/></xs:sequence></xs:complexType>
+  </xs:element>
 </xs:schema>`
 
 // TestGovernedType pins walker.instanceUnder against governedSchema: the
@@ -379,8 +383,12 @@ const governedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // non-overriding row's k is a child of L and an attribute of X, so it fails
 // where the members are classified under the type "$type" names. The blocked
 // rows ask ·override· with no blocking keyword on the {open content}'s x and
-// under the declaration's {disallowed substitutions} on the particle's.
-// Each row agrees with its XML twin.
+// under the declaration's {disallowed substitutions} on the particle's. The
+// rejected rows' x, which q's content model ·attributes· to nothing, has no
+// ·governing element declaration· (key-governing-ed clause 4.3), so L governs
+// it there too, and only q's content is charged (cvc-complex-content): k is a
+// child and a an attribute of L, where X would make k an attribute and a a
+// child. Each row agrees with its XML twin.
 func TestGovernedType(t *testing.T) {
 	v := validatorOver(t, governedSchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
@@ -400,6 +408,12 @@ func TestGovernedType(t *testing.T) {
 			`<pb ` + x + `><x/><x xsi:type="t:Xe" b="1"/></pb>`, none},
 		{"blocked, particle", `{"pb":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:Xe","b":"1"}}}`,
 			`<pb ` + x + `><x xsi:type="t:Xe" b="1"/></pb>`, []xsderr.Rule{"cvc-elt", "cvc-complex-type"}},
+		{"rejected, not overriding", `{"q":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"z"}]}}`,
+			`<q ` + x + `><x/><x xsi:type="t:X"><k>z</k></x></q>`, content},
+		{"rejected, not overriding, an attribute of L", `{"q":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","a":"z"}]}}`,
+			`<q ` + x + `><x/><x xsi:type="t:X" a="z"/></q>`, content},
+		{"after a rejected sibling, not overriding", `{"q":{"x":[{},{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"z"}]}}`,
+			`<q ` + x + `><x/><x/><x xsi:type="t:X"><k>z</k></x></q>`, content},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
@@ -776,10 +790,15 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // settle it differently: the mapping reads the type the root's table
 // ·conditionally selects· (walker.settled), which alone governs the root, and
 // settles the "$type" under it, as the engine assesses each XML twin. gd may
-// be governed by Ta or Tn: under Ta its second x is ·attributed to· the {open
-// content}, and t:X not ·overriding· x's L there, L governs it, of which k is
-// a child; under Tn it is rejected, and t:X governs it, of which k is an
-// attribute. gd has no a, so its table selects Ta. gw may be governed by Gq,
+// be governed by Ta or Tn. Its second x, which Ta ·attributes· to the {open
+// content} and Tn to nothing, is governed by x's L under either, t:X not
+// ·overriding· it, so k is a child (key-governing-type-elem clause 7), and its
+// row settles the "$type" alike whether the mapping reads the selection or
+// not. Its one x, ·attributed· to the element particle, is charged cvc-elt
+// clause 4 under either, and walker.instanceUnder settles its "$type" on L
+// under Ta, which has an {open content}, and on t:X under Tn, which has none,
+// so k is an attribute: the particle row fails where the mapping reads no
+// selection. gd has no a, so its table selects Ta. gw may be governed by Gq,
 // which rejects its second q, so that q's ·locally declared type· L governs
 // it, or by Gw, which ·attributes· it to the lax wildcard, so that the
 // top-level q's Qo does (walker.governing): t:X ·overrides· k's xs:string
@@ -797,6 +816,8 @@ func TestAncestrySelected(t *testing.T) {
 			`<gd ` + x + `><x/><x xsi:type="t:X"><k>zz</k></x></gd>`, none},
 		{"a type table's types governing a child differently", `{"gw":{"q":[{},{"k":{"$xmlns":{"t":"urn:t"},"$type":"t:X"}}]}}`,
 			`<gw ` + x + `><q/><q><k xsi:type="t:X"/></q></gw>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"}},
+		{"a type table's types settling a particle's $type differently", `{"gd":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}}}`,
+			`<gd ` + x + `><x xsi:type="t:X"><k>zz</k></x></gd>`, []xsderr.Rule{"cvc-elt"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
@@ -818,6 +839,8 @@ func TestAncestrySelectedBelowRoot(t *testing.T) {
 			`<hold ` + x + `><gd><x/><x xsi:type="t:X"><k>zz</k></x></gd></hold>`, none},
 		{"a type table's types governing a child differently", `{"hold":{"gw":{"q":[{},{"k":{"$xmlns":{"t":"urn:t"},"$type":"t:X"}}]}}}`,
 			`<hold ` + x + `><gw><q/><q><k xsi:type="t:X"/></q></gw></hold>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"}},
+		{"a type table's types settling a particle's $type differently", `{"hold":{"gd":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}}}}`,
+			`<hold ` + x + `><gd><x xsi:type="t:X"><k>zz</k></x></gd></hold>`, []xsderr.Rule{"cvc-elt"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
