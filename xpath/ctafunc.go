@@ -24,7 +24,8 @@ import (
 // attribute below E (§15.4.5, ctaSum), whose values the [Tally] collects.
 // fn:true and fn:false (§9.1.1, §9.1.2) are constants, which compile to the
 // ctaLiteral of their xs:boolean (ctaParser.constantCall). fn:current-date
-// (§16.4) reads the dynamic context's current dateTime (ctaCurrentDate), and
+// (§16.4) reads the dynamic context's current dateTime (ctaCurrentDate),
+// fn:year-from-date (§10.5.14) the year of its xs:date (ctaYearFromDate), and
 // fn:position and fn:last (§16.1, §16.2) its focus, which only the facet
 // façade compiles, to the err:XPDY0002 of an absent one (ctaNoFocus,
 // ctaFacade.focus). fn:namespace-uri (§14.3, ctaNamespaceURI) and
@@ -33,9 +34,10 @@ import (
 // never atomized (ctaContextNode, ctaFacade.contextNode), through the
 // [ContextElement] the evaluation carries.
 //
-// An argument whose parameter is xs:string? is converted by xpath20.md
-// §3.1.5's function conversion rules, as far as the static type settles them,
-// at compile time (ctaTypes.stringArgument), and read here by ctaStringOf. The
+// An argument whose parameter is xs:string? or xs:date? is converted by
+// xpath20.md §3.1.5's function conversion rules, as far as the static type
+// settles them, at compile time (ctaTypes.atomicArgument), and read here by
+// ctaArgumentAtom, through ctaStringOf for an xs:string? one. The
 // strings are compared under the default collation, which xpath-valid clause
 // 2.2.10 fixes as the Unicode codepoint collation, so a match is a match of
 // code points — which a match of UTF-8 bytes is.
@@ -69,13 +71,14 @@ const (
 	ctaExistsTest
 )
 
-// ctaStringArgument is one argument of an F&O function whose parameter is
-// xs:string?, as ctaTypes.stringArgument converted it at compile time: operand
-// yields items of the xs:string family or none — an xs:untypedAtomic operand
-// is held under its cast to xs:string — and mistyped marks an operand of any
-// other type, whose every item is the err:XPTY0004 xpath20.md §3.1.5 raises.
-// ctaStringOf reads it.
-type ctaStringArgument struct {
+// ctaAtomicArgument is one argument of an F&O function whose parameter is one
+// atomic type with the `?` occurrence indicator, xs:string? or xs:date?, as
+// ctaTypes.atomicArgument converted it at compile time: operand yields items
+// of a type that parameter accepts or none — an xs:untypedAtomic operand is
+// held under its cast to the parameter's type — and mistyped marks an operand
+// of any other type, whose every item is the err:XPTY0004 xpath20.md §3.1.5
+// raises. ctaArgumentAtom reads it.
+type ctaAtomicArgument struct {
 	operand  ctaValue
 	mistyped bool
 }
@@ -84,7 +87,7 @@ type ctaStringArgument struct {
 // two arguments, whose result is st, xs:boolean.
 type ctaMatch struct {
 	op          ctaMatchOp
-	left, right ctaStringArgument
+	left, right ctaAtomicArgument
 	st          *xsd.SimpleType
 }
 
@@ -94,7 +97,7 @@ type ctaMatch struct {
 // (resultType).
 type ctaUnaryString struct {
 	op  ctaUnaryStringOp
-	arg ctaStringArgument
+	arg ctaAtomicArgument
 	st  *xsd.SimpleType
 }
 
@@ -128,7 +131,7 @@ type ctaConcat struct {
 // st, xs:string: the part of left's string after the first occurrence of
 // right's, under the codepoint collation (ctaSubstringAfterItem).
 type ctaSubstringAfter struct {
-	left, right ctaStringArgument
+	left, right ctaAtomicArgument
 	st          *xsd.SimpleType
 }
 
@@ -179,6 +182,15 @@ type ctaCountedItems struct{ operand ctaValue }
 // call in one evaluation, and every evaluation handed the same instant,
 // returns the same date (§16.4 "stable"; cvc-xpath clause 6).
 type ctaCurrentDate struct{ st *xsd.SimpleType }
+
+// ctaYearFromDate is a call to fn:year-from-date with its one xs:date?
+// argument (xpath-functions.md §10.5.14, ctaParser.yearFromDateCall), whose
+// result is st, xs:integer: the year of the argument's ·localized value·, or
+// the empty sequence where the argument is empty (ctaYearFromDateItem).
+type ctaYearFromDate struct {
+	arg ctaAtomicArgument
+	st  *xsd.SimpleType
+}
 
 // ctaNoFocus is a call to fn:position or fn:last with no argument
 // (xpath-functions.md §16.1, §16.2), whose result is st, xs:integer, where
@@ -235,6 +247,7 @@ func (ctaSubstringAfter) ctaValue() {}
 func (ctaNumber) ctaValue()         {}
 func (ctaDistinctValues) ctaValue() {}
 func (ctaCurrentDate) ctaValue()    {}
+func (ctaYearFromDate) ctaValue()   {}
 func (ctaNoFocus) ctaValue()        {}
 func (ctaNamespaceURI) ctaValue()   {}
 func (ctaSum) ctaValue()            {}
@@ -493,43 +506,101 @@ func (op ctaMatchOp) holds(s, sub string) bool {
 	return false // op is one of the three constants; never reached
 }
 
-// ctaStringOf is the one xs:string a evaluates to, reporting false where it
-// raises: the empty sequence is the zero-length string, which is how every
-// xs:string? parameter of this grammar reads it (§7.4.4, §7.4.5, §7.5.1–7.5.3);
-// two or more items are err:XPTY0004, and so is any item of a mistyped
-// argument (xpath20.md §3.1.5); an operand that raised stays raised. The string
-// is the item's ·canonical representation·, read through [value.Canonical] on
-// holdsCollated's terms — the identity for the xs:string family and for
-// xs:anyURI, which §3.1.5's URI promotion makes an xs:string.
+// ctaArgumentAtom is the one item a evaluates to, present false where it
+// evaluates to the empty sequence, and ok false where it raises: two or more
+// items are err:XPTY0004, and so is any item of a mistyped argument
+// (xpath20.md §3.1.5); an operand that raised stays raised.
 //
 // The operand is read in its own static type, so no item is converted here:
-// stringArgument cast an xs:untypedAtomic one to xs:string at compile time. The
-// statically empty operand holds no item. An xs:untypedAtomic static type is
-// raised, since no argument stringArgument built has one.
-func ctaStringOf(a ctaStringArgument, env ctaEnv) (string, bool) {
+// atomicArgument cast an xs:untypedAtomic one to the parameter's type at
+// compile time. The statically empty operand holds no item. An
+// xs:untypedAtomic static type is raised, since no argument atomicArgument
+// built has one.
+func ctaArgumentAtom(a ctaAtomicArgument, env ctaEnv) (v value.Value, present, ok bool) {
 	switch s := ctaStaticOf(a.operand).(type) {
 	case ctaEmptySequence:
-		return "", true
+		return nil, false, true
 	case ctaTyped:
 		atoms, converted := ctaItemOf(a.operand, s.st, env).(ctaAtoms)
 		if !converted {
-			return "", false
+			return nil, false, false
 		}
 		if len(atoms.vs) == 0 {
-			return "", true
+			return nil, false, true
 		}
 		if len(atoms.vs) > 1 || a.mistyped {
-			return "", false // err:XPTY0004
+			return nil, false, false // err:XPTY0004
 		}
-		str, renders := atoms.vs[0].(value.Canonical)
-		if !renders {
-			return "", false
-		}
-		return str.Canonical(), true
+		return atoms.vs[0], true, true
 	case ctaUntypedAtomic:
+		return nil, false, false
+	}
+	return nil, false, false // ctaStatic has the three arms above; never reached
+}
+
+// ctaStringOf is the one xs:string a evaluates to, reporting false where it
+// raises (ctaArgumentAtom): the empty sequence is the zero-length string,
+// which is how every xs:string? parameter of this grammar reads it (§7.4.4,
+// §7.4.5, §7.5.1–7.5.3). The string is the item's ·canonical representation·,
+// read through [value.Canonical] on holdsCollated's terms — the identity for
+// the xs:string family and for xs:anyURI, which §3.1.5's URI promotion makes
+// an xs:string.
+func ctaStringOf(a ctaAtomicArgument, env ctaEnv) (string, bool) {
+	v, present, ok := ctaArgumentAtom(a, env)
+	if !ok || !present {
+		return "", ok
+	}
+	str, renders := v.(value.Canonical)
+	if !renders {
 		return "", false
 	}
-	return "", false // ctaStatic has the three arms above; never reached
+	return str.Canonical(), true
+}
+
+// ctaYearFromDateItem evaluates n and converts the xs:integer it returns into
+// c on ctaMatchItem's terms (xpath-functions.md §10.5.14): the empty sequence
+// for an empty argument, and otherwise the year of the argument's xs:date
+// (ctaDateYear). An argument that raises — err:XPTY0004 for an item of another
+// type or for two or more items (ctaArgumentAtom) — is the error.
+func ctaYearFromDateItem(n ctaYearFromDate, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	v, present, ok := ctaArgumentAtom(n.arg, env)
+	if !ok {
+		return ctaRaised{}
+	}
+	if !present {
+		return ctaAtoms{}
+	}
+	year, read := ctaDateYear(v)
+	if !read {
+		return ctaRaised{}
+	}
+	return ctaConvert(year, n.st, c, env)
+}
+
+// ctaDateYear is the ·year· property of the xs:date v as an xs:integer
+// lexical, read off its ·canonical representation· (value.Canonical), whose
+// leading yearFrag ·dateCanonicalMap· renders from that property alone
+// (xmlschema11-2.md vp-dateCanRep): an optional '-' and four or more digits,
+// up to the '-' before the month. That property is the year §10.5.14 returns,
+// of the ·localized value·: ·dateLexicalMap· (vp-dateLexRep) sets it through
+// ·newDateTime· (p-setDTFromRaw) to the yearFrag written, never normalized to
+// UTC by the timezoneFrag beside it, so `2008-12-31-14:00` is 2008. It
+// reports false for a v that renders no such lexical.
+func ctaDateYear(v value.Value) (string, bool) {
+	canonical, renders := v.(value.Canonical)
+	if !renders {
+		return "", false
+	}
+	s := canonical.Canonical()
+	sign := ""
+	if strings.HasPrefix(s, "-") {
+		sign, s = "-", s[1:]
+	}
+	digits, _, found := strings.Cut(s, "-")
+	if !found || digits == "" {
+		return "", false
+	}
+	return sign + digits, true
 }
 
 // ctaMatchItem evaluates n, its left argument first, and converts the
@@ -611,7 +682,7 @@ func ctaStringFunctionItem(n ctaStringFunction, c *xsd.SimpleType, env ctaEnv) c
 func ctaConcatItem(n ctaConcat, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	var b strings.Builder
 	for _, arg := range n.args {
-		s, ok := ctaStringOf(ctaStringArgument{operand: arg}, env)
+		s, ok := ctaStringOf(ctaAtomicArgument{operand: arg}, env)
 		if !ok {
 			return ctaRaised{}
 		}

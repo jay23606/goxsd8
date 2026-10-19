@@ -326,15 +326,17 @@ func TestStringFunctionArmsInEverySwitch(t *testing.T) {
 	}
 }
 
-// stringArgument and ctaStringOf each name every ctaStatic arm: the statically
-// empty operand is held as it is and not mistyped, an xs:untypedAtomic one is
-// held under its cast to xs:string, and ctaStringOf raises for an operand whose
-// static type is xs:untypedAtomic, which stringArgument never stores. Without
-// stringArgument's ctaEmptySequence case the empty row is mistyped, and with
-// ctaStringOf's ctaUntypedAtomic case answering a string the raised row fails.
+// stringArgument and ctaStringOf, through atomicArgument and ctaArgumentAtom,
+// each name every ctaStatic arm: the statically empty operand is held as it is
+// and not mistyped, an xs:untypedAtomic one is held under its cast to
+// xs:string, and ctaStringOf raises for an operand whose static type is
+// xs:untypedAtomic, which atomicArgument never stores. Without
+// atomicArgument's ctaEmptySequence case the empty row is mistyped, and with
+// ctaArgumentAtom's ctaUntypedAtomic case answering the empty sequence the
+// raised row fails.
 func TestStringArgumentNamesEveryStaticArm(t *testing.T) {
 	known := compileTypes(t)
-	if got := known.stringArgument(ctaEmptyValue{}); got != (ctaStringArgument{operand: ctaEmptyValue{}}) {
+	if got := known.stringArgument(ctaEmptyValue{}); got != (ctaAtomicArgument{operand: ctaEmptyValue{}}) {
 		t.Errorf("stringArgument(()) = %+v, want the operand held, not mistyped", got)
 	}
 	untyped := known.stringArgument(ctaUntypedValue{})
@@ -342,7 +344,7 @@ func TestStringArgumentNamesEveryStaticArm(t *testing.T) {
 		t.Errorf("stringArgument($value untyped) = %+v, want its cast to xs:string, not mistyped", untyped)
 	}
 	env := ctaEnv{backend: backend(), types: seededTypes}
-	if s, ok := ctaStringOf(ctaStringArgument{operand: ctaUntypedValue{}}, env); ok {
+	if s, ok := ctaStringOf(ctaAtomicArgument{operand: ctaUntypedValue{}}, env); ok {
 		t.Errorf("ctaStringOf(xs:untypedAtomic operand) = %q, want raised", s)
 	}
 }
@@ -518,7 +520,7 @@ func TestCompileCTATestDeclinesLibraryFunctions(t *testing.T) {
 		"contains(@a, 'x')", "starts-with(@a, 'x')", "ends-with(@a, 'x')",
 		"string-length(@a) > 0", "normalize-space(@a) = 'x'", "string(@a) = 'x'",
 		"empty(@a)", "exists(@a)", "distinct-values(@a) = 'x'", "true()", "false()", "not(true())",
-		"current-date() = current-date()", "concat(@a, 'x') = 'ax'",
+		"current-date() = current-date()", "concat(@a, 'x') = 'ax'", "year-from-date(@a) eq 2008",
 	} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)

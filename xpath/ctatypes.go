@@ -309,7 +309,7 @@ func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
 	case ctaAttr, ctaTypedAttr, ctaUntypedChild, ctaValueVar, ctaUntypedValue, ctaEmptyValue,
 		ctaContextAtom, ctaNoContextItem, ctaNoDocumentRoot, ctaCast, ctaCastable, ctaInstanceOf, ctaCount,
 		ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction, ctaConcat, ctaSubstringAfter, ctaNumber, ctaCurrentDate,
-		ctaNoFocus, ctaNamespaceURI:
+		ctaYearFromDate, ctaNoFocus, ctaNamespaceURI:
 		return ctaStaticOf(v), false, true
 	}
 	return nil, false, false
@@ -427,9 +427,10 @@ func (t ctaTypes) annotationDerives(v ctaValue, name xsd.QName) (derives, decide
 //     ctaPresence, xs:boolean; ctaUnaryString, xs:integer or xs:string;
 //     ctaStringFunction, ctaConcat and ctaSubstringAfter, xs:string;
 //     ctaNumber, xs:double; ctaDistinctValues, its typed operand's type, a
-//     literal's included; ctaCurrentDate, xs:date; ctaNamespaceURI,
-//     xs:anyURI), or a cast of one of them, or of an operand the second shape
-//     names, that is not in the string family (castSource, its target);
+//     literal's included; ctaCurrentDate, xs:date; ctaYearFromDate,
+//     xs:integer; ctaNamespaceURI, xs:anyURI), or a cast of one of them, or of
+//     an operand the second shape names, that is not in the string family
+//     (castSource, its target);
 //   - a cast of any other shape whose target is xs:float or xs:double
 //     (floatingSource): a cast to either over an untyped operand, a
 //     string-family one or a literal other than a DoubleLiteral, as in
@@ -704,33 +705,51 @@ func (t ctaTypes) localValueSource(st *xsd.SimpleType) bool {
 }
 
 // stringArgument converts v, one argument of an F&O function whose parameter
-// is xs:string?, by xpath20.md §3.1.5's function conversion rules as far as
-// v's static type settles them — atomization, then "each item of type
-// xs:untypedAtomic is cast to the expected atomic type", then B.1's URI
-// promotion, and err:XPTY0004 for an item that matches none of them:
+// is xs:string?, on atomicArgument's terms, where the {primitive type
+// definition}s accepted are xs:string and xs:anyURI (ctaStringLike): subtype
+// substitution and B.1's URI promotion convert such an operand, and neither
+// changes its string. An empty operand of any type matches xs:string?, so an
+// absent xs:integer attribute is the zero-length string (ctaStringOf).
+func (t ctaTypes) stringArgument(v ctaValue) ctaAtomicArgument {
+	return t.atomicArgument(v, t.str, ctaStringLike)
+}
+
+// dateArgument converts v, one argument of an F&O function whose parameter is
+// xs:date?, on atomicArgument's terms, where the one {primitive type
+// definition} accepted is xs:date: subtype substitution converts such an
+// operand, and no promotion of xpath20.md B.1 reaches xs:date. date is
+// xs:date.
+func (t ctaTypes) dateArgument(v ctaValue, date *xsd.SimpleType) ctaAtomicArgument {
+	return t.atomicArgument(v, date, func(p *xsd.SimpleType) bool { return p.Name() == ctaBuiltin("date") })
+}
+
+// atomicArgument converts v, one argument of an F&O function whose parameter
+// is target with the `?` occurrence indicator, by xpath20.md §3.1.5's function
+// conversion rules as far as v's static type settles them — atomization, then
+// "each item of type xs:untypedAtomic is cast to the expected atomic type",
+// then subtype substitution and B.1's promotions, and err:XPTY0004 for an item
+// that matches none of them:
 //
-//   - an xs:untypedAtomic operand is held under its cast to xs:string, the
-//     `?` allowing the empty sequence and the cast raising err:XPTY0004 for two
-//     or more items (ctaCastItem);
-//   - a typed operand whose {primitive type definition} is xs:string or
-//     xs:anyURI (ctaStringLike) is held as it is: subtype substitution and the
-//     URI promotion convert it, and neither changes its string;
+//   - an xs:untypedAtomic operand is held under its cast to target, the `?`
+//     allowing the empty sequence and the cast raising err:XPTY0004 for two or
+//     more items (ctaCastItem);
+//   - a typed operand whose {primitive type definition} accepts reports true
+//     for is held as it is;
 //   - the statically empty operand is held as it is: it holds no item;
-//   - every other typed operand is held mistyped, and ctaStringOf raises
+//   - every other typed operand is held mistyped, and ctaArgumentAtom raises
 //     err:XPTY0004 for any item it yields. That is raised dynamically and not
-//     here: an empty operand of any type matches xs:string?, so an absent
-//     xs:integer attribute is the zero-length string.
-func (t ctaTypes) stringArgument(v ctaValue) ctaStringArgument {
+//     here: an empty operand of any type matches the `?` parameter.
+func (t ctaTypes) atomicArgument(v ctaValue, target *xsd.SimpleType, accepts func(p *xsd.SimpleType) bool) ctaAtomicArgument {
 	switch s := ctaStaticOf(v).(type) {
 	case ctaUntypedAtomic:
-		return ctaStringArgument{operand: ctaCast{operand: v, target: t.str, allowsEmpty: true}}
+		return ctaAtomicArgument{operand: ctaCast{operand: v, target: target, allowsEmpty: true}}
 	case ctaTyped:
 		p, resolved := t.primitive(s.st)
-		return ctaStringArgument{operand: v, mistyped: !resolved || !ctaStringLike(p)}
+		return ctaAtomicArgument{operand: v, mistyped: !resolved || !accepts(p)}
 	case ctaEmptySequence:
-		return ctaStringArgument{operand: v}
+		return ctaAtomicArgument{operand: v}
 	}
-	return ctaStringArgument{operand: v, mistyped: true} // ctaStatic has the three arms above; never reached
+	return ctaAtomicArgument{operand: v, mistyped: true} // ctaStatic has the three arms above; never reached
 }
 
 // typedAtomic reports whether this engine reads a value of type st off the

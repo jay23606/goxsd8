@@ -20,62 +20,58 @@ import (
 // "//" opening [25] PathExpr over one such step or one attribute step, a [26]
 // RelativePathExpr of two or more such steps, the last of which may be the [37]
 // Wildcard `*`, one element step `N`, `./N` or `.//N`, one step whose NodeTest
-// is [58] CommentTest, a [54] KindTest, in the same three places,
-// `.//comment()`, or a child step filtered by a [40] Predicate that is a
-// conjunction of child steps or one `preceding::` step, standing as the whole
-// operand of fn:exists, fn:empty or an ·effective boolean value· (childPath,
-// selectedElements, commentStep, childrenHaving, childrenPreceded), an fn:count
-// call ([48] FunctionCall) over one counted path, a [40] Predicate on a child
-// step in it (predicate) or a [21] UnionExpr of such paths (countArgument), or
-// over an operand a library call takes as its argument (countCall), a call to
-// one of the F&O string and sequence functions (libraryCall) whose arguments are
-// additive expressions or `()`, a constructor function whose operand is such an
-// argument (constructorOperand), a call to fn:namespace-uri over `.` or with no
-// argument (namespaceURICall) and, as an operand of `=` against string literals,
-// to fn:in-scope-prefixes over `.` (prefixMember), each `.` there E as a node
-// (contextNodeArgument), the binary operators of [13] AdditiveExpr and [14]
-// MultiplicativeExpr, [47] ContextItemExpr `.`, which the assertion and facet
-// façades admit, and the predicate façade reads as its candidate
+// is [58] CommentTest, a [54] KindTest, in the same three places, `.//comment()`, or a
+// child step filtered by a [40] Predicate that is a conjunction of child steps or one
+// `preceding::` step, standing as the whole operand of fn:exists, fn:empty or an
+// ·effective boolean value· (childPath, selectedElements, commentStep, childrenHaving,
+// childrenPreceded), an fn:count call ([48] FunctionCall) over one counted path, a
+// [40] Predicate on a child step in it (predicate) or a [21] UnionExpr of such paths
+// (countArgument), or over an operand a library call takes as its argument
+// (countCall), a call to one of the F&O string, sequence and date functions
+// (libraryCall) whose arguments are additive expressions or `()`, a constructor
+// function whose operand is such an argument (constructorOperand), a call to
+// fn:namespace-uri over `.` or with no argument (namespaceURICall) and, as an operand
+// of `=` against string literals, to fn:in-scope-prefixes over `.` (prefixMember),
+// each `.` there E as a node (contextNodeArgument), the binary operators of [13]
+// AdditiveExpr and [14] MultiplicativeExpr, [47] ContextItemExpr `.`, which the
+// assertion and facet façades admit, and the predicate façade reads as its candidate
 // (valuePredicate), [7] IfExpr wherever an ExprSingle stands whole in a boolean
-// position (exprSingle), [6] QuantifiedExpr over one child step whose body tests
-// the bound child's attributes or next sibling element, over one typed child
-// step, filtered by `[position() lt last()]` or not (rangeBinding), whose body
-// is any ExprSingle reading the bound child, `$v/following-sibling::M[1]`
-// and an attribute step over either, a function call ending it or not
-// (childQuantified, boundSibling, boundAttributeStep), or over the items of a
-// typed `$value` whose body is any ExprSingle, in the same positions
-// (quantifiedExpr), [18] CastableExpr's `castable as` tail (castableTail), [16]
-// InstanceofExpr's `instance of` tail with an atomic SequenceType, over an
-// fn:data call among others (instanceofExpr), or with an AttributeTest over one
-// attribute step (attributeInstanceOf), and, as a general comparison's operand,
-// an integer sequence, [11] RangeExpr or §3.3.1's comma sequence over
-// IntegerLiterals (integerSequence), or a string sequence, §3.3.1's comma
-// sequence over StringLiterals (stringSequence; ctasequence.go) — each behind
-// the façade (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
+// position (exprSingle), [6] QuantifiedExpr over one child step whose body tests the
+// bound child's attributes or next sibling element, over one typed child step,
+// filtered by `[position() lt last()]` or not (rangeBinding), whose body is any
+// ExprSingle reading the bound child, `$v/following-sibling::M[1]` and an attribute
+// step over either, a function call ending it or not (childQuantified, boundSibling,
+// boundAttributeStep), or over the items of a typed `$value` whose body is any
+// ExprSingle, in the same positions (quantifiedExpr), [18] CastableExpr's `castable
+// as` tail (castableTail), [16] InstanceofExpr's `instance of` tail with an atomic
+// SequenceType, over an fn:data call among others (instanceofExpr), or with an
+// AttributeTest over one attribute step (attributeInstanceOf), and, as a general
+// comparison's operand, an integer sequence, [11] RangeExpr or §3.3.1's comma sequence
+// over IntegerLiterals (integerSequence), or a string sequence, §3.3.1's comma
+// sequence over StringLiterals (stringSequence; ctasequence.go) — each behind the
+// façade (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
 // ctaFacade.childPath, ctaFacade.childrenHaving, ctaFacade.childrenPreceded,
-// ctaFacade.elements, ctaFacade.comments, ctaFacade.quantified,
-// ctaFacade.rangeScope, ctaFacade.childScope, ctaFacade.boundSibling,
-// ctaFacade.boundAttribute, ctaFacade.rooted, ctaFacade.count,
-// ctaFacade.callsLibrary, ctaFacade.computes, ctaFacade.contextItem,
-// ctaFacade.contextNode, ctaFacade.focus, ctaFacade.conditional,
-// ctaFacade.constructsSequences, ctaFacade.castable, ctaFacade.instanceOf), so a
-// Type Alternative's {test} reaches none of them. Every method below is named
-// for the production it parses, and the whole grammar is both reached and
-// evaluated: no method here is a stub, and the production-level declines are
-// those twenty-three façade methods'. xpath/doc.go owns the enumeration of what
+// ctaFacade.elements, ctaFacade.comments, ctaFacade.quantified, ctaFacade.rangeScope,
+// ctaFacade.childScope, ctaFacade.boundSibling, ctaFacade.boundAttribute,
+// ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary, ctaFacade.computes,
+// ctaFacade.contextItem, ctaFacade.contextNode, ctaFacade.focus,
+// ctaFacade.conditional, ctaFacade.constructsSequences, ctaFacade.castable,
+// ctaFacade.instanceOf), so a Type Alternative's {test} reaches none of them. Every
+// method below is named for the production it parses, and the whole grammar is both
+// reached and evaluated: no method here is a stub, and the production-level declines
+// are those twenty-three façade methods'. xpath/doc.go owns the enumeration of what
 // declines; every other decline reaching this file is ctaTypes answering
-// ctaTypeDeclined for a comparison type, a cast target or a cast operand it will
-// not serve, ctaTypes.arithmetic declining an operand pair,
-// ctaTypes.instanceItem and ctaTypes.itemMatches declining an `instance of`
-// operand or AtomicType, ctaTypes.annotationDerives an AttributeTest's TypeName,
-// a library call of an arity its function does not have, a predicate or a union
-// operand outside the shapes predicate, valuePredicate, childrenHaving,
-// childrenPreceded and ctaUnionOf admit, a quantified expression outside the
-// shapes quantifiedExpr admits, `.` or another node standing as a node
-// (booleanExpr, presenceCall, instanceofExpr), a sequence sequenceLength does
-// not measure or integerSequence does not build, or the façade declining a
-// NameTest, a variable's type or a settled comparison type, which the production
-// that asked propagates unchanged.
+// ctaTypeDeclined for a comparison type, a cast target or a cast operand it will not
+// serve, ctaTypes.arithmetic declining an operand pair, ctaTypes.instanceItem and
+// ctaTypes.itemMatches declining an `instance of` operand or AtomicType,
+// ctaTypes.annotationDerives an AttributeTest's TypeName, a library call of an arity
+// its function does not have, a predicate or a union operand outside the shapes
+// predicate, valuePredicate, childrenHaving, childrenPreceded and ctaUnionOf admit, a
+// quantified expression outside the shapes quantifiedExpr admits, `.` or another node
+// standing as a node (booleanExpr, presenceCall, instanceofExpr), a sequence
+// sequenceLength does not measure or integerSequence does not build, or the façade
+// declining a NameTest, a variable's type or a settled comparison type, which the
+// production that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -2049,6 +2045,8 @@ func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
 		return p.constantCall(local)
 	case "current-date":
 		return p.currentDateCall()
+	case "year-from-date":
+		return p.yearFromDateCall()
 	case "position", "last":
 		return p.focusCall()
 	case "namespace-uri":
@@ -2521,6 +2519,27 @@ func (p *ctaParser) currentDateCall() (ctaValue, bool) {
 		return nil, false
 	}
 	return ctaCurrentDate{st: date}, true
+}
+
+// yearFromDateCall parses a call to fn:year-from-date with its one xs:date?
+// argument (xpath-functions.md §10.5.14), converted by ctaTypes.dateArgument,
+// into its ctaYearFromDate, whose result is xs:integer?. Every other arity
+// declines (err:XPST0017, withheld on [CompileAssertionTest]'s terms), and so
+// does an xs:date or xs:integer that does not resolve.
+func (p *ctaParser) yearFromDateCall() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 1 {
+		return nil, false
+	}
+	date, resolved := p.types.simple(ctaBuiltin("date"))
+	if !resolved {
+		return nil, false
+	}
+	integer, resolved := p.types.simple(ctaBuiltin("integer"))
+	if !resolved {
+		return nil, false
+	}
+	return ctaYearFromDate{arg: p.types.dateArgument(args[0], date), st: integer}, true
 }
 
 // focusCall parses a call to fn:position or fn:last with no argument

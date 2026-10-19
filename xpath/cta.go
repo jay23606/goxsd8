@@ -34,19 +34,19 @@ import (
 // whose body is any ExprSingle over its range variable, a node, `$v/following-sibling::M[1]`
 // and an attribute step over either, which a function call may end (ctaQuantifiedChildren,
 // ctaBoundChild, ctaBoundSibling, ctaBoundAttribute, ctaBoundAttributeCall), or over the items
-// of a typed `$value`, whose body is any ExprSingle over its range variable
-// (ctaQuantifiedValue, ctaRangeItem); and [14] ValueExpr also takes an fn:count call over one
-// counted path (ctaCount) — a child step in it filtered by one [40] Predicate testing attribute
-// existence (ctaFilteredChildren) or comparing the child's value (ctaMatchingChildren, whose
-// `.` is ctaCandidate), and two or more such paths joined by [21] UnionExpr (ctaUnion) — or
-// over an operand that is no path, such as `$value`, whose items it counts (ctaCountedItems),
-// and a call to one of the F&O string and sequence functions or to fn:namespace-uri over E
+// of a typed `$value`, whose body is any ExprSingle over its range variable (ctaQuantifiedValue,
+// ctaRangeItem); and [14] ValueExpr also takes an fn:count call over one counted path (ctaCount)
+// — a child step in it filtered by one [40] Predicate testing attribute existence
+// (ctaFilteredChildren) or comparing the child's value (ctaMatchingChildren, whose `.` is
+// ctaCandidate), and two or more such paths joined by [21] UnionExpr (ctaUnion) — or over an
+// operand that is no path, such as `$value`, whose items it counts (ctaCountedItems), and a call
+// to one of the F&O string, sequence and date functions or to fn:namespace-uri over E
 // (ctaNamespaceURI), evaluated in ctafunc.go, or to fn:doc, which raises (ctaNoDocument), and
 // [18]'s operand any argument of such a call (ctaParser.constructorOperand), and [11]
 // ta-BooleanExpr a comparison by `=` of fn:in-scope-prefixes over E against string literals
 // (ctaPrefixMember), whose `.` is E as a node (ctaContextNode); and each comparison operand may
-// be xpath20.md [13] AdditiveExpr over [14] MultiplicativeExpr, whose operators are evaluated
-// in ctaarith.go (ctaArith); [47] ContextItemExpr `.`, atomized to E's string value
+// be xpath20.md [13] AdditiveExpr over [14] MultiplicativeExpr, whose operators are evaluated in
+// ctaarith.go (ctaArith); [47] ContextItemExpr `.`, atomized to E's string value
 // (ctaContextAtom); xpath20.md [18] CastableExpr's `castable as` tail in place of [15]'s `cast
 // as` one (ctaCastable); xpath20.md [16] InstanceofExpr's `instance of` tail with an atomic
 // SequenceType over a [14] ta-ValueExpr or an fn:data call, or with an AttributeTest over one
@@ -55,23 +55,23 @@ import (
 // (ctaChildAt); and a general comparison's operand may be an integer sequence, xpath20.md [11]
 // RangeExpr or §3.3.1's comma sequence over IntegerLiterals, or a string sequence, §3.3.1's
 // comma sequence over StringLiterals, evaluated in ctasequence.go (ctaIntegerRanges,
-// ctaStringSequence). The facet façade (ctaFacetFacade) takes the assertion façade's grammar
-// but fn:count over a path, and compiles every read of the context item — `.`, an attribute or
-// child step, a rooted path — to the err:XPDY0002 an assertions facet's absent context item
-// raises (ctaNoContextItem; ctaAbsentNode for `.` as a node). It is not a stage of a general
-// XPath 2.0 evaluator: the productions below reach no axis but attribute, one child step, the
-// child-step paths and the one descendant step whose existence is asked, the descendant steps
-// fn:count counts over, the preceding step of ctaChildrenPreceded and the child step filtering
-// it, and the following-sibling and self steps of a quantifier's body and the following-sibling
-// step over its range variable, no predicate or union but those in an fn:count argument, the
+// ctaStringSequence). The facet façade (ctaFacetFacade) takes the assertion façade's grammar but
+// fn:count over a path, and compiles every read of the context item — `.`, an attribute or child
+// step, a rooted path — to the err:XPDY0002 an assertions facet's absent context item raises
+// (ctaNoContextItem; ctaAbsentNode for `.` as a node). It is not a stage of a general XPath 2.0
+// evaluator: the productions below reach no axis but attribute, one child step, the child-step
+// paths and the one descendant step whose existence is asked, the descendant steps fn:count
+// counts over, the preceding step of ctaChildrenPreceded and the child step filtering it, and
+// the following-sibling and self steps of a quantifier's body and the following-sibling step
+// over its range variable, no predicate or union but those in an fn:count argument, the
 // child-existence conjunction, the two of ctaChildrenPreceded, the two of that body, the `[1]`
 // of that following-sibling step, the `[k]` of ctaChildAt and the `[position() lt last()]`
 // filtering a quantifier's binding step, no variable but `$value` and a quantifier's range
 // variable inside its body, and no function but fn:not, fn:count, the ctaParser.libraryCall
 // names, fn:in-scope-prefixes as an operand of `=` (ctaParser.prefixMember) and fn:data as the
-// operand of `instance of` (ctaParser.instanceofExpr) or over `$value` as a quantifier's
-// binding sequence (ctaParser.valueBinding), so evaluating them directly is exact where a
-// fail-open delegation to a general engine would be a guess.
+// operand of `instance of` (ctaParser.instanceofExpr) or over `$value` as a quantifier's binding
+// sequence (ctaParser.valueBinding), so evaluating them directly is exact where a fail-open
+// delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -856,19 +856,19 @@ func (ctaQuantifiedChildren) ctaExpr() {}
 // string or sequence function over them (ctaMatch, ctaUnaryString,
 // ctaPresence, ctaDistinctValues, ctaStringFunction, ctaConcat,
 // ctaSubstringAfter, ctaNumber; ctaFacade.callsLibrary), to fn:current-date
-// (ctaCurrentDate) or, over an absent focus, to fn:position or fn:last
-// (ctaNoFocus, ctaFacade.focus), or to fn:namespace-uri (ctaNamespaceURI), the
-// assertion façade's `.` (ctaContextAtom, ctaFacade.contextItem), and an
-// integer or string sequence (ctaIntegerRanges, ctaStringSequence,
-// ctaFacade.constructsSequences), and the range variable of a quantifier over
-// `$value` inside its body (ctaRangeItem, ctaFacade.rangeScope), and the range
-// variable of a quantifier over a typed child step inside its body,
-// `$v/following-sibling::M[1]` over it and an attribute step over either, a
-// function call ending it or not (ctaBoundChild, ctaBoundSibling,
-// ctaBoundAttribute, ctaBoundAttributeCall; ctaFacade.childScope,
-// ctaFacade.boundSibling, ctaFacade.boundAttribute). `.` as the node
-// fn:namespace-uri and fn:in-scope-prefixes take is no branch: it is
-// ctaNodeArg (ctaFacade.contextNode). Every branch answers readsChild,
+// (ctaCurrentDate), to fn:year-from-date (ctaYearFromDate) or, over an absent
+// focus, to fn:position or fn:last (ctaNoFocus, ctaFacade.focus), or to
+// fn:namespace-uri (ctaNamespaceURI), the assertion façade's `.`
+// (ctaContextAtom, ctaFacade.contextItem), and an integer or string sequence
+// (ctaIntegerRanges, ctaStringSequence, ctaFacade.constructsSequences), and
+// the range variable of a quantifier over `$value` inside its body
+// (ctaRangeItem, ctaFacade.rangeScope), and the range variable of a quantifier
+// over a typed child step inside its body, `$v/following-sibling::M[1]` over
+// it and an attribute step over either, a function call ending it or not
+// (ctaBoundChild, ctaBoundSibling, ctaBoundAttribute, ctaBoundAttributeCall;
+// ctaFacade.childScope, ctaFacade.boundSibling, ctaFacade.boundAttribute). `.`
+// as the node fn:namespace-uri and fn:in-scope-prefixes take is no branch: it
+// is ctaNodeArg (ctaFacade.contextNode). Every branch answers readsChild,
 // childAttributes and counted on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
@@ -1328,10 +1328,11 @@ type ctaFacade interface {
 	// functions ctaParser.libraryCall parses — fn:contains, fn:starts-with,
 	// fn:ends-with, fn:string-length, fn:normalize-space, fn:string,
 	// fn:concat, fn:substring-after, fn:number, fn:empty, fn:exists,
-	// fn:distinct-values, fn:true, fn:false, fn:current-date, fn:position and
-	// fn:last (ctaFacade.focus), fn:namespace-uri (ctaFacade.contextNode) and
-	// fn:doc (ctaFacade.document) — and fn:in-scope-prefixes as an operand of
-	// `=` (ctaParser.prefixMember) at all, which §3.12.6 clause 3 pins out of
+	// fn:distinct-values, fn:true, fn:false, fn:current-date,
+	// fn:year-from-date, fn:position and fn:last (ctaFacade.focus),
+	// fn:namespace-uri (ctaFacade.contextNode) and fn:doc
+	// (ctaFacade.document) — and fn:in-scope-prefixes as an operand of `=`
+	// (ctaParser.prefixMember) at all, which §3.12.6 clause 3 pins out of
 	// [12] ta-BooleanFunction (fn:not alone) and [18] ta-ConstructorFunction
 	// (constructors alone), an fn:count argument that is no path
 	// (ctaParser.countCall), and a constructor function's operand beyond
@@ -2627,9 +2628,9 @@ type ctaUntypedAtomic struct{}
 // ctaTyped is an operand carrying a datatype: a Literal, the result of a cast,
 // a constructor function, a castable or an instance-of expression, a typed
 // attribute, an fn:count call, an arithmetic result, the result of an F&O
-// string or sequence function or of fn:current-date, or each item of `$value`.
-// It carries the COMPONENT alone — st.Name() is the name, and storing both
-// would be two encodings of one fact (STYLE D3).
+// string or sequence function, of fn:current-date or of fn:year-from-date, or
+// each item of `$value`. It carries the COMPONENT alone — st.Name() is the
+// name, and storing both would be two encodings of one fact (STYLE D3).
 type ctaTyped struct{ st *xsd.SimpleType }
 
 // ctaEmptySequence is the statically empty operand, ctaEmptyValue: it yields
@@ -2736,6 +2737,8 @@ func ctaCarriedType(v ctaValue) (*xsd.SimpleType, bool) {
 	case ctaNumber:
 		return n.st, true
 	case ctaCurrentDate:
+		return n.st, true
+	case ctaYearFromDate:
 		return n.st, true
 	case ctaNoFocus:
 		return n.st, true
@@ -3550,6 +3553,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaNumberItem(n, c, env)
 	case ctaCurrentDate:
 		return ctaCurrentDateItem(n, c, env)
+	case ctaYearFromDate:
+		return ctaYearFromDateItem(n, c, env)
 	case ctaNamespaceURI:
 		return ctaNamespaceURIItem(n, c, env)
 	case ctaDistinctValues:

@@ -113,7 +113,7 @@ func TestFacetAssertionsStaticTypeOfAResult(t *testing.T) {
 
 // FacetAssertions declines a {test} outside the grammar CompileAssertionTest
 // admits — arithmetic over a non-numeric `$value`, a call to a function
-// outside the string and sequence core, a variable other than `$value`, the
+// libraryCall does not name, a variable other than `$value`, the
 // abbreviated parent step.
 func TestFacetAssertionsDecline(t *testing.T) {
 	str := asBuiltin(t, "string")

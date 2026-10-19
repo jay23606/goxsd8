@@ -23,13 +23,13 @@ import (
 // (ctaNoFocus); and `$value`, bound to the XDM representation of the value
 // under the facet's type, or under its ·active basic member· where that type
 // is a union (clause 1.4, dt-xdmrep clause 4), is the whole of what a {test}
-// can read, arithmetic and the F&O string and sequence functions over it
-// included (ctaFacetFacade.computes, ctaFacetFacade.callsLibrary), `castable
-// as` and `instance of` over it (ctaFacetFacade.castable,
-// ctaFacetFacade.instanceOf), and fn:count over it or over any other operand
-// that is no path. An fn:count call over a path declines
-// (ctaFacetFacade.count), and so does a quantified expression, over a child
-// step (ctaFacetFacade.quantified, and ctaParser.childQuantified for one
+// can read, arithmetic, the F&O string and sequence functions and
+// fn:year-from-date over it included (ctaFacetFacade.computes,
+// ctaFacetFacade.callsLibrary), `castable as` and `instance of` over it
+// (ctaFacetFacade.castable, ctaFacetFacade.instanceOf), and fn:count over it
+// or over any other operand that is no path. An fn:count call over a path
+// declines (ctaFacetFacade.count), and so does a quantified expression, over a
+// child step (ctaFacetFacade.quantified, and ctaParser.childQuantified for one
 // windowed or reading its bound children, whose binding step compiles to no
 // typed child) or over `$value` (ctaFacetFacade.rangeScope).
 

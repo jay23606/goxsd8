@@ -219,6 +219,11 @@
 //	                   and its `instance of` read off the type of the value
 //	                   it returns
 //	no   yes    yes    fn:current-date (§16.4; Dynamic context below)
+//	no   yes    yes    fn:year-from-date (§10.5.14), the year of the
+//	                   ·localized value·, never normalized to UTC; an
+//	                   xs:date? argument casts an xs:untypedAtomic item to
+//	                   xs:date and raises err:XPTY0004 for an item of
+//	                   another type or for two or more items
 //	no   err    no     fn:doc (§15.5.4) over a StringLiteral, which raises
 //	                   err:FODC0005 because cvc-xpath clause 8 leaves no
 //	                   available document, followed or not by a path of
