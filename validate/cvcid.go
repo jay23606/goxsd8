@@ -271,7 +271,7 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // [[children]] are [walk.child]'s undecided branch, whose marker names that
 // shape's consumers. An element with NO ·governing element declaration· is not
 // that shape. A ·laxly assessed· one, a declared element §5.3 falls back to
-// ·lax assessment· among them ([walk.declaredGovernance]), is assessed against
+// ·lax assessment· among them ([governedByDeclaration]), is assessed against
 // xs:anyType, whose complex {content type} is not derived from ID and so
 // contributes nothing under clause 3, and its [[children]] are read in their
 // own turn ([walk.child]). An undecided one ([governance]) is [walk.child]'s

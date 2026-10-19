@@ -341,7 +341,7 @@ func TestNoGoverningDeclaration(t *testing.T) {
 // particle of type T under either, which its "$type" U ·overrides· under O1's, so
 // U governs it, and not under O2's, which blocks restriction, so T governs it,
 // cvc-elt clause 4 charged: the "$type" settles differently under the two
-// (walker.overriddenUnder).
+// (walker.governedTypes).
 func TestInheritedUndetermined(t *testing.T) {
 	v := validatorOver(t, inheritSchema)
 	for _, tc := range []struct {

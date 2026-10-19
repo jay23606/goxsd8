@@ -450,7 +450,7 @@ func TestEndOfInputLocation(t *testing.T) {
 // inside it is reported rather than read past.
 func TestDrainClassifies(t *testing.T) {
 	v := validatorOver(t, orderSchema)
-	w := newWalker(jsonURI, strings.NewReader(`{"order":{"size":1,"item":[{"sku":"ABC"},{"sku":[["x"]]}]}}`), v.Schema(), v.ConditionallySelected)
+	w := newWalker(jsonURI, strings.NewReader(`{"order":{"size":1,"item":[{"sku":"ABC"},{"sku":[["x"]]}]}}`), v.Schema(), v.ConditionallySelected, v.Governing)
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)
@@ -466,7 +466,7 @@ func TestDrainClassifies(t *testing.T) {
 // parent's cursor moved past an element, its members are a later element's.
 func TestChildrenAfterTheWalkLeftPanics(t *testing.T) {
 	v := validatorOver(t, orderSchema)
-	w := newWalker(jsonURI, strings.NewReader(`{"order":{"size":1,"item":{"sku":"ABC"}}}`), v.Schema(), v.ConditionallySelected)
+	w := newWalker(jsonURI, strings.NewReader(`{"order":{"size":1,"item":{"sku":"ABC"}}}`), v.Schema(), v.ConditionallySelected, v.Governing)
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)
@@ -633,7 +633,7 @@ func TestAttributeMember(t *testing.T) {
 // Loc, and the same before and after the element's children are read.
 func TestAttributesReadWhole(t *testing.T) {
 	v := validatorOver(t, attributeSchema)
-	w := newWalker(jsonURI, strings.NewReader("{\"shipment\":{\"id\":\"s1\",\n \"code\":\"a\\tb\\nc\\rd\",\"dest\":\"Oslo\"}}"), v.Schema(), v.ConditionallySelected)
+	w := newWalker(jsonURI, strings.NewReader("{\"shipment\":{\"id\":\"s1\",\n \"code\":\"a\\tb\\nc\\rd\",\"dest\":\"Oslo\"}}"), v.Schema(), v.ConditionallySelected, v.Governing)
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)
@@ -858,7 +858,7 @@ func TestNilledAttribute(t *testing.T) {
 		return []seen{{xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, "true", loc}}
 	}
 
-	w := newWalker(jsonURI, strings.NewReader("{\"order\":\n null}"), v.Schema(), v.ConditionallySelected)
+	w := newWalker(jsonURI, strings.NewReader("{\"order\":\n null}"), v.Schema(), v.ConditionallySelected, v.Governing)
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)
@@ -873,7 +873,7 @@ func TestNilledAttribute(t *testing.T) {
 		t.Fatalf("root Attributes() after the walk = %v, want %v", got, want)
 	}
 
-	w = newWalker(jsonURI, strings.NewReader(`{"order":{"line":[1, null],"box":{}}}`), v.Schema(), v.ConditionallySelected)
+	w = newWalker(jsonURI, strings.NewReader(`{"order":{"line":[1, null],"box":{}}}`), v.Schema(), v.ConditionallySelected, v.Governing)
 	root, err = w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)
@@ -1227,7 +1227,7 @@ func TestStrayChildDeclines(t *testing.T) {
 // unqualified u, whatever namespace the schema's target is.
 func TestStrayChildName(t *testing.T) {
 	v := validatorOver(t, strayChildSchema)
-	w := newWalker(jsonURI, strings.NewReader(`{"r":{"x":1,"u":{"y":1}}}`), v.Schema(), v.ConditionallySelected)
+	w := newWalker(jsonURI, strings.NewReader(`{"r":{"x":1,"u":{"y":1}}}`), v.Schema(), v.ConditionallySelected, v.Governing)
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)

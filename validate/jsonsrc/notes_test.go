@@ -789,7 +789,7 @@ func TestNotesKept(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			v := validatorOver(t, c.schema)
-			w := newWalker(jsonURI, strings.NewReader(c.doc), v.Schema(), v.ConditionallySelected)
+			w := newWalker(jsonURI, strings.NewReader(c.doc), v.Schema(), v.ConditionallySelected, v.Governing)
 			root, err := w.root()
 			if err != nil {
 				t.Fatalf("root(%s): %v", c.doc, err)

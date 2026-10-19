@@ -70,7 +70,8 @@
 //     whose doc says which {test}s withhold the selection, which count as false,
 //     and what Assess records for a withheld one; nothing else in the [Result]
 //     reports a withheld selection, since a withheld type charges the element
-//     nothing.
+//     nothing. The governance that selection feeds, the ·override· included,
+//     is exported as [Validator.Governing].
 //   - Identity constraints: node tables propagate UPWARD — a keyref on
 //     element E resolves only against key sequences sourced within E's
 //     own subtree; selector/field paths honor xpathDefaultNamespace for

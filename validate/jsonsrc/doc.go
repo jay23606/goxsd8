@@ -199,7 +199,8 @@
 //     ·overrides· the element's ·locally declared type· ·without limitation·,
 //     or where the element has none, and the ·locally declared type· where it
 //     does not (clauses 6 to 8); and the declared type where it names none.
-//     That is read as the engine reads it: at the root off its declaration,
+//     That is read as the engine reads it, through its own decision,
+//     validate.Validator.Governing: at the root off its declaration,
 //     and below it off the ·attribution· the parent's ·governing type
 //     definition· gives the element — its parent's content model run over the
 //     siblings before it ([xsd.Schema.ContentMatcher]) — and not off the

@@ -10,9 +10,11 @@ import (
 )
 
 // This file is §3.3.4.1's ·selected type definition· — the half of the
-// ·governing type definition· that a {type table} decides — and nothing else.
-// The ·overriding· xsi:type read that sits above it stays in assess.go, where
-// key-governing-type-elem's own clause order lives.
+// ·governing type definition· that a {type table} decides — as the walk reads
+// it: the scan, and the charge or decline where the slot selected resolves to
+// no type. key-selected-type's two clauses, and the ·overriding· xsi:type read
+// that sits above them, are decided in governing.go ([governedByDeclaration]),
+// where key-governing-type-elem's own clause order lives.
 
 // ruleKeyCTATASelect is ·successfully selects· (§3.12.4, key-cta-ta-select),
 // the check conditionallySelected reaches for each Type Alternative and does
@@ -29,90 +31,54 @@ import (
 // package charges nothing under this ID and must not start.
 const ruleKeyCTATASelect xsderr.Rule = "key-cta-ta-select"
 
-// selectedType is the ·selected type definition· S of an element information
-// item E whose ·governing element declaration· is d (§3.3.4.1,
-// key-selected-type). ok is false wherever this package cannot determine it,
-// which is [walk.declaredGovernance]'s decline and carries its consequences
-// unchanged. ok true with a nil S is S determined and ·absent· (§5.3), which
-// resolvedSelection has already charged and [walk.declaredGovernance] answers
-// with ·lax assessment·.
-//
-// The rule has exactly two cases and they are taken in its order: clause 1,
-// a declaration WITH a {type table}, whose table ·conditionally selects· S;
-// clause 2, one without, whose {type definition} is S outright. inherited is
-// E's [inherited attributes], which only clause 1 reads (conditionallySelected).
-func (w *walk) selectedType(e Element, d xsd.ElementDeclaration, inherited []inheritedAttribute) (xsd.TypeDefinition, bool) {
-	table, tabled := d.TypeTable()
-	if !tabled {
-		return w.resolvedSelection(e, d.TypeDefinition(), "the {type definition} of its ·governing element declaration·")
-	}
-	return w.conditionallySelected(e, table, inherited)
+// absentSelection charges e, whose ·selected type definition· is ·absent·:
+// slot, the {type definition} slot key-selected-type reads for e, is a
+// [xsd.SubstitutionGroupHeadTypeRef] whose head names no declaration
+// ([missingHead]), which Finalize accepts (xsd's resolveTypeDefinitionSlot).
+// That is an ·absent· value where a component is mandated (§5.3 Missing
+// Sub-components), and §5.3 makes validating e "as if clause 1 of Element
+// Locally Valid (Element) had failed", falling back to ·lax assessment·:
+// cvc-elt clause 1 is CHARGED at e's own location, and e is assessed laxly
+// ([walk.charged]). The parser never builds this shape: it gives the member of
+// an unresolvable substitutionGroup head xs:anyType.
+func (w *walk) absentSelection(e Element, slot string) {
+	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
+		"the ·selected type definition· of the element %s is ·absent·: %s names a substitution group head with no element declaration in the schema, a missing sub-component that Structures §5.3 (Missing Sub-components) treats as if cvc-elt clause 1 had failed, so the element is ·laxly assessed·",
+		e.Name(), slot))
+	w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1", "charged")
 }
 
-// resolvedSelection is the type definition a {type definition} slot that
-// key-selected-type reads for e names, through [xsd.Schema.ResolvedType]; slot
-// names that slot for the message. A finalized Schema reaches a slot that
-// resolves to nothing two ways, and they end differently.
-//
-// A [xsd.SubstitutionGroupHeadTypeRef] whose head names no declaration, which
-// Finalize accepts (xsd's resolveTypeDefinitionSlot), is an ·absent· value
-// where a component is mandated (§5.3 Missing Sub-components), so S is ·absent·
-// and §5.3 makes validating e "as if clause 1 of Element Locally Valid
-// (Element) had failed", falling back to ·lax assessment·. That is cvc-elt
-// clause 1 CHARGED at e's own location, and a nil S returned with ok true for
-// [walk.declaredGovernance] to assess e laxly. The parser never builds this
-// shape: it gives the member of an unresolvable substitutionGroup head
-// xs:anyType.
-//
-// A nil {type definition}, the ·absent· slot of a declaration built without the
-// parser's §3.3.2.1 defaulting (the declaration's own slot, or the slot of a
-// head a SubstitutionGroupHeadTypeRef names; xsd.NewTypeAlternative rejects
-// nil), is declined instead: RECORDED as one [Unevaluated] under cvc-elt clause
-// 1 at e's own location, with ok false. GAP(validate): that slot is the
-// sch-props-correct clause 1 fault xsd's Finalize defers, so the instance walk
-// neither charges cvc-elt clause 1 for it nor assesses e laxly, and e is
-// assessed against nothing. RULED permanent by #2166 (STYLE P3b), on #774's
-// terms: the charge belongs to xsd's deferred schema check, not to the
-// instance walk.
-func (w *walk) resolvedSelection(e Element, ref xsd.TypeDefinitionOrRef, slot string) (xsd.TypeDefinition, bool) {
-	t, ok := w.schema.ResolvedType(ref)
-	if ok {
-		return t, true
-	}
-	if w.absentHead(ref) {
-		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
-			"the ·selected type definition· of the element %s is ·absent·: %s names a substitution group head with no element declaration in the schema, a missing sub-component that Structures §5.3 (Missing Sub-components) treats as if cvc-elt clause 1 had failed, so the element is ·laxly assessed·",
-			e.Name(), slot))
-		w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1", "charged")
-		return nil, true
-	}
+// resolvedSelection declines e, whose ·selected type definition· slot, the
+// {type definition} slot key-selected-type reads for e that slot names, is
+// nil and resolves to no type through [xsd.Schema.ResolvedType]: the ·absent·
+// slot of a declaration built without the parser's §3.3.2.1 defaulting (the
+// declaration's own slot, or the slot of a head a SubstitutionGroupHeadTypeRef
+// names; xsd.NewTypeAlternative rejects nil). It is RECORDED as one
+// [Unevaluated] under cvc-elt clause 1 at e's own location, and e keeps its
+// declaration with no ·governing type definition· ([walk.charged]).
+// GAP(validate): that slot is the sch-props-correct clause 1 fault xsd's
+// Finalize defers, so the instance walk neither charges cvc-elt clause 1 for
+// it nor assesses e laxly, and e is assessed against nothing. RULED permanent
+// by #2166 (STYLE P3b), on #774's terms: the charge belongs to xsd's deferred
+// schema check, not to the instance walk.
+func (w *walk) resolvedSelection(e Element, slot string) {
 	w.decline("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1",
 		"the ·selected type definition· of the element %s was not determined, so it has no ·governing type definition· and was assessed against nothing: %s resolves to no type definition, an ·absent· (nil) {type definition} that sch-props-correct clause 1 leaves to the schema check, so cvc-elt clause 1 (Structures §5.3) is not charged here",
 		e.Name(), slot)
-	return nil, false
 }
 
-// absentHead reports whether ref is a [xsd.SubstitutionGroupHeadTypeRef] whose
-// head names no element declaration in the schema: §5.3's ·absent· head, as
-// against a head that exists and whose own slot is nil.
-func (w *walk) absentHead(ref xsd.TypeDefinitionOrRef) bool {
-	head, isHead := ref.(xsd.SubstitutionGroupHeadTypeRef)
-	if !isHead {
-		return false
-	}
-	_, found := w.schema.Element(head.Head)
-	return !found
-}
-
-// conditionallySelected is the type a Type Table ·conditionally selects· for e
-// (§3.3.4.1, key-cta-select): the {alternatives} are tried in document order
-// until one ·successfully selects· a type definition (§3.12.4,
+// conditionallySelected is the {type definition} slot a Type Table
+// ·conditionally selects· for e (§3.3.4.1, key-cta-select), unresolved, with a
+// description of it for the message of a slot that resolves to no type
+// (absentSelection, resolvedSelection): the {alternatives} are tried in
+// document order until one ·successfully selects· a type definition (§3.12.4,
 // key-cta-ta-select — its {test} evaluates to true), and if none does, the
 // {default type definition}'s {type definition} is the answer. Every {test}
 // reads e's own [[attributes]] and inherited, e's [inherited attributes]
 // (ctaAttributes). The scan is selectAlternative's, the one
 // [Validator.ConditionallySelected] makes too; this method adds the walk's
-// record of a withhold and resolvedSelection's reading of the slot selected.
+// record of a withhold. It is the selection callback [walk.decide] hands
+// [decideGovernance].
 //
 // The scan is LAZY in both directions the rule quantifies in. It compiles and
 // evaluates one alternative at a time, because "if any Type Alternative
@@ -122,12 +88,12 @@ func (w *walk) absentHead(ref xsd.TypeDefinitionOrRef) bool {
 //
 // An alternative this engine cannot evaluate, sitting BEFORE any that
 // succeeds, withholds the whole element's ·governing type definition· and
-// stops the scan. It does NOT fall through to the next alternative or to the
-// {default type definition}: the undecided test might have been true, so
-// continuing would select a type the rule may not have selected, and
-// assessing an element against the wrong type manufactures a false reject in
-// both directions (the charge governingType's own doc rules out). Withholding
-// can only cost a rejection.
+// stops the scan, with ok false. It does NOT fall through to the next
+// alternative or to the {default type definition}: the undecided test might
+// have been true, so continuing would select a type the rule may not have
+// selected, and assessing an element against the wrong type manufactures a
+// false reject in both directions (the charge [walk.charged]'s doc rules out).
+// Withholding can only cost a rejection.
 //
 // That withhold is RECORDED, as one [Unevaluated] under ruleKeyCTATASelect at
 // the element's own location, and logged as declined at clause 2, the {test}
@@ -135,8 +101,7 @@ func (w *walk) absentHead(ref xsd.TypeDefinitionOrRef) bool {
 // the element, so without the record an element whose ·governing type
 // definition· was withheld is byte-identical at the [Result] API to one that
 // passed every rule (#56). A selected {type definition} that resolves to
-// nothing is resolvedSelection's: an ·absent· head charged there under cvc-elt
-// clause 1, a nil slot withheld and recorded there under cvc-elt.
+// nothing is absentSelection's charge or resolvedSelection's decline.
 //
 // A DYNAMIC OR TYPE ERROR INSIDE AN EVALUABLE {test} IS NOT RECORDED, because
 // it is not a withhold: key-cta-ta-select clause 2 says such a {test} "is
@@ -156,7 +121,7 @@ func (w *walk) absentHead(ref xsd.TypeDefinitionOrRef) bool {
 // carries nothing here; a table that reached this package without it declines
 // anyway, because a zero XPath Expression record has an empty {expression} and
 // no {expression} is a Test production.
-func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited []inheritedAttribute) (xsd.TypeDefinition, bool) {
+func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited []inheritedAttribute) (xsd.TypeDefinitionOrRef, string, bool) {
 	alts := table.Alternatives()
 	i, decided := selectAlternative(table, w.backend, w.schema, ctaAttributes(e.Attributes(), inherited))
 	if !decided {
@@ -164,15 +129,15 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 		w.decline("assessing element", e.Name(), e.Loc(), ruleKeyCTATASelect, "2",
 			"alternative %d of %d in the {alternatives} of the {type table} of %s's ·governing element declaration·, whose {test} is %q, was not evaluated: this engine's §3.12.6 required-subset compiler declined it, which ta-props-correct clause 2 licenses (a conforming processor may but is not required to support XPath outside that subset), so whether it ·successfully selects· its {type definition} is undecided and the type the table ·conditionally selects· (§3.3.4.1, key-cta-select) is withheld along with it, together with every alternative behind it",
 			i+1, len(alts), e.Name(), test.Expression())
-		return nil, false
+		return nil, "", false
 	}
 	if i < len(alts) {
-		return w.resolvedSelection(e, alts[i].TypeDefinition(), fmt.Sprintf(
+		return alts[i].TypeDefinition(), fmt.Sprintf(
 			"the {type definition} of alternative %d of %d in the {alternatives} of the {type table} of its ·governing element declaration·, which ·successfully selects· it,",
-			i+1, len(alts)))
+			i+1, len(alts)), true
 	}
-	return w.resolvedSelection(e, table.DefaultTypeDefinition().TypeDefinition(),
-		"the {type definition} of the {default type definition} of the {type table} of its ·governing element declaration·, which the table ·conditionally selects· because no alternative ·successfully selects· a type definition,")
+	return table.DefaultTypeDefinition().TypeDefinition(),
+		"the {type definition} of the {default type definition} of the {type table} of its ·governing element declaration·, which the table ·conditionally selects· because no alternative ·successfully selects· a type definition,", true
 }
 
 // ConditionallySelected is the {type definition} slot table ·conditionally
@@ -223,9 +188,10 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 //
 // The method is exported for a source adapter that settles which members of
 // its source are attributes by the type the selection gives; validate/jsonsrc
-// is the in-module instance. The result is the ·selected type definition·,
-// which a valid xsi:type ·overrides· (key-governing-type-elem clause 3); the
-// adapter applies that override itself, as validate/jsonsrc does for $type.
+// is the in-module instance. The result is the slot of the ·selected type
+// definition·, which an xsi:type may ·override· (key-governing-type-elem
+// clause 3); that override is [Validator.Governing]'s to decide, handed this
+// method partly applied as its selection, and not the adapter's.
 func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inherited []Attribute) (xsd.TypeDefinitionOrRef, bool) {
 	copied := make([]inheritedAttribute, 0, len(inherited))
 	for _, a := range inherited {

@@ -127,7 +127,7 @@ func TestXmlnsMember(t *testing.T) {
 // unchanged, located at the "$type" key, before the attribute members.
 func TestTypeAttribute(t *testing.T) {
 	v := validatorOver(t, typeSchema)
-	w := newWalker(jsonURI, strings.NewReader(`{"item":{"$type":" derived ","d":"1","a":"x","b":"y"}}`), v.Schema(), v.ConditionallySelected)
+	w := newWalker(jsonURI, strings.NewReader(`{"item":{"$type":" derived ","d":"1","a":"x","b":"y"}}`), v.Schema(), v.ConditionallySelected, v.Governing)
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)
@@ -264,7 +264,7 @@ const openContentSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema
   </xs:element>
 </xs:schema>`
 
-// TestOpenContentType pins walker.overriddenUnder's {open content} arm: a
+// TestOpenContentType pins walker.governedTypes' {open content} arm: a
 // "$type" on an element a non-skip {open content} may take, whose name has a
 // ·locally declared type· dt within the type, classifies the element's
 // members under dt where the type it names does not ·override· dt, and under
@@ -369,7 +369,7 @@ const governedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
 </xs:schema>`
 
-// TestGovernedType pins walker.overriddenUnder against governedSchema: the
+// TestGovernedType pins walker.governedTypes against governedSchema: the
 // members of the second x are classified under the type its "$type" names
 // where that type ·overrides· L ·without limitation·, and under L where it
 // does not, uncharged (key-governing-type-elem clauses 6 and 7). The
@@ -499,7 +499,7 @@ func TestChargedType(t *testing.T) {
 	}
 }
 
-// TestUnresolvedWildcardType pins walker.overriddenUnder where a ·wildcard
+// TestUnresolvedWildcardType pins walker.governedTypes where a ·wildcard
 // particle· ·attributes· a child whose name ·resolves· to no declaration: the
 // child has no ·governing element declaration·, so no cvc-elt clause 4 is
 // charged, its "$type" governs it (key-governing-type-elem clause 8), and the
@@ -516,22 +516,68 @@ func TestUnresolvedWildcardType(t *testing.T) {
 // viewOnly is a schema view without the governor capability.
 type viewOnly struct{ validate.SchemaView }
 
-// TestTypeWithoutGovernor pins the governor capability's fail-closed arm:
-// under a schema view without it, the root's "$type" maps and a "$type" below
-// the root declines, whatever it names.
+// TestTypeWithoutGovernor pins the governor capability's absence: under a
+// schema view without it the mapping attributes no child of p
+// (object.unattributed), as where xsd.Schema.ContentMatcher declines p's
+// content model, and a "$type" below the root is settled on p alone
+// (walker.instanceUnder). The governance itself is
+// validate.Validator.Governing's, which reads no capability of the view. Xe
+// ·overrides· x's ·locally declared type· L, so the second x's b maps as Xe's
+// attribute and nothing is charged. q has no ·locally declared type· within
+// p and ·resolves· to the top-level q, whose type Xe does not ·override·, so
+// every ·attribution· p may give it charges it, and its members are
+// classified under Xe rather than that type: b maps as an attribute, which
+// the engine, governing q by the type Xe does not ·override·, charges under
+// cvc-complex-type clause 2.1, where under q's type it would map as a child.
 func TestTypeWithoutGovernor(t *testing.T) {
 	v := validatorOver(t, governedSchema)
-	const doc = `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:Xe","b":"1"}]}}`
-	w := newWalker(jsonURI, strings.NewReader(doc), viewOnly{v.Schema()}, v.ConditionallySelected)
-	root, err := w.root()
-	if err != nil {
-		t.Fatalf("root: %v", err)
+	for _, c := range []struct {
+		doc    string
+		charge string
+	}{
+		{`{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:Xe","b":"1"}]}}`, ""},
+		{`{"p":{"$xmlns":{"t":"urn:t"},"t:q":{"$type":"t:Xe","b":"1"}}}`, "the attribute b matches no attribute use"},
+	} {
+		w := newWalker(jsonURI, strings.NewReader(c.doc), viewOnly{v.Schema()}, v.ConditionallySelected, v.Governing)
+		root, err := w.root()
+		if err != nil {
+			t.Fatalf("root: %v", err)
+		}
+		res := v.Assess(root)
+		if w.err != nil {
+			t.Fatalf("walking %s latched %v, want it to map", c.doc, w.err)
+		}
+		got := res.Violations()
+		if c.charge == "" && len(got) != 0 {
+			t.Errorf("walking %s charged %v, want nothing: b is an attribute Xe declares", c.doc, got)
+		}
+		if c.charge != "" && !slices.ContainsFunc(got, func(e *xsderr.Error) bool {
+			return e.Rule == ruleCvcComplexType && strings.HasPrefix(e.Msg, c.charge)
+		}) {
+			t.Errorf("walking %s charged %v, want a cvc-complex-type charge opening %q: b is an attribute", c.doc, got, c.charge)
+		}
 	}
-	v.Assess(root)
-	const want = `jsonsrc: instance.json:1:39: the "$type" member of {urn:t}x: the mapping determines no type that governs {urn:t}p`
-	if w.err == nil || !strings.HasPrefix(w.err.Error(), want) {
-		t.Fatalf("walking %s latched %v, want it to open %q", doc, w.err, want)
-	}
+}
+
+// TestAbsentAffiliationLax pins the governance validate.Validator.Governing
+// gives an element whose declaration has an ·absent· {substitution group
+// affiliations} member: §5.3 sends it to ·lax assessment·, cvc-elt clause 1
+// charged, so its children are ·attributed to· xs:anyType's lax wildcard and
+// not to its declaration's content model. c then ·resolves· to no
+// declaration and its "$type" governs it (key-governing-type-elem clause 8),
+// so k maps as an attribute of X, as its XML twin carries it, and not under
+// c's local declaration, of type Tc, which X does not ·override·.
+func TestAbsentAffiliationLax(t *testing.T) {
+	v := validatorOver(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="X"><xs:attribute name="k" type="xs:string"/></xs:complexType>
+  <xs:complexType name="Tc"/>
+  <xs:element name="e" substitutionGroup="t:rotten">
+    <xs:complexType><xs:sequence><xs:element name="c" type="t:Tc"/></xs:sequence></xs:complexType>
+  </xs:element>
+</xs:schema>`)
+	twin(t, v, `{"e":{"c":{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"1"}}}`,
+		`<e xmlns="urn:t" xmlns:t="urn:t" `+xsiDecl+`><c xsi:type="t:X" k="1"/></e>`, []xsderr.Rule{"cvc-elt"})
 }
 
 // TestTypeOnUndeclaredElement pins a "$type" on an element a wildcard names
@@ -893,7 +939,7 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // either: t:Le ·overrides· L under Ta's x and governs it, so a is an
 // attribute, and not under Tn's, which blocks extension, so the engine
 // charges cvc-elt clause 4 and L governs it, of which a is a child
-// (walker.overriddenUnder): the particle row fails where the mapping reads no
+// (walker.governedTypes): the particle row fails where the mapping reads no
 // selection. gd has no a, so its table selects Ta. gw may be governed by Gq,
 // which rejects its second q, so that q's ·locally declared type· L governs
 // it, or by Gw, which ·attributes· it to the lax wildcard, so that the
@@ -986,7 +1032,7 @@ func TestUnattributedParentTypeDeclines(t *testing.T) {
 // of which is one named type gives that type: the second z of zw is ·laxly
 // assessed·, so g is ·attributed to· xs:anyType's wildcard and governed by
 // the top-level g's Ta, whichever alternative is selected, under whose {open
-// content} the second x takes L, of which k is a child (walker.resolved); the
+// content} the second x takes L, of which k is a child (walker.governedTypes); the
 // second yt of wt is governed by the top-level yt's Tt, whose x selects Lr
 // either way, of which k is a child, where its members are classified under
 // Ta's x of type L, the mapping reading the selection of Tt's x

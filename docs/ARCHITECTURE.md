@@ -101,8 +101,9 @@ and imports `xsd`, `value`, `regex` and
 
 **[2] The infoset seam, the assessment skeleton, the XML adapter and the
 JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views,
-`New`/`Validator`/`Result` and `Validator.ConditionallySelected`, the
-key-cta-select scan its walk makes, and imports `xsd`, `xsderr`, `value`, `xpath`,
+`New`/`Validator`/`Result`, `Validator.ConditionallySelected`, the
+key-cta-select scan its walk makes, and `Validator.Governing`, the governance
+decision its walk makes, and imports `xsd`, `xsderr`, `value`, `xpath`,
 `icpath` and `internal/xmlqname` — no longer `regex` directly, whose NCName class left with the
 identity-constraint path lexer for `icpath`, though it stays in the closure
 behind `value` for the pattern facets validate compiles — but never a
@@ -115,10 +116,11 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `Validate`/`Option`/`WithURI` and `DeclineError`, imports `validate`, `xsd`, `xsderr`,
 `internal/xmlname`, `internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
 view `Validator.Schema` returns, to name the root and classify members, and
-reads `xsd.Schema.LocallyDeclaredElementType`, `ValidlySubstitutable` and
-`ContentMatcher` off that view through a capability interface, the `xsd`
-methods beyond it the mapping needs, and settles a root's attribute members
-by the type `Validator.ConditionallySelected` selects for them;
+reads `xsd.Schema.ContentMatcher` off that view through a capability
+interface, the `xsd` method beyond it the mapping needs, reads each
+element's governance off `Validator.Governing`, and settles a root's
+attribute members by the type `Validator.ConditionallySelected` selects for
+them;
 `validate/bersrc` is a destination, on `[1]`'s terms.
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
@@ -632,7 +634,9 @@ the two optional document-level capabilities an adapter may implement
 plus `New`/`Validator`/`Result`/`Option`/`WithLogger`, `SchemaView` (what
 `Validator.Schema` returns: the schema reads an adapter makes),
 `Validator.ConditionallySelected` (the key-cta-select scan `Assess` makes, for
-an adapter that classifies members by the type a {type table} selects) and `Unevaluated`
+an adapter that classifies members by the type a {type table} selects),
+`Validator.Governing` (the governance `Assess` decides for an element, for an
+adapter that must know it before the engine sees the element) and `Unevaluated`
 (`Rule`/`Loc`/`Msg`, read off `Result.Unevaluated`: one check the assessment
 reached and did not perform, deliberately not an `error`), and `Assess` walks a
 source once. **Read which rules it charges, which clauses of each, and which

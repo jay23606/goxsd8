@@ -256,7 +256,7 @@ func (g *subtreeGate) enter(start xml.StartElement) func() {
 // selectedType is the ·selected type definition· (§3.3.4.1, key-selected-type)
 // of the element whose start tag is start, whose ·governing element
 // declaration· is d and whose [inherited attributes] are inherited, determined
-// here independently of the walk — validate's walk.selectedType and
+// here independently of the walk — validate's governedByDeclaration and
 // walk.conditionallySelected are its counterparts — and a refusal wherever the
 // gate does not determine it. Clause 2: d with no {type table} selects d.{type
 // definition}. Clause 1: d.{type table} ·conditionally selects· it
@@ -886,7 +886,7 @@ func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool,
 // for it, and under lax it is not ·laxly assessed· (key-lva clause 1). Where
 // the child's ·locally declared type· within the parent's type is ·absent·,
 // key-governing-type-elem clause 8 selects T, which is validate's
-// walk.childGoverning reading (instanceGovernance). A child ·attributed to· a
+// walk.childGoverning reading (governedByName). A child ·attributed to· a
 // Wildcard reaches here with a non-·absent· one too — child asks
 // LocallyDeclaredElementType only on its {open content} arm — and clause 6
 // selects T only where T ·overrides· that type, which with no declaration is

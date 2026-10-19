@@ -55,7 +55,9 @@ type inheritor interface {
 // walk.inheritable, which hand down under the one governance the engine has
 // determined for an element it is walking. The mapping runs before the engine
 // and holds several types that may govern an element, so it composes under
-// each and compares, which no export of validate answers (#2791).
+// each and compares, which no export of validate answers: the governance
+// each type is read off is validate.Validator.Governing's, and the hand-down
+// under it is restated here.
 func (w *walker) handDown(attrs []validate.Attribute, o *object, inherited []validate.Attribute, known bool) ([]validate.Attribute, bool) {
 	s, ok := w.schema.(inheritor)
 	if !ok || !known || len(o.governing) == 0 {
