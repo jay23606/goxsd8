@@ -1106,6 +1106,111 @@ func TestValidateJSONMemberClauses(t *testing.T) {
 	}
 }
 
+// TestValidateFormatMismatchClause pins the clause formatHint ends a line
+// with, on README's order.xsd (readme-order.xsd here) and order.json, with a
+// well-formed order.xml: -format json over order.xml and -format xml over
+// order.json, each keeping its token and exit code. Three more rows carry it:
+// content after the top-level object and no JSON value at all under -format
+// json, and under -format xml a fault the walk meets inside the document
+// element, which reaches validate.Result.Err. The other rows print no
+// clause, each under the guard named in its name: the forced format matching
+// the extension, no -format, an extension naming no format and standard input,
+// an extension naming the reserved ber, a decline, and a read fault under each
+// format. want is the whole of stdout.
+func TestValidateFormatMismatchClause(t *testing.T) {
+	dir := t.TempDir()
+	at := func(name string) string { return filepath.Join(dir, name) }
+	const orderXML = `<o:order xmlns:o="urn:o" kind="x"><o:item>a</o:item></o:order>` + "\n"
+	for name, body := range map[string]string{
+		"order.json":   `{"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","item":["a","b"]}}` + "\n",
+		"order.xml":    orderXML,
+		"order.txt":    orderXML,
+		"order.ber":    orderXML,
+		"hello.json":   "hello\n",
+		"declined.xml": `{"z:nosuch":{}}` + "\n",
+		"after.xml":    `{"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","item":["a"]}} {}` + "\n",
+		"empty.xml":    "",
+		"mid.json":     `<o:order xmlns:o="urn:o"><o:item>a</o:order>` + "\n",
+	} {
+		if err := os.WriteFile(at(name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const notJSON = ":1:1: [jsonsrc] malformed JSON: invalid character '<' looking for beginning of value"
+	for _, c := range []struct {
+		name  string
+		args  []string
+		stdin string
+		code  int
+		want  string
+	}{
+		{"json forced on xml", []string{"-format", "json", at("order.xml")}, "", exitUndecided,
+			at("order.xml") + notJSON + "; -format json read " + at("order.xml") + " as json, but its extension names xml: drop -format, or pass -format xml\n"},
+		{"xml forced on json", []string{"-format", "xml", at("order.json")}, "", exitInvalid,
+			at("order.json") + ":1:1: [xml-wf] character data before the document element: only an XML declaration, a DOCTYPE, comments, processing instructions and white space may precede it (XML 1.0 [1] document, [22] prolog, [27] Misc); -format xml read " + at("order.json") + " as xml, but its extension names json: drop -format, or pass -format json\n"},
+		{"json forced on xml, content after the top-level object", []string{"-format", "json", at("after.xml")}, "", exitUndecided,
+			at("after.xml") + ":1:62: [jsonsrc] content follows the top-level object; -format json read " + at("after.xml") + " as json, but its extension names xml: drop -format, or pass -format xml\n"},
+		{"json forced on xml, no JSON value", []string{"-format", "json", at("empty.xml")}, "", exitUndecided,
+			at("empty.xml") + `:1:1: [jsonsrc] the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {"<root>":...}; -format json read ` + at("empty.xml") + " as json, but its extension names xml: drop -format, or pass -format xml\n"},
+		{"xml forced on json, fault the walk meets", []string{"-format", "xml", at("mid.json")}, "", exitInvalid,
+			at("mid.json") + ":1:35: [xml-wf] end tag </o:order> does not match open element {urn:o}item; -format xml read " + at("mid.json") + " as xml, but its extension names json: drop -format, or pass -format json\n"},
+		{"forced format named by the extension", []string{"-format", "json", malformedJSON}, "", exitUndecided,
+			malformedJSON + ":1:18: [jsonsrc] malformed JSON: unexpected EOF\n"},
+		{"no -format", []string{at("hello.json")}, "", exitUndecided,
+			at("hello.json") + ":1:1: [jsonsrc] malformed JSON: invalid character 'h' looking for beginning of value\n"},
+		{"extension naming no format", []string{"-format", "json", at("order.txt")}, "", exitUndecided,
+			at("order.txt") + notJSON + "\n"},
+		{"standard input", []string{"-format", "json", stdinArg}, orderXML, exitUndecided,
+			stdinArg + notJSON + "\n"},
+		{"extension naming the reserved ber", []string{"-format", "json", at("order.ber")}, "", exitUndecided,
+			at("order.ber") + notJSON + "\n"},
+		{"decline", []string{"-format", "json", at("declined.xml")}, "", exitUndecided,
+			at("declined.xml") + `:1:2: [jsonsrc] member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor` + "\n"},
+		{"read fault under json", []string{"-format", "json", at("fault.xml")}, "", exitUndecided,
+			at("fault.xml") + ":1:1: [jsonsrc] fault reading the input: read " + at("fault.xml") + ": input/output error\n"},
+		{"read fault under xml", []string{"-format", "xml", at("fault.json")}, "", exitInvalid,
+			at("fault.json") + ":1:1: [xml-wf] read " + at("fault.json") + ": input/output error\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if strings.HasPrefix(c.name, "read fault") {
+				// /proc/self/mem opens, and its first read faults (EIO at offset
+				// 0), as TestValidateJSONReadFaultIsUndecided reads it; the link
+				// gives it an extension naming the other format.
+				const faulting = "/proc/self/mem"
+				if _, err := os.ReadFile(faulting); err == nil || !strings.Contains(err.Error(), "input/output error") {
+					t.Skipf("reading %s gives %v here, not the EIO this row needs", faulting, err)
+				}
+				if err := os.Symlink(faulting, c.args[len(c.args)-1]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if c.stdin != "" {
+				r, w, err := os.Pipe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := w.WriteString(c.stdin); err != nil {
+					t.Fatal(err)
+				}
+				if err := w.Close(); err != nil {
+					t.Fatal(err)
+				}
+				old := os.Stdin
+				os.Stdin = r
+				t.Cleanup(func() { os.Stdin = old; _ = r.Close() })
+			}
+			args := append([]string{"validate", "-schema", "testdata/readme-order.xsd"}, c.args...)
+			var stdout, stderr bytes.Buffer
+			if code := run(args, &stdout, &stderr); code != c.code {
+				t.Errorf("run(%q) = %d, want %d (stderr %q)", args, code, c.code, stderr.String())
+			}
+			if stdout.String() != c.want {
+				t.Errorf("run(%q) stdout =\n%q\nwant\n%q", args, stdout.String(), c.want)
+			}
+		})
+	}
+}
+
 // TestValidateSchemaFlagIsRepeatable pins the grammar doc.go states and the
 // flag.Value implements: every schema needs its own -schema, so a second
 // location standing beside the first is a positional argument — an instance —

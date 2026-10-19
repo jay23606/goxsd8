@@ -126,6 +126,17 @@ Usage (contract; subcommands land with their milestones):
       because the line names no class, and nothing tells a shape
       the mapping rejects from an arm it does not implement, so
       charging 1 would charge every decline as invalid.
+      Where -format forces xml or json on an instance whose
+      extension names the other, a line saying it is not well-formed
+      in the forced format keeps its token and exit code and ends
+      with a clause naming the format forced and the one the
+      extension names, ; -format F read <instance> as F, but its
+      extension names G: drop -format, or pass -format G. Under
+      -format json that is every [jsonsrc] line but a decline's:
+      malformed JSON, no JSON value and content after the top-level
+      object alike. Under -format xml it is every [xml-wf] line,
+      wherever in the document its fault lies. A line reporting a
+      fault reading the instance gets no clause.
       The JSON shape in brief: the top-level object has exactly one
       member, whose key names the root element. In an element's
       object a "$xmlns" member, {"prefix":"uri",...}, comes first
