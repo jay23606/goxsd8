@@ -95,7 +95,8 @@ type element struct {
 	name xsd.QName
 	// key is the member's key as spelled, an array item's being its array's,
 	// for an object-valued element, which a note on a member of its object
-	// names it by (walker.noteChild); empty for a scalar or null one.
+	// (walker.noteChild) or on its "$type" (walker.noteTypeLexical,
+	// walker.noteOverride) names it by; empty for a scalar or null one.
 	key string
 	// loc is where the member's key, or the array item, begins.
 	loc xsderr.Loc
@@ -244,11 +245,12 @@ type peeked struct {
 
 // arrayRun is one array-valued member: its key, which each of its items is an
 // element under, classified over each item (walker.item); the key's location,
-// loc, and the array's, at; and whether an item has been read.
+// loc, and the array's, at; and items, the number of its items read, which an
+// arrayItem note names its item by (walker.noteChild).
 type arrayRun struct {
 	key     string
 	loc, at xsderr.Loc
-	items   bool
+	items   int
 }
 
 func (m *members) Next() (validate.Child, bool) {
@@ -285,7 +287,7 @@ func (m *members) next() (*element, error) {
 				return nil, err
 			}
 			if v.tok == json.Delim(']') {
-				if !m.run.items {
+				if m.run.items == 0 {
 					if _, err := m.w.item(m.object, m.run, m.owner.scope, false); err != nil {
 						return nil, err
 					}
@@ -293,7 +295,7 @@ func (m *members) next() (*element, error) {
 				m.run = nil
 				continue
 			}
-			m.run.items = true
+			m.run.items++
 			child, err := m.w.item(m.object, m.run, v.scope, scalarValue(v.tok))
 			if err != nil {
 				return nil, err

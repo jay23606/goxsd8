@@ -386,7 +386,8 @@ func unnamedHint(key, owner, keys string) string {
 // child of a parent whose type is a simple type; and that it appends neither
 // to any other charge, the child's own at the same rule and location, the
 // parent's at a later child, a parent's whose type names the child or has a
-// wildcard, and one whose content is empty or simple, included. The key list
+// wildcard, and one whose content is empty or simple, included. A "$type"
+// charge in its rows carries the clause TestSpellingNoteHints pins. The key list
 // is the keys of the type that governs the parent — the type its {type table}
 // selects, the one its "$type" names where that ·overrides·, the top-level
 // declaration's a lax wildcard's child resolves to — and not those of the type
@@ -486,21 +487,21 @@ func TestChildNoteHints(t *testing.T) {
 			{content, ":1:23", unnamedHint("zz", "st", `"m", "n", "y"`)},
 		}},
 		{"a \"$type\" that does not override", childSchema, `{"st":{"$type":"abs","zz":"1"}}`, []charge{
-			{"cvc-elt", ":1:2", ""},
+			{ruleCvcElt, ":1:2", overrideHint("st", "abs")},
 			{content, ":1:22", unnamedHint("zz", "st", `"m", "n"`)},
 		}},
 		{"_ before a use of the \"$type\" that does not override", childSchema, `{"st":{"$type":"uT","_u":"1"}}`, []charge{
-			{"cvc-elt", ":1:2", ""},
+			{ruleCvcElt, ":1:2", overrideHint("st", "uT")},
 			{content, ":1:21", unnamedHint("_u", "st", `"m", "n"`)},
 		}},
 		{"a \"$type\" that does not override a type with an {attribute wildcard}", childSchema, `{"sa":{"$type":"uT","zz":"1"}}`, []charge{
-			{"cvc-elt", ":1:2", ""},
+			{ruleCvcElt, ":1:2", overrideHint("sa", "uT")},
 		}},
 		{"an abstract parent with \"$type\"", childSchema, `{"ab":{"$type":"conc","zz":"1"}}`, []charge{
 			{content, ":1:23", unnamedHint("zz", "ab", `"z", "c"`)},
 		}},
 		{"an unbound \"$type\" prefix", childSchema, `{"st":{"$type":"u:kExt","zz":"1"}}`, []charge{
-			{"cvc-attribute", ":1:8", ""},
+			{ruleCvcAttribute, ":1:8", typeLexicalHint("st", "u")},
 			{content, ":1:25", unnamedHint("zz", "st", `"m", "n"`)},
 		}},
 		{"a skipped parent", childSchema, `{"sk":{"r":{"zz":"1"}}}`, nil},
@@ -529,6 +530,277 @@ func TestChildNoteHints(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			wantCharges(t, c.schema, c.doc, c.want)
+		})
+	}
+}
+
+// spellSchema is the schema of #2829: in urn:o, order is of base, a sequence
+// of one qty of xs:int, and other is a sequence of one z of xs:string.
+const spellSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:o="urn:o" targetNamespace="urn:o">
+  <xs:element name="order" type="o:base"/>
+  <xs:complexType name="base"><xs:sequence><xs:element name="qty" type="xs:int"/></xs:sequence></xs:complexType>
+  <xs:complexType name="other"><xs:sequence><xs:element name="z" type="xs:string"/></xs:sequence></xs:complexType>
+</xs:schema>`
+
+// spellProbeSchema holds, in urn:o, the shapes whose charges share a rule and
+// location with a "$type", null or array-item charge. base has an attribute
+// use m and a sequence of up to two qty of xs:int, then an optional ref to ab,
+// abstract, of xs:int, an optional ref to fx, nillable and fixed "3", of
+// xs:int, and an optional line, a sequence of one a. order is of base and ao
+// abstract of base; baseM extends base with nothing and abs, abstract, with
+// nothing too; other is a sequence of an optional z, derived from no base. tt
+// is of base and its {type table} selects baseM for an element with an
+// attribute m; tw's selects it by a {test} outside the engine's §3.12.6
+// compiler's subset, so that the engine withholds its selection; ta is
+// abstract and carries tt's table, and twa is abstract and carries tw's; tw1's
+// table selects base itself by tw's {test}, so that it can select one type,
+// and hw's selects its own type hold so, a sequence of an x holding a tt. dq is
+// of ·xs:anySimpleType· with the default "abc", and its {type table} selects
+// xs:int for an element with no attribute m. w's one particle is a lax ##local
+// wildcard.
+const spellProbeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:o="urn:o" targetNamespace="urn:o">
+  <xs:element name="order" type="o:base"/>
+  <xs:element name="ao" type="o:base" abstract="true"/>
+  <xs:element name="ab" type="xs:int" abstract="true"/>
+  <xs:element name="fx" type="xs:int" nillable="true" fixed="3"/>
+  <xs:element name="tt" type="o:base"><xs:alternative test="@m" type="o:baseM"/></xs:element>
+  <xs:element name="tw" type="o:base"><xs:alternative test="count(@m) > 0" type="o:baseM"/></xs:element>
+  <xs:element name="ta" type="o:base" abstract="true"><xs:alternative test="@m" type="o:baseM"/></xs:element>
+  <xs:element name="tw1" type="o:base"><xs:alternative test="count(@m) > 0" type="o:base"/></xs:element>
+  <xs:element name="hw" type="o:hold"><xs:alternative test="count(@m) > 0" type="o:hold"/></xs:element>
+  <xs:complexType name="hold"><xs:sequence><xs:element name="x" minOccurs="0">
+    <xs:complexType><xs:sequence><xs:element ref="o:tt" minOccurs="0"/></xs:sequence></xs:complexType>
+  </xs:element></xs:sequence></xs:complexType>
+  <xs:element name="twa" type="o:base" abstract="true"><xs:alternative test="count(@m) > 0" type="o:baseM"/></xs:element>
+  <xs:element name="dq" type="xs:anySimpleType" default="abc"><xs:alternative test="not(@m)" type="xs:int"/></xs:element>
+  <xs:element name="w"><xs:complexType><xs:sequence><xs:any namespace="##local" processContents="lax" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
+  <xs:complexType name="base">
+    <xs:sequence>
+      <xs:element name="qty" type="xs:int" minOccurs="0" maxOccurs="2"/>
+      <xs:element ref="o:ab" minOccurs="0"/>
+      <xs:element ref="o:fx" minOccurs="0"/>
+      <xs:element name="line" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int"/></xs:sequence></xs:complexType></xs:element>
+    </xs:sequence>
+    <xs:attribute name="m"/>
+  </xs:complexType>
+  <xs:complexType name="baseM"><xs:complexContent><xs:extension base="o:base"/></xs:complexContent></xs:complexType>
+  <xs:complexType name="abs" abstract="true"><xs:complexContent><xs:extension base="o:base"/></xs:complexContent></xs:complexType>
+  <xs:complexType name="other"><xs:sequence><xs:element name="z" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>
+</xs:schema>`
+
+// overrideHint is the clause a notOverriding note appends for the object
+// member key whose "$type" has the value lexical.
+func overrideHint(key, lexical string) string {
+	return `; JSON member "$type" of "` + key + `" spells its xsi:type, "` + lexical + `": the type it names governs the element only where it ·overrides· the type the element's declaration selects, so name one that does, or drop the "$type"`
+}
+
+// typeLexicalHint is the clause a typeLexical note appends for the "$type" of
+// the object member key, whose value's one fault is the unbound prefix, ""
+// where its fault is another.
+func typeLexicalHint(key, prefix string) string {
+	if prefix == "" {
+		return `; JSON member "$type" of "` + key + `" spells its xsi:type, an xs:QName: give it as "local" or "p:local", each part an NCName`
+	}
+	return `; JSON member "$type" of "` + key + `" spells its xsi:type, an xs:QName, and no "$xmlns" in scope binds its prefix "` + prefix + `": bind it in a "$xmlns" member leading this object or one enclosing it, {"$xmlns":{"` + prefix + `":"<namespace name>"}}`
+}
+
+// nilHint is the clause a nonNillable note appends for the null member key.
+func nilHint(key string) string {
+	return `; JSON member "` + key + `" is null, which spells xsi:nil="true", but the declaration of its element is not nillable: give it a value`
+}
+
+// arrayItemHint is the clause an arrayItem note appends for item n of the
+// array member key.
+func arrayItemHint(key, n string) string {
+	return `; JSON member "` + key + `" is an array, each of whose items is one element of that name: the element charged is item ` + n + ` of it`
+}
+
+// TestSpellingNoteHints pins the clause Validate appends to a charge against a
+// JSON spelling: the element's cvc-elt clause 4 charge where its "$type" does
+// not ·override·, the "$type"'s cvc-attribute clause 3 charge, the element's
+// cvc-elt clause 3.1 charge at a null under a declaration that is not
+// nillable, and the parent's cvc-complex-content charge at an array item; and
+// that it appends none to any other charge at the same rule and location — the
+// element's cvc-elt clause 2 charge before or after its clause 3.1 or 4 one,
+// an array item's own content charge, an unnamed note's charge at an item, the
+// cvc-type charge over the empty value that follows — nor where the engine
+// makes no such charge: a "$type" that ·overrides·, one naming no type
+// (cvc-attribute clause 5), one whose element's own {type table} selection
+// the engine withholds, a nillable fixed declaration's clause 3.2.3.2 charge,
+// a parent's content charged at an earlier child, an element the engine walks
+// undecided below a withheld selection or an unattributed parent, and a null
+// no declaration governs. Each charge's rule and location are the engine's.
+func TestSpellingNoteHints(t *testing.T) {
+	const (
+		content = ruleCvcComplexContent
+		order   = `{"o:order":{"$xmlns":{"o":"urn:o"},`
+	)
+	for _, c := range []struct {
+		name, schema, doc string
+		want              []charge
+	}{
+		{"a \"$type\" that does not override", spellSchema, order + `"$type":"o:other","qty":1}}`, []charge{
+			{ruleCvcElt, ":1:2", overrideHint("o:order", "o:other")},
+		}},
+		{"a \"$type\" prefix no \"$xmlns\" binds", spellSchema, order + `"qty":{"$type":"xs:short"}}}`, []charge{
+			{ruleCvcAttribute, ":1:43", typeLexicalHint("qty", "xs")},
+			{ruleCvcType, ":1:36", ""},
+		}},
+		{"a \"$type\" that is no QName", spellSchema, order + `"qty":{"$type":"1bad"}}}`, []charge{
+			{ruleCvcAttribute, ":1:43", typeLexicalHint("qty", "")},
+			{ruleCvcType, ":1:36", ""},
+		}},
+		{"a \"$type\" whose prefix is no NCName", spellSchema, order + `"qty":{"$type":"1x:short"}}}`, []charge{
+			{ruleCvcAttribute, ":1:43", typeLexicalHint("qty", "")},
+			{ruleCvcType, ":1:36", ""},
+		}},
+		{"a \"$type\" of two colons", spellSchema, order + `"qty":{"$type":"a:b:c"}}}`, []charge{
+			{ruleCvcAttribute, ":1:43", typeLexicalHint("qty", "")},
+			{ruleCvcType, ":1:36", ""},
+		}},
+		{"an empty \"$type\"", spellSchema, order + `"qty":{"$type":" "}}}`, []charge{
+			{ruleCvcAttribute, ":1:43", typeLexicalHint("qty", "")},
+			{ruleCvcType, ":1:36", ""},
+		}},
+		{"a null under a declaration that is not nillable", spellSchema, order + `"qty":null}}`, []charge{
+			{ruleCvcElt, ":1:36", nilHint("qty")},
+			{ruleCvcType, ":1:36", ""},
+		}},
+		{"an array item the parent's content model rejects", spellSchema, order + `"qty":[1,2]}}`, []charge{
+			{content, ":1:45", arrayItemHint("qty", "2")},
+		}},
+		{"an unnamed array item", spellSchema, order + `"zz":[1,2]}}`, []charge{
+			{content, ":1:42", unnamedHint("zz", "o:order", `"qty"`)},
+		}},
+		{"a \"$type\" naming no type", spellSchema, order + `"$type":"o:nosuch","qty":1}}`, []charge{
+			{ruleCvcAttribute, ":1:36", ""},
+		}},
+		{"a \"$type\" that overrides", spellSchema, order + `"$type":"o:base","qty":1}}`, nil},
+		{"a \"$type\" that does not override, of an abstract declaration", spellProbeSchema, `{"o:ao":{"$xmlns":{"o":"urn:o"},"$type":"o:other"}}`, []charge{
+			{ruleCvcElt, ":1:2", overrideHint("o:ao", "o:other")},
+			{ruleCvcElt, ":1:2", ""},
+		}},
+		{"a \"$type\" that overrides, of an abstract declaration", spellProbeSchema, `{"o:ao":{"$xmlns":{"o":"urn:o"},"$type":"o:baseM"}}`, []charge{
+			{ruleCvcElt, ":1:2", ""},
+		}},
+		{"a null under an abstract declaration", spellProbeSchema, order + `"o:ab":null}}`, []charge{
+			{ruleCvcElt, ":1:36", ""},
+			{ruleCvcElt, ":1:36", nilHint("o:ab")},
+			{ruleCvcType, ":1:36", ""},
+		}},
+		{"a null under a nillable fixed declaration", spellProbeSchema, order + `"o:fx":null}}`, []charge{
+			{ruleCvcElt, ":1:36", ""},
+		}},
+		{"an array item charged by its parent and by its own content", spellProbeSchema, order + `"line":[{"a":1},{}]}}`, []charge{
+			{content, ":1:52", arrayItemHint("line", "2")},
+			{content, ":1:52", ""},
+		}},
+		{"an array item past maxOccurs", spellProbeSchema, order + `"qty":[1,2,3]}}`, []charge{
+			{content, ":1:47", arrayItemHint("qty", "3")},
+		}},
+		{"array items after the parent's content is charged", spellProbeSchema, order + `"zz":1,"qty":[1,2,3]}}`, []charge{
+			{content, ":1:36", unnamedHint("zz", "o:order", `"m", "qty", "ab", "fx", "line"`)},
+		}},
+		{"a null array item the parent's content model rejects", spellProbeSchema, order + `"qty":[1,2,null]}}`, []charge{
+			{content, ":1:47", arrayItemHint("qty", "3")},
+			{ruleCvcType, ":1:47", ""},
+		}},
+		{"a null array item", spellProbeSchema, order + `"qty":[1,null]}}`, []charge{
+			{ruleCvcElt, ":1:45", nilHint("qty")},
+			{ruleCvcType, ":1:45", ""},
+		}},
+		{"a \"$type\" that is no QName, on an array item", spellProbeSchema, order + `"qty":[{"$type":"1bad"}]}}`, []charge{
+			{ruleCvcAttribute, ":1:44", typeLexicalHint("qty", "")},
+			{ruleCvcType, ":1:43", ""},
+		}},
+		{"a \"$type\" that does not override, on an array item", spellProbeSchema, order + `"line":[{"$type":"o:other"}]}}`, []charge{
+			{ruleCvcElt, ":1:44", overrideHint("line", "o:other")},
+			{content, ":1:44", ""},
+		}},
+		{"a \"$type\" that does not override the type a {type table} selects", spellProbeSchema, `{"o:tt":{"$xmlns":{"o":"urn:o"},"$type":"o:other"}}`, []charge{
+			{ruleCvcElt, ":1:2", overrideHint("o:tt", "o:other")},
+		}},
+		{"a \"$type\" that does not override the type a {type table} selects, of an abstract declaration", spellProbeSchema, `{"o:ta":{"$xmlns":{"o":"urn:o"},"$type":"o:other"}}`, []charge{
+			{ruleCvcElt, ":1:2", overrideHint("o:ta", "o:other")},
+			{ruleCvcElt, ":1:2", ""},
+		}},
+		{"a \"$type\" that overrides the type a {type table} selects, of an abstract declaration", spellProbeSchema, `{"o:ta":{"$xmlns":{"o":"urn:o"},"$type":"o:baseM"}}`, []charge{
+			{ruleCvcElt, ":1:2", ""},
+		}},
+		{"a \"$type\" under a withheld {type table} selection", spellProbeSchema, `{"o:tw":{"$xmlns":{"o":"urn:o"},"$type":"o:other"}}`, nil},
+		{"a \"$type\" under a withheld {type table} selection, of an abstract declaration", spellProbeSchema, `{"o:twa":{"$xmlns":{"o":"urn:o"},"$type":"o:other"}}`, []charge{
+			{ruleCvcElt, ":1:2", ""},
+		}},
+		{"a null below a withheld {type table} selection", spellProbeSchema, `{"o:tw":{"$xmlns":{"o":"urn:o"},"qty":null}}`, nil},
+		{"a null of an abstract declaration under a lax wildcard", spellProbeSchema, `{"o:w":{"$xmlns":{"o":"urn:o"},"o:ao":null}}`, []charge{
+			{content, ":1:32", ""},
+			{ruleCvcElt, ":1:32", ""},
+			{ruleCvcElt, ":1:32", nilHint("o:ao")},
+		}},
+		{"a \"$type\" that does not override, under a lax wildcard", spellProbeSchema, `{"o:w":{"$xmlns":{"o":"urn:o"},"o:order":{"$type":"o:other"}}}`, []charge{
+			{content, ":1:32", ""},
+			{ruleCvcElt, ":1:32", overrideHint("o:order", "o:other")},
+		}},
+		{"an undeclared null", spellProbeSchema, `{"o:w":{"$xmlns":{"o":"urn:o"},"zz":null}}`, nil},
+		{"a null root", childSchema, `{"st":null}`, []charge{
+			{ruleCvcElt, ":1:2", nilHint("st")},
+		}},
+		{"a null root whose {type table} selects a type its default is invalid for", spellProbeSchema, `{"dq":null}`, []charge{
+			{ruleCvcElt, ":1:2", nilHint("dq")},
+			{ruleCvcType, ":1:2", ""},
+		}},
+		{"a null below an unattributed parent", inheritSchema, `{"big":{"mid":null,"b":""}}`, nil},
+		{"array items below an unattributed parent", inheritSchema, `{"big":{"mid":[{},{}],"b":""}}`, nil},
+		{"a \"$type\" that is no QName below an unattributed parent", inheritSchema, `{"big":{"mid":{"$type":"1bad"},"b":""}}`, nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			wantCharges(t, c.schema, c.doc, c.want)
+		})
+	}
+}
+
+// TestNotesKept pins how many notes the mapping keeps for a document, as
+// Validate keeps them, beside the charges they answer: one per charge where
+// the engine assesses the elements, and none where it walks them undecided —
+// below an element whose {type table} selection it withholds, or a parent
+// whose content model xsd.Schema.ContentMatcher declines — or skips them, so
+// that the notes kept there do not grow with the document (STYLE P4).
+func TestNotesKept(t *testing.T) {
+	const tw = `{"o:tw":{"$xmlns":{"o":"urn:o"},`
+	for _, c := range []struct {
+		name, schema, doc string
+		notes, charges    int
+	}{
+		{"nulls the engine charges", spellProbeSchema, `{"o:order":{"$xmlns":{"o":"urn:o"},"qty":[null,null]}}`, 2, 4},
+		{"nulls below a withheld selection", spellProbeSchema, tw + `"qty":[null,null]}}`, 0, 0},
+		{"\"$type\"s of no QName below a withheld selection", spellProbeSchema, tw + `"qty":[{"$type":"1bad"},{"$type":"1bad"}]}}`, 0, 0},
+		{"\"$type\"s that do not override below a withheld selection", spellProbeSchema, tw + `"qty":[{"$type":"o:other"},{"$type":"o:other"}]}}`, 0, 0},
+		{"nulls two levels below a withheld selection", spellProbeSchema, tw + `"line":{"a":[null,null]}}}`, 0, 0},
+		{"nulls below a withheld selection of one type", spellProbeSchema, `{"o:tw1":{"$xmlns":{"o":"urn:o"},"qty":[null,null]}}`, 0, 0},
+		{"nulls below a \"$type\" over a withheld selection of one type", spellProbeSchema, `{"o:tw1":{"$xmlns":{"o":"urn:o"},"$type":"o:baseM","qty":[null,null]}}`, 0, 0},
+		{"a scalar of element-only content below a withheld selection of one type", spellProbeSchema, `{"o:tw1":{"$xmlns":{"o":"urn:o"},"line":"x"}}`, 0, 0},
+		{"a \"$type\" over a read selection below a withheld selection of one type", spellProbeSchema, `{"o:hw":{"$xmlns":{"o":"urn:o"},"x":{"o:tt":{"$type":"o:other"}}}}`, 0, 0},
+		{"unnamed members two levels below a withheld selection", spellProbeSchema, tw + `"line":{"zz":1,"zy":2}}}`, 0, 0},
+		{"scalars of element-only content below a withheld selection", spellProbeSchema, tw + `"line":["x","y"]}}`, 0, 0},
+		{"\"$type\"s two levels below a withheld selection", spellProbeSchema, tw + `"line":{"a":{"$type":"1bad"}}}}`, 0, 0},
+		{"nulls below an unattributed parent", inheritSchema, `{"big":{"mid":[null,null],"b":""}}`, 0, 0},
+		{"a skipped \"$type\" of no QName", childSchema, `{"sk":{"r":{"$type":"1bad"}}}`, 0, 0},
+		{"a skipped null", childSchema, `{"sk":{"r":null}}`, 0, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			v := validatorOver(t, c.schema)
+			w := newWalker(jsonURI, strings.NewReader(c.doc), v.Schema(), v.ConditionallySelected)
+			root, err := w.root()
+			if err != nil {
+				t.Fatalf("root(%s): %v", c.doc, err)
+			}
+			res := v.Assess(root)
+			if err := w.end(root); err != nil {
+				t.Fatalf("end(%s): %v", c.doc, err)
+			}
+			if len(w.notes) != c.notes || len(res.Violations()) != c.charges {
+				t.Errorf("%s keeps %d notes beside %d charges, want %d beside %d", c.doc, len(w.notes), len(res.Violations()), c.notes, c.charges)
+			}
 		})
 	}
 }

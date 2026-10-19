@@ -130,14 +130,28 @@ func WithURI(uri string) Option {
 //     {attribute wildcard}: the clause lists the keys that map to the type's
 //     attribute uses and child element declarations, and, for a key that is
 //     "_" before an attribute use's name, names that name as the key.
+//   - the cvc-complex-content charge the parent's content model makes at an
+//     item of an array, where the clause above does not go on it: the item's
+//     place in the array.
 //   - the cvc-type clause 3.1.2 charge at the first child member of the
 //     object of an element whose type is a simple type: scalar expected.
+//   - the cvc-elt clause 4 charge at an element whose "$type" names a type
+//     that does not ·override· the one its declaration selects, and the
+//     cvc-attribute clause 3 charge at a "$type" whose value has no xs:QName
+//     value, under builtin/strict, or a backend whose xs:QName mapping is its:
+//     "$type" spells xsi:type, and, where the fault is a prefix no "$xmlns" in
+//     scope binds, a "$xmlns" member binds it (walker.noteTypeLexical's
+//     GAP(jsonsrc) marker).
+//   - the cvc-elt clause 3.1 charge at a null member whose element's
+//     declaration is not nillable: null spells xsi:nil="true".
 //
 // The clause goes on that one charge alone, never on another charge at the
-// same rule and location, such as the parent's at an array item or the
-// child's own at its member, and only where the mapping determines the type
-// that governs the element the charge is against, or every type that may
-// govern it agrees on the charge and on the keys the clause lists
+// same rule and location, such as the child's own at its member or array
+// item, or the element's cvc-elt clause 2 charge beside its clause 3.1 or 4
+// one; and, but on the cvc-attribute clause 3 charge, whose clause reads the
+// "$type" alone, only where the mapping determines the type or the
+// declaration that governs the element the charge is against, or every one
+// that may govern it agrees on the charge and on what the clause names
 // (walker.noteCharacters' and walker.noteChild's GAP(jsonsrc) markers).
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
@@ -547,6 +561,15 @@ type object struct {
 	// xsd.Schema.ContentMatcher declines, or the schema view lacks the
 	// governor capability (walker.govern).
 	unattributed bool
+	// unassessed is the engine assessing none of the owner's children with
+	// their governance decided: it walks them undecided, the owner's {type
+	// table} selection withheld (walker.settled, walker.overrode) or the owner
+	// undecided or skipped itself (placement.assessed, walker.objectElement).
+	// The notes a child's spelling keeps read it (walker.noteNil,
+	// walker.noteOverride, walker.noteOverrode, walker.noteTypeLexical,
+	// through placement.assessed), so that none is kept where
+	// the engine charges none, however many such children there are (STYLE P4).
+	unassessed bool
 }
 
 // overriding is an element's ·governing element declaration· decl, which
@@ -643,10 +666,12 @@ type placement struct {
 
 // parentCharge is the rule the parent's content is charged under at the
 // child at stands for, "" where it is charged none, whichever of
-// parent.governing governs the parent; false where those differ or the
-// mapping cannot attribute the child.
+// parent.governing governs the parent; false where those differ, the mapping
+// cannot attribute the child, or the engine assesses none of the parent's
+// children with their governance decided (object.unassessed), so that it
+// walks the parent undecided and charges its content at none.
 func (at placement) parentCharge() (xsderr.Rule, bool) {
-	if !at.attributed {
+	if !at.attributed || at.parent.unassessed {
 		return "", false
 	}
 	for _, r := range at.charges[1:] {
@@ -655,6 +680,23 @@ func (at placement) parentCharge() (xsderr.Rule, bool) {
 		}
 	}
 	return at.charges[0], true
+}
+
+// assessed reports whether the element standing at at is one the engine
+// assesses with its governance decided: the root, or a child of a parent
+// whose children it assesses so (object.unassessed), one type governing the
+// parent (object.governing) and ·attributing· the child to something other
+// than a skip wildcard or {open content}. The mapping attributes it to nothing
+// where xsd.Schema.ContentMatcher declines the parent's content model
+// (object.unattributed), where validate walks it undecided (walk.child);
+// several types may govern the parent only below an element the engine walks
+// undecided (walker.selector); and a skipped element is not assessed
+// (cvc-assess-elt clause 2).
+func (at placement) assessed() bool {
+	if at.parent == nil {
+		return true
+	}
+	return !at.parent.unassessed && at.attributed && len(at.parent.governing) == 1 && !skips(at.a[0])
 }
 
 // inherited is the [inherited attributes] of the element standing at at, and
@@ -724,7 +766,8 @@ func (b bareElement) elementName() xsd.QName     { return b.name }
 // names carries a {type table}, under every type the table can select as well
 // (walker.selectable), until walker.attributes reads the one the table selects
 // (object.table), or, where the mapping reads no selection, alike under every
-// one (walker.classify).
+// one (walker.classify). Under a "$type" it keeps the note walker.annotate
+// reads for e's cvc-elt clause 4 charge (walker.noteOverride).
 func (d declaredElement) object(w *walker, e *element, typ *attribute, at placement, loc xsderr.Loc) (*object, error) {
 	declared, err := w.declaredType(d.decl, loc)
 	if err != nil {
@@ -737,7 +780,11 @@ func (d declaredElement) object(w *walker, e *element, typ *attribute, at placem
 				return nil, err
 			}
 			o := w.object(e.name, td)
-			return o, w.instanceGoverning(o, e, typ, d.decl, declared, instance, td, at)
+			if err := w.instanceGoverning(o, e, typ, d.decl, declared, instance, td, at); err != nil {
+				return nil, err
+			}
+			w.noteOverride(e, typ, d.decl, instance, at)
+			return o, nil
 		}
 	}
 	o := w.object(e.name, declared)
@@ -1430,8 +1477,9 @@ func (w *walker) entry(sc *scope, key string, loc xsderr.Loc) (value, error) {
 // parent's object — nil for the root. Every element below the root is
 // ·attributed· under its parent's governing type as it is built
 // (object.attribute), whatever its value, and keeps the notes walker.annotate
-// reads for the parent's content charge at it (walker.noteChild) and for its
-// own text charge (walker.noteCharacters).
+// reads for the parent's content charge at it (walker.noteChild), for its own
+// text charge (walker.noteCharacters), and for its own cvc-elt clause 3.1
+// charge where its value is null (walker.noteNil).
 //
 // It DECLINES an array item that is itself an array. That has no XML twin, so
 // no marker tracks it: an item maps to exactly one element, and an array to
@@ -1445,6 +1493,7 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 	}
 	switch t := v.tok.(type) {
 	case nil:
+		w.noteNil(m, key, loc, at)
 		return w.nilled(m.elementName(), loc, v.loc, v.scope), nil
 	case json.Delim:
 		if t != json.Delim('{') {
@@ -1468,23 +1517,40 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 // classified under the type its members are (elementMember.object), the type
 // that governs it where its "$type" leaves that to a {type table}'s selection
 // (walker.overrode, walker.governOverriding), what it hands its children
-// (walker.handDown), and a cursor over the rest.
+// (walker.handDown), and a cursor over the rest. It keeps the note
+// walker.annotate reads for the "$type"'s cvc-attribute clause 3 charge
+// (walker.noteTypeLexical), and, under a {type table} whose selection
+// walker.overrode reads, for e's cvc-elt clause 4 charge
+// (walker.noteOverrode), where the engine assesses the element with its
+// governance decided (placement.assessed): it charges neither on an undecided
+// or skipped element (walk.instanceTypeResolves, walk.childGoverning). It
+// marks the object unassessed where the element is not so assessed.
 func (w *walker) objectElement(m elementMember, loc xsderr.Loc, key string, v value, at placement) (*element, error) {
 	e := &element{w: w, name: m.elementName(), key: key, loc: loc, scope: v.scope}
 	typ, tok, tokAt, err := w.typeMember(e, v.next, v.nextLoc)
 	if err != nil {
 		return nil, err
 	}
+	if at.assessed() {
+		w.noteTypeLexical(e, typ)
+	}
 	o, err := m.object(w, e, typ, at, v.loc)
 	if err != nil {
 		return nil, err
 	}
 	inherited, known := at.inherited()
+	ov := o.overriding
 	attrs, ahead, o, err := w.attributes(o, e.scope, tok, tokAt, typ, inherited)
 	if err != nil {
 		return nil, err
 	}
 	e.attrs = attrs
+	if ov != nil && at.assessed() {
+		w.noteOverrode(e, typ, ov, o)
+	}
+	if !at.assessed() {
+		o.unassessed = true
+	}
 	if o.overriding != nil {
 		if err := w.governOverriding(o, e, typ); err != nil {
 			return nil, err
@@ -3267,6 +3333,7 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 		if len(r.live) < len(r.owner.selectable)+1 {
 			return nil, nil, w.withheld(r.owner, loc)
 		}
+		r.owner.unassessed = true
 		return w.unselected(r, next)
 	}
 	s, ok := w.schema.ResolvedType(slot)
@@ -3303,14 +3370,15 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 // it returns the object of the type that governs the element
 // (key-governing-type-elem clauses 3 and 4; walk.declaredGovernance): instance
 // where it ·overrides· S under D's {disallowed substitutions}, and S, cvc-elt
-// clause 4 charged, where it does not (walker.overridden). The members after
-// the run are classified under that type, which classifies the run and next
-// as r.owner did (walker.agrees), so that S is the type the twin's attributes
-// select too. Where the engine withholds S, or S does not resolve, the run
-// ends under r.owner (walker.unselected), and walker.governOverriding makes
-// each type that may govern the element. It DECLINES typ where ·override· is
-// not decided (walker.overridden), and where the governing type declines a
-// member of the run, or next (walker.agrees).
+// clause 4 charged, where it does not (walker.overridden), and
+// walker.noteOverrode keeps the note for that charge. The members after the
+// run are classified under that type, which classifies the run and next as
+// r.owner did (walker.agrees), so that S is the type the twin's attributes
+// select too. Where the engine withholds S, or S does not resolve, the run ends
+// under r.owner (walker.unselected), and walker.governOverriding makes each
+// type that may govern the element. It DECLINES typ where ·override· is not
+// decided (walker.overridden), and where the governing type declines a member
+// of the run, or next (walker.agrees).
 //
 // It DECLINES typ too where the governing type classifies the run, or next,
 // otherwise than r.owner did.
@@ -3335,6 +3403,7 @@ func (w *walker) overrode(r *attributeRun, next *runMember) (final *object, unse
 	table, _ := ov.decl.TypeTable()
 	slot, decided := w.selected(table, r.attributes(), r.inherited)
 	if !decided {
+		r.owner.unassessed = true
 		return w.unselected(r, next)
 	}
 	s, ok := w.schema.ResolvedType(slot)

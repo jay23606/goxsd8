@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kud360/goxsd8/internal/xmlname"
+	"github.com/kud360/goxsd8/internal/xmlqname"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -12,12 +14,15 @@ import (
 
 // The rules of the charges a note answers, and that validate's
 // contentCheck.element charges a parent's content under (contentCharge): a
-// characters note answers cvc-complex-type, a scalarExpected cvc-type, and an
-// unnamed cvc-complex-content.
+// characters note answers cvc-complex-type, a scalarExpected cvc-type, an
+// unnamed and an arrayItem cvc-complex-content, a notOverriding and a
+// nonNillable cvc-elt, and a typeLexical cvc-attribute.
 const (
 	ruleCvcType           xsderr.Rule = "cvc-type"
 	ruleCvcComplexType    xsderr.Rule = "cvc-complex-type"
 	ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
+	ruleCvcElt            xsderr.Rule = "cvc-elt"
+	ruleCvcAttribute      xsderr.Rule = "cvc-attribute"
 )
 
 // xmlWhitespace is white space as XML defines it (S ::= (#x20 | #x9 | #xD |
@@ -34,15 +39,23 @@ type noteAt struct {
 
 // note is what the mapping knows about one member, in the instance's own
 // terms, kept at the charge it answers (noteAt): hint is the clause [Validate]
-// appends to that charge's Msg, and own reports whether the charge is the
-// element's own, which follows every charge its parent makes at the same rule
-// and location, rather than the parent's, which precedes every charge of the
-// element's there (walker.annotate). Its arms are characters, scalarExpected
-// and unnamed.
+// appends to that charge's Msg, and answers which of the violations at its
+// rule and location, in the result's order, that charge is (walker.annotate).
+// Its arms are characters, scalarExpected, unnamed, arrayItem, notOverriding,
+// nonNillable and typeLexical.
 type note interface {
 	hint() string
-	own() bool
+	answers() chargeOrder
 }
+
+// chargeOrder is which of the violations at a note's rule and location the
+// charge it answers is: the first or the last, in the result's order.
+type chargeOrder uint8
+
+const (
+	firstCharge chargeOrder = iota
+	lastCharge
+)
 
 // characters is a scalar member whose element the engine charges
 // cvc-complex-type for the scalar's text, kept at that charge's rule and
@@ -63,9 +76,9 @@ func (c characters) hint() string {
 		c.key, c.lexical, c.variety, c.key)
 }
 
-// own is true: the element's text charge follows the parent's charges at an
-// array item's location, which is its scalar's (walker.annotate).
-func (characters) own() bool { return true }
+// answers is the last: the element's text charge follows the parent's charges
+// at an array item's location, which is its scalar's (walker.annotate).
+func (characters) answers() chargeOrder { return lastCharge }
 
 // scalarExpected is the first child member of the object of an element whose
 // every type that may govern it is a simple type, kept at the cvc-type clause
@@ -82,7 +95,9 @@ func (s scalarExpected) hint() string {
 		s.key, s.owner, s.owner)
 }
 
-func (scalarExpected) own() bool { return false }
+// answers is the first: the parent's charge at a child precedes the child's
+// own there (walker.annotate).
+func (scalarExpected) answers() chargeOrder { return firstCharge }
 
 // unnamed is a child member that no child element declaration and no
 // attribute use of its parent's type names, kept at the cvc-complex-content
@@ -112,14 +127,115 @@ func (u unnamed) hint() string {
 	return hint
 }
 
-func (unnamed) own() bool { return false }
+// answers is the first, as scalarExpected's is.
+func (unnamed) answers() chargeOrder { return firstCharge }
+
+// arrayItem is an item of an array-valued member, kept at the
+// cvc-complex-content charge the parent's content model makes there where no
+// unnamed note is kept (walker.noteChild): key is the array's key as spelled,
+// and item the item's place in the array, from 1.
+type arrayItem struct {
+	key  string
+	item int
+}
+
+// hint answers the parent's cvc-complex-content charge: an array spells one
+// element per item, so the element charged is one item of it.
+func (a arrayItem) hint() string {
+	return fmt.Sprintf("; JSON member %q is an array, each of whose items is one element of that name: the element charged is item %d of it",
+		a.key, a.item)
+}
+
+// answers is the first, as scalarExpected's is: the item's own
+// cvc-complex-content charges at its location, an object item's at its '{',
+// follow the parent's.
+func (arrayItem) answers() chargeOrder { return firstCharge }
+
+// notOverriding is an object member whose "$type" names a type that does not
+// ·override· the ·selected type definition· of the element's ·governing
+// element declaration·, kept at the cvc-elt clause 4 charge the engine makes
+// at the element (walker.noteOverride, walker.noteOverrode): key is the member's
+// key as spelled, an array item's being its array's, and lexical the
+// "$type"'s value.
+type notOverriding struct {
+	key, lexical string
+}
+
+// hint answers the element's cvc-elt clause 4 charge: "$type" spells xsi:type.
+func (n notOverriding) hint() string {
+	return fmt.Sprintf("; JSON member \"$type\" of %q spells its xsi:type, %q: the type it names governs the element only where it ·overrides· the type the element's declaration selects, so name one that does, or drop the \"$type\"",
+		n.key, n.lexical)
+}
+
+// answers is the first: validate's walk charges clause 4 as it settles the
+// element's governance (walk.instanceOverride), before its clause 2 charge
+// (walk.abstractDeclaration) and its clause 5 charges, which follow its
+// [[children]], and a clause 1 charge leaves no clause 4 one
+// (walk.declaredGovernance); clause 3 reads an xsi:nil, which only a null
+// member carries, and no charge of the parent's at the element's location is
+// a cvc-elt one, the parent being no null.
+func (notOverriding) answers() chargeOrder { return firstCharge }
+
+// nonNillable is a null member whose element's ·governing element
+// declaration· is not nillable, kept at the cvc-elt clause 3.1 charge the
+// engine makes at the element (walker.noteNil): key is the member's key as
+// spelled, an array item's being its array's.
+type nonNillable struct {
+	key string
+}
+
+// hint answers the element's cvc-elt clause 3.1 charge: null spells
+// xsi:nil="true".
+func (n nonNillable) hint() string {
+	return fmt.Sprintf("; JSON member %q is null, which spells xsi:nil=\"true\", but the declaration of its element is not nillable: give it a value",
+		n.key)
+}
+
+// answers is the last: validate's walk charges clause 2
+// (walk.abstractDeclaration) before clause 3.1 (walk.nilCheck), and no
+// clause after it. Clause 5 is charged after the [[children]], and none of
+// its arms is charged at a null: an element that is not ·nilled· and has no
+// [[children]] takes clause 5.1 wherever its declaration has a {value
+// constraint}, and clause 5.1.1, its one cvc-elt charge, reads an
+// ·instance-specified type definition· (contentCheck.defaultValid), which
+// only an object's "$type" presents. A clause 1 charge leaves no clause 3.1
+// one, clause 4 reads an xsi:type too, and no charge of the parent's at the
+// element's location is a cvc-elt one, the parent being no null.
+func (nonNillable) answers() chargeOrder { return lastCharge }
+
+// typeLexical is a "$type" member whose value has no xs:QName ·actual value·,
+// kept at the cvc-attribute clause 3 charge the engine makes at its key
+// (walker.noteTypeLexical): key is the key of the member whose object it
+// leads, as spelled, an array item's being its array's, and prefix the
+// value's prefix where that is the one fault, no "$xmlns" in scope binding
+// it, and empty otherwise.
+type typeLexical struct {
+	key, prefix string
+}
+
+// hint answers the cvc-attribute clause 3 charge: "$type" spells xsi:type,
+// whose value is an xs:QName, and a prefix is bound by a "$xmlns" member.
+func (t typeLexical) hint() string {
+	if t.prefix == "" {
+		return fmt.Sprintf("; JSON member \"$type\" of %q spells its xsi:type, an xs:QName: give it as \"local\" or \"p:local\", each part an NCName",
+			t.key)
+	}
+	return fmt.Sprintf("; JSON member \"$type\" of %q spells its xsi:type, an xs:QName, and no \"$xmlns\" in scope binds its prefix %q: bind it in a \"$xmlns\" member leading this object or one enclosing it, {\"$xmlns\":{%q:\"<namespace name>\"}}",
+		t.key, t.prefix, t.prefix)
+}
+
+// answers is the first, and the only: the engine charges an xsi:type under
+// cvc-attribute clause 3 or clause 5, never both (walk.instanceTypeResolves),
+// and every other attribute stands at a key of its own.
+func (typeLexical) answers() chargeOrder { return firstCharge }
 
 // noteChild keeps a note at loc for the child member key that m classifies
 // under in's object, its value's scope sc, standing at at, where every type
 // that may govern the parent (object.governing) charges the parent's content
 // there under one rule (placement.parentCharge): a scalarExpected where that
-// is cvc-type, every such type being a simple type, and an unnamed where it is
-// cvc-complex-content and walker.unnamedNote keeps one. Each parent's content is
+// is cvc-type, every such type being a simple type, and where it is
+// cvc-complex-content an unnamed where walker.unnamedNote keeps one, and
+// otherwise, at an item of an array, an arrayItem. Each parent's content is
 // charged at one child at most (object.attribute), so the notes kept grow with
 // the parents charged, not with the document (STYLE P4).
 //
@@ -160,6 +276,10 @@ func (w *walker) noteChild(m elementMember, key string, loc xsderr.Loc, sc *scop
 	}
 	if u, ok := w.unnamedNote(key, loc, sc, in); ok {
 		w.notes[noteAt{loc: loc, rule: rule}] = u
+		return
+	}
+	if in.run != nil {
+		w.notes[noteAt{loc: loc, rule: rule}] = arrayItem{key: key, item: in.run.items}
 	}
 }
 
@@ -287,6 +407,154 @@ func namesNone(m member) bool {
 	return false
 }
 
+// noteOverride keeps a notOverriding note at e's location for e, whose
+// "$type" typ names instance and whose members are classified by d, standing
+// at at, where the engine charges cvc-elt clause 4 there under a declaration
+// with no {type table}: the declaration walker.governingDeclaration finds
+// governing e carries no {type table}, no ·absent· {substitution group
+// affiliations} member (walker.affiliated), and a {type definition} that
+// resolves to a type S, its ·selected type definition· (key-selected-type
+// clause 2), that instance does not ·override· under its {disallowed
+// substitutions} (key-overrides, walk.instanceOverride). Under a declaration
+// with a {type table} whose selection the mapping reads, walker.noteOverrode keeps
+// the note; where it reads none, or the engine withholds the selection, the
+// engine determines no ·selected type definition· and charges no clause 4
+// (walk.declaredGovernance).
+func (w *walker) noteOverride(e *element, typ *attribute, d xsd.ElementDeclaration, instance xsd.TypeDefinition, at placement) {
+	g, ok := w.schema.(governor)
+	if !ok {
+		return
+	}
+	gd, ok := w.governingDeclaration(g, d, at)
+	if !ok {
+		return
+	}
+	if _, tabled := gd.TypeTable(); tabled || !w.affiliated(gd) {
+		return
+	}
+	s, ok := w.schema.ResolvedType(gd.TypeDefinition())
+	if !ok {
+		return
+	}
+	overrides, err := g.ValidlySubstitutable(instance, s, gd.DisallowedSubstitutions())
+	if err != nil || overrides {
+		return
+	}
+	w.notes[noteAt{loc: e.loc, rule: ruleCvcElt}] = notOverriding{key: e.key, lexical: typ.value}
+}
+
+// noteOverrode keeps a notOverriding note at e's location for e, whose
+// "$type" typ names ov.instance and whose ·governing element declaration·
+// ov.decl carries a {type table} whose selection the mapping reads, where the
+// engine charges cvc-elt clause 4 there: walker.overrode decided the type S the
+// table selects, leaving o, the object e's members after the run are
+// classified against, no overriding, and the one type governing it is S, not
+// instance, which, a named type, is the one type walker.overridden returns
+// exactly where it ·overrides· S (sameNamed); and no ·absent· {substitution
+// group affiliations} member of ov.decl takes e to cvc-elt clause 1 instead
+// (walker.affiliated). Where the engine withholds S, walker.overrode leaves o
+// its overriding and the engine charges no clause 4.
+func (w *walker) noteOverrode(e *element, typ *attribute, ov *overriding, o *object) {
+	if o.overriding != nil || sameNamed(o.governing[0].typ, ov.instance) || !w.affiliated(ov.decl) {
+		return
+	}
+	w.notes[noteAt{loc: e.loc, rule: ruleCvcElt}] = notOverriding{key: e.key, lexical: typ.value}
+}
+
+// noteNil keeps a nonNillable note at loc, the location of the null-valued
+// element m classifies under the member key, standing at at, where the engine
+// charges cvc-elt clause 3.1 there: the declaration
+// walker.governingDeclaration finds governing it is not nillable, has no
+// ·absent· {substitution group affiliations} member (walker.affiliated) and
+// every type it can select resolving (walker.declarationType), so that no
+// cvc-elt clause 1 charge takes the element to ·lax assessment· instead
+// (walk.declaredGovernance). Clause 3.1 reads the declaration's {nillable}
+// alone, whatever type governs the element (walk.nilCheck), so a nillable
+// declaration, whose ·nilled· element the engine charges under clause 3.2.3.2
+// where it is fixed, keeps none.
+func (w *walker) noteNil(m elementMember, key string, loc xsderr.Loc, at placement) {
+	d, ok := m.(declaredElement)
+	if !ok {
+		return
+	}
+	g, ok := w.schema.(governor)
+	if !ok {
+		return
+	}
+	gd, ok := w.governingDeclaration(g, d.decl, at)
+	if !ok || gd.Nillable() || !w.affiliated(gd) || len(w.declarationType(gd)) == 0 {
+		return
+	}
+	w.notes[noteAt{loc: loc, rule: ruleCvcElt}] = nonNillable{key: key}
+}
+
+// governingDeclaration is the ·governing element declaration· of an element
+// whose members are classified by d, standing at at, as validate's walk
+// determines it (walk.childGoverning): at the root d, the top-level
+// declaration of its name; below it, the one walker.governs reads off what
+// the one type governing the parent ·attributes· the element to. It is false
+// where the element stands nowhere the engine assesses it (placement.assessed),
+// and where that type gives it none, the engine then assessing it with no
+// declaration and charging it no cvc-elt clause.
+func (w *walker) governingDeclaration(g governor, d xsd.ElementDeclaration, at placement) (xsd.ElementDeclaration, bool) {
+	if at.parent == nil {
+		return d, true
+	}
+	if !at.assessed() {
+		return xsd.ElementDeclaration{}, false
+	}
+	gd, declares, _ := w.governs(g, d.Name(), nil, at.parent.governing[0].typ, at.a[0])
+	return gd, declares
+}
+
+// affiliated reports whether every member of d's {substitution group
+// affiliations} names a top-level element declaration: an ·absent· one makes
+// validate's walk charge cvc-elt clause 1 and assess the element laxly, reading
+// no other clause of d (walk.absentAffiliation).
+func (w *walker) affiliated(d xsd.ElementDeclaration) bool {
+	for _, head := range d.SubstitutionGroupAffiliationNames() {
+		if _, ok := w.schema.Element(head); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// noteTypeLexical keeps a typeLexical note at the key of e's "$type" member
+// typ, where none is nil, whose value has no xs:QName ·actual value· under e's
+// bindings, so that the engine charges cvc-attribute clause 3 there
+// (walk.instanceTypeLexical): it is no QName — empty after the whiteSpace
+// collapse xs:QName fixes, of a colon structure no QName has, or with a part
+// that is no NCName — or its prefix is one no "$xmlns" in scope binds
+// (element.LookupPrefix). The split is [xmlqname.Resolve]'s, read through a
+// lookup that binds every prefix to itself, so that the namespace it returns
+// is the prefix, and the local part it returns where it splits no QName is
+// empty, which is no NCName; the NCName test is [xmlname.IsNCName], which
+// accepts the strings builtin/strict's xs:QName mapping accepts as NCNames.
+//
+// GAP(jsonsrc): under a value backend that does not map xs:QName, or maps it
+// otherwise than builtin/strict, the engine declines clause 3 and charges a
+// lexical of no QName under cvc-attribute clause 5 at the "$type"'s key, or
+// nothing (walk.instanceTypeLexical's GAP(validate) marker), and the note
+// goes on that clause 5 charge, which its clause does not answer, or on none.
+// RULED permanent by #774: mapping xs:QName is backend coverage, not this
+// package's, and the mapping reads no backend.
+func (w *walker) noteTypeLexical(e *element, typ *attribute) {
+	if typ == nil {
+		return
+	}
+	at := noteAt{loc: typ.loc, rule: ruleCvcAttribute}
+	prefix, local, _ := xmlqname.Resolve(typ.value, func(p string) (string, bool) { return p, true })
+	if !xmlname.IsNCName(local) || (prefix != "" && !xmlname.IsNCName(prefix)) {
+		w.notes[at] = typeLexical{key: e.key}
+		return
+	}
+	if _, bound := e.LookupPrefix(prefix); bound {
+		return
+	}
+	w.notes[at] = typeLexical{key: e.key, prefix: prefix}
+}
+
 // noteCharacters keeps a characters note at loc, the location of the scalar
 // whose lexical form is lexical, for the member key that m classifies,
 // standing at at, where the type walker.scalarGoverning finds governing the
@@ -359,14 +627,12 @@ func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr
 // [inherited attributes] at hands it (key-cta-ta-select clauses 1.1.2 and
 // 1.1.3), as validate.Validator.ConditionallySelected, the engine's own scan,
 // answers. It is false for an element ·skipped· by a skip wildcard, which
-// nothing assesses (cvc-assess-elt clause 2), and at the sites
-// walker.noteCharacters' GAP(jsonsrc) markers name.
-//
-// Below an element whose selection the engine withholds, the mapping can
-// determine a type where every type that may govern each element between
-// hands down alike (walker.selector), while the engine walks the subtree
-// undecided and charges nothing there, the scalar's parent included; the note
-// kept then answers no charge (walker.annotate).
+// nothing assesses (cvc-assess-elt clause 2), for a child of a parent whose
+// children the engine walks undecided (object.unassessed), below an element
+// whose selection it withholds, though the mapping can determine a type there
+// where every type that may govern each element between hands down alike
+// (walker.selector), and at the sites walker.noteCharacters' GAP(jsonsrc)
+// markers name.
 func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.TypeDefinition, bool) {
 	declared, ok := w.schema.ResolvedType(d.TypeDefinition())
 	if !ok {
@@ -376,7 +642,7 @@ func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.Ty
 	if !read {
 		return nil, false
 	}
-	if at.parent != nil && skips(at.a[0]) {
+	if at.parent != nil && (at.parent.unassessed || skips(at.a[0])) {
 		return nil, false
 	}
 	if declares {
@@ -397,9 +663,11 @@ func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.Ty
 }
 
 // annotate appends to the Msg of the charge each note answers the clause its
-// hint gives: of the violations of res at the note's rule and location, the
-// last where the charge is the element's own (note.own) and the first where
-// it is its parent's, and none where no violation is there.
+// hint gives: of the violations of res at the note's rule and location, in
+// res's order, the first or the last as note.answers says, and none where no
+// violation is there. Each arm's answers states the order its charge takes among the
+// others there; the two paragraphs below state it for characters and for
+// the parent's notes.
 //
 // Where the engine determines the type walker.scalarGoverning determines, a
 // characters note is kept exactly where the engine makes the element's own
@@ -414,8 +682,8 @@ func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.Ty
 // and clause 1.2's ·initial value· charge needing simple content.
 //
 // Where the engine determines the type that governs the parent, the one
-// object.governing holds, a scalarExpected or unnamed note is kept exactly
-// where the engine charges the parent's content at the child
+// object.governing holds, a scalarExpected, unnamed or arrayItem note is kept
+// exactly where the engine charges the parent's content at the child
 // (walker.noteChild), and that charge is the first violation at the child's
 // location under its rule: validate's walk.child charges the parent's content
 // at a child before it assesses the child, every charge of the child's own at
@@ -428,25 +696,24 @@ func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.Ty
 // validate.Result.Violations states; the rule ID and location stay the
 // engine's.
 func (w *walker) annotate(res *validate.Result) {
-	var answers []*xsderr.Error
-	answered := map[noteAt]int{}
+	var noted []noteAt
+	charges := map[noteAt][]*xsderr.Error{}
 	for _, e := range res.Violations() {
 		at := noteAt{loc: e.Loc, rule: e.Rule}
-		n, ok := w.notes[at]
-		if !ok {
+		if _, ok := w.notes[at]; !ok {
 			continue
 		}
-		i, seen := answered[at]
-		if !seen {
-			answered[at] = len(answers)
-			answers = append(answers, e)
-			continue
+		if _, seen := charges[at]; !seen {
+			noted = append(noted, at)
 		}
-		if n.own() {
-			answers[i] = e
-		}
+		charges[at] = append(charges[at], e)
 	}
-	for _, e := range answers {
-		e.Msg += w.notes[noteAt{loc: e.Loc, rule: e.Rule}].hint()
+	for _, at := range noted {
+		n, es := w.notes[at], charges[at]
+		e := es[0]
+		if n.answers() == lastCharge {
+			e = es[len(es)-1]
+		}
+		e.Msg += n.hint()
 	}
 }
