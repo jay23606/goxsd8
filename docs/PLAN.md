@@ -17,22 +17,21 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-19 (post-land for #2783, on `main` at `6c345948`)
+## Status — 2026-10-19 (`/backlog`, on `main` at `e4fabdb5`)
 
-**North star: M8, the `json` adapter, through #2780, which now leads the
-band.** #2783 landed the unnamed-member key-list and "scalar expected"
-clauses on the parent's content charge, which finishes #2722's member-hint
-half. #2780, #2722's `-format` half, is the rest of that re-plan, and its
-prior art is on `wip/issue-2722`. A `GOXSD_DECLINES=1` run on `7610745d`
-leaves no unruled W3C cluster on any active lane. #2781, #2723 and #2783
-changed no file the W3C lanes read. **Lean: product**, unchanged: the
-retro's product share fell from 76% to 54%, and W3C yield was 4 cases in 54
-sessions.
+**North star: M8, the `json` adapter, and confirmed by a fresh partition.**
+A `GOXSD_DECLINES=1` run on `e4fabdb5` leaves every `instance`, `schema` and
+`datatypes` cluster ruled or recorded. No W3C lane has an unruled lead, so the
+lane work below the band waits on rulings, not on a slice. M8 now has 6 open
+issues. #2827 is a JSON-versus-XML verdict divergence and leads the band.
+#2829 is new from this pass's cliuser round. **Lean: product**, unchanged
+since the 2026-10-18 retro. Since then, #1002, #2805 and #2807 moved
+`instance` by +22 net and `schema` by +2, and #2795 moved `json` by +2.
 
 ### Conformance lanes
 
 **This table is `go tool lanestatus`, pasted verbatim, on `main` at
-`6c345948`.** It is the committed expectations census, which `docs/WORKFLOW.md`
+`e4fabdb5`.** It is the committed expectations census, which `docs/WORKFLOW.md`
 names as the lane score (#1120).
 
 | Lane | Pass | Fail | Total |
@@ -44,19 +43,18 @@ names as the lane score (#1120).
 | `schema` | 15302 | 96 | 15398 |
 | `xpath` | — | — | 0 |
 
-**No lane moved at `6c345948`**: #2783 changes message text only, so `json`
-banks no curated row. **`datatypes ⊆ instance` is intended** (#1507).
-**An em dash means a lane with no cases yet, not a lane scoring zero.**
-`datatypes` is M3 and complete. `schema` is M4, `instance` is M5, and `json`
-is M8, and all three are active. `json` moves only by curated cases a
+**No lane moved since `6c345948`**: #2780 is CLI-only, and #2796 changed a
+classification no curated row banks. **`datatypes ⊆ instance` is intended**
+(#1507). **An em dash means a lane with no cases yet, not a lane scoring
+zero.** `datatypes` is M3 and complete. `schema` is M4, `instance` is M5, and
+`json` is M8, and all three are active. `json` moves only by curated cases a
 landing adds. `xpath` waits on M7 and `ber` on M11.
 
 ### What holds each active lane's failures
 
-**Measured on `7610745d`** (a read-only `GOXSD_DECLINES=1` run fed to `go
-tool lanepartition`). #2781, #2723 and #2783 touched only `validate/jsonsrc`,
-`cmd/goxsd8` and one doc comment in `validate`, so the figures stand. Every
-figure is a part of the banked fails and a bound from above.
+**Measured on `e4fabdb5`**: a read-only `GOXSD_DECLINES=1` run (exit 0, 523 s,
+expectations untouched) fed to `go tool lanepartition`. Every figure is a part
+of the banked fails and a bound from above.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
@@ -64,37 +62,41 @@ figure is a part of the banked fails and a bound from above.
 | `schema` | 96 | 1 | 11 | 84 |
 | `datatypes` | 10 | 6 | — | 4 |
 
-- **`VC` is empty.** No `instance` or `schema` fail is banked under it.
-- **Every larger `instance` cluster is ruled or recorded.** `MS-Regex`
-  18 is ruled by #1899, `MS-Attribute`'s 11 by #2151, and `MS-Particles`'
-  ceiling by #1601. `MS-Additional`'s 5 are named in #2171. The 7
+- **The figures match `7610745d`'s cell for cell.** No landing since then
+  touched a file the W3C lanes read.
+- **Every larger `instance` cluster is ruled or recorded.** `MS-Regex` 18 is
+  ruled by #1899, `MS-Attribute`'s 11 by #2151, and `MS-Particles`' 4 by
+  #1601. `MS-Additional`'s 5 are named in #2171. The 7
   `strict-attribute-unresolved` declines are #1912's ruled divergence, and
   #2237's Acceptance turns them into decided disagreements, fail to fail.
   `MS-Schema`'s 4 and 3 match #744 and #921 by test-set name only.
   `lanepartition` reads open issues only, so a ruled cluster prints "no open
   issue names it" (#2542).
 - **`schema`:** `MS-Wildcards` 49 is a recorded divergence (#1809), and
-  `Open`'s 5 are `blocked` on #1374. `Simple`'s 5 match #513, #620, #634 and
-  #1236 by test-set name.
+  `Open`'s 5 are `blocked` on #1374. `Simple`'s 5 match #513, #620, #634, #1236
+  and #2624 by test-set name.
 - **`json` has no fails to partition.** It moves by the curated rows a slice
   adds.
 
 ### Branch namespace, `origin` (report-only; containers cannot delete a ref)
 
-**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 2821 distinct 2821
-min 1 max 2821 no gaps`). No `wip/issue-<N>` is LIVE. `wip/issue-2783` is
-gone, as a landing leaves it.
+**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 2828 distinct 2828
+min 1 max 2828 no gaps`), on an unshallowed clone. No `wip/issue-<N>` is LIVE.
 
 - **RETIRED, deletable now:** `wip/issue-2013`, `wip/issue-2332`,
-  `wip/issue-2696` and `wip/issue-2699` (each issue closed).
-- **RETIRED, keep until #2780 lands:** `wip/issue-2722` (`8a3fa106`). #2783
-  ported its `TestNoteHints` rows, but it is still the only ref holding
-  #2780's prior art (`4d488043`, `d97d68f8`, `40250392`, `0c9a9107`).
+  `wip/issue-2696`, `wip/issue-2699` and `wip/issue-2722`. Each issue is
+  closed. #2780 ported `wip/issue-2722`'s prior art. The park entries of
+  `wip/issue-2699` (`5812f283`) and `wip/issue-2696` (`4e60252f`) are on
+  `main`'s log, recovered by #2795's post-land pass, so nothing is owed from
+  either ref.
 - **EXPIRED:** `wip/issue-2081`, a parked grounding with no code, on an issue
   `blocked` on the owner.
-- **Certified for deletion and still standing:** `meta/backlog-2026-10-01-b`,
-  `meta/backlog-20261013-0808`, `chronicler-345`, `meta/post-land-1816`,
-  `meta/post-land-1908`, `postland-2099` and `postland/issue-2284`.
+- **Certified for deletion and still standing:** `meta/backlog-2026-10-01-b`
+  and `meta/backlog-20261013-0808`. Both print STRANDED PASS, a known false
+  positive (#1897): their content landed by squash (PRs #2011 and #2609), and
+  later `meta: backlog` commits are on `main`. Also certified: the AHEAD-of-main
+  leftovers `chronicler-345`, `meta/post-land-1816`, `meta/post-land-1908`,
+  `postland-2099` and `postland/issue-2284`.
 - **For human triage:** `parked/untriaged-20260930-110432`,
   `parked/untriaged-20260930-215455`, and eight subagent branches the survey
   skips: `wip/issue-1861-{mason,chronicler}`, `wip/issue-1926-{mason,chronicler}`,
@@ -103,19 +105,17 @@ gone, as a landing leaves it.
 
 ### Marker census
 
-**`go tool gapaudit` on `6c345948`, fed the same walk:** 183 markers across 11
+**`go tool gapaudit` on `e4fabdb5`, fed the same walk:** 183 markers across 11
 areas (xpath 63, jsonsrc 33, xsd 32, validate 23, value 11, conformance 7,
-parser 6, xml 3, landcheck 2, regex 2, cmd 1). #2783 added `walker.noteChild`'s
-two: `Owned by #2670` and `RULED permanent by #2702`. **Group 1 has 11 rows**,
-none in `notes.go`. Eight are #2719's. The other three have an owner
-written into the body: `xsd/derivation.go:1293` (#555),
-`value/valuespace.go:152` (#462) and `tools/landcheck/keywords.go:48`
-(#2541). **Group 2 has 27 rows**, all kind/gap trackers that carry no marker
-by design.
+parser 6, xml 3, landcheck 2, regex 2, cmd 1), with no dead end. **Group 1 has
+11 rows**, unchanged. Eight are #2719's. The other three have an owner written
+into the body: `xsd/derivation.go:1293` (#555), `value/valuespace.go:152`
+(#462) and `tools/landcheck/keywords.go:48` (#2541). **Group 2 has 28 rows**:
+the 27 kind/gap trackers that carry no marker by design, and #2824.
 
 ### Milestones and queue
 
-**Read from GitHub after this pass: 336 open issues.**
+**Read from GitHub after this pass: 337 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -126,35 +126,44 @@ by design.
 | **M5 — Instance validation (XML)** | **9** | **136** | active |
 | **M6 — XPath required subset** | **6** | **46** | active |
 | M7 — XPath 2.0 growth | 1 | 1 | #2619 open |
-| **M8 — JSON instance adapter** | **6** | **41** | active; `json` 43 |
+| **M8 — JSON instance adapter** | **6** | **43** | active; `json` 43 |
 | M9–M12 | 0 | 0 | not started |
 
-The open issues are **320 `ready`, 14 `blocked` and 2 `epic`**, which sums to
-336. No issue is `needs-replan` or unlabelled. Open `kind/process` is 3
-(#1885, #2803, #2810). #2810 and #2819 carry no milestone.
+The open issues are **321 `ready`, 14 `blocked` and 2 `epic`**, which sums to
+337. No issue is `needs-replan` or unlabelled. Open `kind/process` is 3
+(#1885, #2803, #2810).
 
-- **This pass unblocked nothing.** No open body names #2783 as a dependency,
-  and no lane-score trigger fired.
+- **This pass unblocked nothing.** No `blocked` thread carries an owner
+  comment, and no lane figure moved to fire a trigger. #1609's arm 3 has not
+  fired: no landing since `47872a3` touched `xsd/contentrestricts.go`.
 - **`blocked` is 14:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885,
   #2022, #2081, #2376, #2533, #2670 and #2749.
   - #2376 waits on #2370, and #1051 on #1183 and #1196. All are open.
-  - #2670 waits on #1601's ruling reopening; its Acceptance now names both
-    landed `notes.go` markers. #2533 waits on an evaluation-time CTA decline.
-  - #1885 and #2081 wait on the owner.
-- **Measured refactors over the files #2783 changed,** re-run at `6c345948`:
-  #2790 is flat at 6, #2791 at 8, and #2792 at 5 and 2. Every other figure
-  stands from `7eea6746`, `7610745d`, `438fadae`, `7a12227e`, `74c38cc5` or
-  `12ff9797`: #2675 3, 1 and 1, #2595 1 and 1, #2237 24, #2372 27, #2600 2,
-  #1865 2, #2370 32, #363 2, #848 2 and 0, #1080 8, #1958 2, #2101 1 and 1,
-  #2205 2, #2239 2, #2329 1, #2359 14, #2373 16, #2374 22, #2375 1 and 1,
-  #2599 186, #2601 0, #2663 4, #2793 3.
+  - #2670 waits on #1601's ruling reopening, and #2533 on an evaluation-time
+    CTA decline.
+  - #1885 and #2081 wait on the owner. #1790, #2022 and #2749 wait on a human
+    authorizing a CLAUDE.md edit.
+- **Measured refactors over the files touched since the last stamp,** re-run
+  at `e4fabdb5`: #2790 is flat at 6, #2791 at 8, and #2792 at 5 and 2. #2757's
+  census is flat at 479 lines and 5 `#N`. Every other figure stands from
+  `6c345948` or earlier: #2675 3, 1 and 1; #2595 1 and 1; #2237 24; #2372 27;
+  #2600 2; #1865 2; #2370 32; #363 2; #848 2 and 0; #1080 8; #1958 2; #2101 1
+  and 1; #2205 2; #2239 2; #2329 1; #2359 14; #2373 16; #2374 22; #2375 1 and
+  1; #2599 186; #2601 0; #2663 4; #2793 3.
 
 ### Persona consultations
 
-**Both personas were consulted at `3a8126e`.** Their findings are filed or
-folded. #2781, #2723 and #2783 left the exported surface unchanged; #2783
-added two clauses to `Validate`'s doc. No round is due until the surface next
-changes.
+**Both personas were consulted on 2026-10-19 at `e4fabdb5`.** #2780 and #2796
+had changed `-help` and the jsonsrc messages. Every finding is filed, folded
+or dismissed. The disposition list is #2829's issuecomment-6269464425.
+- **cliuser's findings 2–4 are filed as #2829.**
+- **libuser's three HIGHs are folded into standing issues:** #2792, #1291 and
+  #1292.
+- **Other folds:** #1406, #2757, #2798, #1005, #1408, #2370 and #1433.
+- **Dismissed:** libuser findings 6 and 7, the tool question in finding 5, and
+  cliuser finding 1.
+
+No round is due until the surface next changes.
 
 ### Working band
 
@@ -166,40 +175,49 @@ row's state. Each row names one issue (#1636).
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2780 | **#2722's `-format` half**, CLI only. Both #2722 verdicts left it with no outstanding finding, and its four prior-art commits are on `wip/issue-2722`, which it retires. Its `usage` sentence goes beside #2781's. |
-| 2 | #2796 | **A grounding first.** It either produces a twin-divergent probe for `instanceUnder` or closes `not_planned`. |
+| 1 | #2827 | **A JSON verdict that diverges from its XML twin**: a charged `"$type"` is classified under the `"$type"` type, where the engine uses the selected type. It is #2796's residue and re-pins the two "particle's `$type`" rows. Same files as #2791 and #2829. |
+| 2 | #2769 | **Test-only.** It asserts the withheld-selection premise that #2702's permanent ruling stands on. |
+| 3 | #2829 | **Clauses for `"$type"`, `null` and an extra array item** (cliuser 2–4, reproduced). Messages only, in `notes.go`'s shape. It restates `Validate`'s array-item sentence. |
 
-**Tier B: jsonsrc refactors, flat at `6c345948`.**
-
-| # | issue | why here |
-|---|---|---|
-| 3 | #2790 | **`governor` assertions, 6.** Each M8 slice adds sites. One `SchemaView` widening deletes all six. |
-| 4 | #2791 | **The governance mirror, 8.** It needs a warden pre-flight on mechanism (a) or (b). It would also retire #2796, and #2781's `scalarGoverning` now reads the mirror. |
-
-**Tier C: tooling.**
+**Tier B: jsonsrc refactors, flat at `e4fabdb5`.**
 
 | # | issue | why here |
 |---|---|---|
-| 5 | #2819 | **A STYLE D3 prose-restatement lister.** #2781's and #2723's round 1 each drew a D3 finding after #2739's `mason.md` sentence, the second the reject's only cause; the retro named a tool as the next fix. |
-| 6 | #2789 | **The fired-trigger blind spot that hid #1880 for eight days.** It lists `blocked` issues whose thread carries an owner comment, which each pass checks by hand. |
-| 7 | #2748 | **`issuefeed -comments`.** It closes #1153 and #1217. |
+| 4 | #2791 | **The governance mirror, 8.** It needs a warden pre-flight on mechanism (a) or (b). Take it after #2827, which changes the convention it mirrors. |
+| 5 | #2792 | **Text-only jsonsrc errors, 5 and 2.** It needs a warden pre-flight. libuser's HIGH finding 1, the malformed-versus-read-fault split, now rides its class arm. |
+| 6 | #2790 | **`governor` assertions, 6.** One `SchemaView` widening deletes all six. |
+
+**Tier C: the library contract, from libuser's top-graded findings.**
+
+| # | issue | why here |
+|---|---|---|
+| 7 | #1292 | **The decidedness guard.** It is raised again as a HIGH, and it has a real consumer: `cmd/goxsd8`'s `assessmentLines` re-derives the three-way check by hand. It needs a warden pre-flight on the name. Read #1257 with it. |
+
+**Tier D: tooling.**
+
+| # | issue | why here |
+|---|---|---|
+| 8 | #2819 | **A STYLE D3 prose-restatement lister.** Two consecutive round-1 D3 findings, one of them a reject's only cause. |
+| 9 | #2789 | **The fired-trigger blind spot.** It lists `blocked` issues whose thread carries an owner comment, which each pass checks by hand. |
+| 10 | #2748 | **`issuefeed -comments`.** It closes #1153 and #1217. |
 
 **Named below the band, on purpose.**
+- **M8:**
+  - #2757 (the jsonsrc doc restructure, with libuser 4 and 5 folded; 479
+    lines).
+  - #2798 (doc only), and #2670 (waits on #1601).
+- **cmd:** #2824 (pins #2780's two unpinned format-clause cases).
+- **Library contract, behind row 7:**
+  - #1291 (a violation's instance path) and #1406 (`Unevaluated` versus
+    `*xsderr.Error`'s shape, and `String`). #486 bears on both.
 - **M5, `conformance/subtreeroot.go`:** #2237 (24; the 7
   `strict-attribute-unresolved` declines become decided disagreements, fail
   to fail) and #755 (the hint reader's home).
-- **M8:**
-  - #2769 (a test asserts no `Unevaluated()`).
-  - #2757 (jsonsrc's doc restructure; census re-taken at 479 lines at
-    `6c345948`, and `Validate` now names `walker.noteChild` too).
-  - #2670 (waits on #1601).
-  - #2798 (doc only).
-  - #2792 (needs a warden pre-flight, flat at 5 and 2).
-- **Process:** #2803 (a park's LOG entry rides the `wip/` branch, two
-  sightings, no round lost) and #2810 (`SendMessage` recovery of a round that
-  ended with no report, two sightings, no round lost this time).
+- **Process:**
+  - #2803 (a park's LOG entry rides the `wip/` branch).
+  - #2810 (`SendMessage` recovery of a round that ended with no report).
 - **Persona documentation, behind lane work by the retro's bar:**
-  - #2797, #1088, #1144, #1430, #688 and #2313.
+  - #2797, #1088, #1144, #1430, #688, #2313, #1005 and #1408.
   - `cmd/goxsd8`'s `usage` family: #1407, #1089, #1433, #1571 and #1570.
   - README: #1143 and #1003.
 - **Marker bookkeeping:** #2719 (gapaudit's 8 Group 1 rows). A session in
@@ -207,13 +225,13 @@ row's state. Each row names one issue (#1636).
   absorbs its row.
 - **M7:** #2619 (`as-props-correct` clause 2; needs a warden ruling on its
   `xpath` export).
-- **`xpath/cta.go` and `xpath/ctaparser.go`:** #2675 (flat at 5), #2416 and
-  #2595. A session taking one reads the others.
+- **`xpath/cta.go` and `xpath/ctaparser.go`:** #2675 (flat), #2416 and #2595.
+  A session taking one reads the others.
 - **M6:** #2663 (flat at 4) and #2662 share `validate/cvcassertion.go`. #2455,
   #2437 and #2394 are in `xpath/assertion.go`, one at a time with #2370, #2314
   and #889.
-- **STYLE E5 sweeps,** measured flat: #2370, #2372, #2373, #2374 and #2375.
-  #2376 waits on #2370.
+- **STYLE E5 sweeps,** measured flat: #2370 (cliuser 5 folded), #2372, #2373,
+  #2374 and #2375. #2376 waits on #2370.
 - **M5 residue:** #2764 (a repeated attribute name, `parser/xmltree`), #2494,
   #1825, #1382, #1257, #1250, #920 and #2419.
 - **M4, where `Ratchet: unchanged` is expected or the bound is small:** #2087,
@@ -221,20 +239,23 @@ row's state. Each row names one issue (#1636).
   `xsd/contentrestricts.go`, so either one fires #1609's arm 3.
 - **Docs and bookkeeping:** #2679, #2624 with #793, #1803, #1881, #785, #1343
   and #1502. **`value`:** #721, #2045 and #462. **`regex`:** #2148 and #2147.
-- **Tooling, after row 7:** #2542, #2203, #2539, #2605, #1897, #2541, #1935,
-  #2070, #2066, #678, #1464, #1838, #1794 and #1735.
+- **Tooling, after row 10:** #1897 (whose false STRANDED PASS this pass met
+  again), #2542, #2203, #2539, #2605, #2541, #1935, #2070, #2066, #678, #1464,
+  #1838, #1794 and #1735.
 - **Refactors:** #2599 (186) and #2601, #2793 (3), and the flat list above.
   #989, #1736, #1701, #845, #1757, #1825, #2416, #2419 and #2437 are
   unmeasured.
 
 ### Next planning action
 
-1. **A `/backlog` run.** Every W3C cluster on the active lanes is ruled or
-   recorded, so name `instance`'s next north star — the ruling that holds the
-   most cases, or the largest yield no cluster shows — and confirm M8 as the
-   lead track, since #2722's re-plan closes with #2780.
-2. **Post-land for #2780.** Move `wip/issue-2722` to the deletable list.
-3. **Owed to a human:**
+1. **Post-land for #2827,** band row 1. Re-measure #2791's figure, because
+   #2827 changes the convention it mirrors.
+2. **The next `/retro`** reads this stamp's product lean against the share of
+   develop sessions spent on product since 2026-10-18.
+3. **When M8's six close, a `/backlog` run** names the next north star. Every
+   W3C cluster is ruled, so it is either a ruling the owner reopens (#1601,
+   #1899, #2081) or the next milestone's first slice.
+4. **Owed to a human:**
    - #1885 (arbiter.md's Ratchet integrity), #2081, #1790, #2022 and #2749.
    - The ref deletions under Branch namespace.
 
