@@ -72,6 +72,10 @@ func TestByteOrderMarkIgnored(t *testing.T) {
 			`{"o:order":{"$xmlns":{"o":"urn:o"},"item":["` + bom + `a"]}}`, "result"},
 		{"only the mark", readmeSchema, "",
 			`error jsonsrc: instance.json:1:1: the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {"<root>":...}`},
+		{"the mark and a line feed", readmeSchema, "\n",
+			`error jsonsrc: instance.json:1:1: the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {"<root>":...}`},
+		{"truncated, then a line feed", readmeSchema, `{"r":"1"` + "\n",
+			"error jsonsrc: instance.json:1:9: malformed JSON: unexpected EOF"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := outcome(t, strings.NewReader(tc.doc), tc.schema); got != tc.want {

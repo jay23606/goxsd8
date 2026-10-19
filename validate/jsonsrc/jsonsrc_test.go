@@ -332,6 +332,10 @@ func TestReadFault(t *testing.T) {
 		{"first read", iotest.ErrReader(boom), "jsonsrc: instance.json:1:1: "},
 		{"mid-document", io.MultiReader(strings.NewReader(`{"order":{"si`), iotest.ErrReader(boom)),
 			"jsonsrc: instance.json:1:11: "},
+		// The input goes on past the final LF read, so it opens line 2,
+		// unlike a final LF the input ends with (TestEndOfInputLocation).
+		{"after a line feed", io.MultiReader(strings.NewReader("{\"order\":{\"size\":1\n"), iotest.ErrReader(boom)),
+			"jsonsrc: instance.json:2:1: "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Validate(v, tc.r, WithURI(jsonURI))
@@ -398,6 +402,46 @@ func TestLocations(t *testing.T) {
 	want := []string{"instance.json:3:5", "instance.json:5:8"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("violation locations = %v, want %v (violations %v)", got, want, res.Violations())
+	}
+}
+
+// TestEndOfInputLocation pins the location of an error at the end of the
+// input, as the package doc's "Locations" section places it, whatever sizes
+// the reader returns (positions.start, #2723).
+func TestEndOfInputLocation(t *testing.T) {
+	v := validatorOver(t, orderSchema)
+	const (
+		truncated = `{"order":{"size":1` // 18 bytes
+		eof       = ": malformed JSON: unexpected EOF"
+		empty     = `: the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {"<root>":...}`
+	)
+	for _, tc := range []struct {
+		name, doc, want string
+	}{
+		{"truncated", truncated, "1:19" + eof},
+		{"truncated, then LF", truncated + "\n", "1:19" + eof},
+		{"truncated, then CRLF", truncated + "\r\n", "1:20" + eof},
+		{"truncated, then CR", truncated + "\r", "1:20" + eof},
+		{"truncated, then LF LF", truncated + "\n\n", "2:1" + eof},
+		{"truncated, then spaces", truncated + "  ", "1:21" + eof},
+		{"truncated, then LF and spaces", truncated + "\n  ", "2:3" + eof},
+		{"truncated on line 2, then LF", "{\n" + truncated[1:] + "\n", "2:18" + eof},
+		{"columns in bytes", `{"order":{"size":"é"` + "\n", "1:22" + eof},
+		{"empty", "", "1:1" + empty},
+		{"a space", " ", "1:2" + empty},
+		{"LF", "\n", "1:1" + empty},
+		{"LF LF", "\n\n", "2:1" + empty},
+		{"CRLF", "\r\n", "1:2" + empty},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			want := "jsonsrc: instance.json:" + tc.want
+			for _, r := range []io.Reader{strings.NewReader(tc.doc), iotest.OneByteReader(strings.NewReader(tc.doc))} {
+				_, err := Validate(v, r, WithURI(jsonURI))
+				if err == nil || err.Error() != want {
+					t.Errorf("Validate(%q) = %v, want %q", tc.doc, err, want)
+				}
+			}
+		})
 	}
 }
 

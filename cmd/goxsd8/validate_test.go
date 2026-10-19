@@ -916,7 +916,7 @@ func TestValidateJSONInstance(t *testing.T) {
 			assertedJSON + ":1:2: [cvc-assertion] ",
 		}},
 		{"malformed", orderSchema, []string{malformedJSON}, exitUndecided, []string{
-			malformedJSON + ":2:1: [jsonsrc] malformed JSON: unexpected EOF",
+			malformedJSON + ":1:18: [jsonsrc] malformed JSON: unexpected EOF",
 		}},
 		{"declined", orderSchema, []string{declinedJSON}, exitUndecided, []string{
 			declinedJSON + `:1:2: [jsonsrc] member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`,
@@ -1010,7 +1010,7 @@ func TestValidateJSONErrorLineSplitsByURI(t *testing.T) {
 	if code := run(args, &stdout, &stderr); code != exitUndecided {
 		t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, exitUndecided, stdout.String(), stderr.String())
 	}
-	want := instance + ":2:1: [jsonsrc] malformed JSON: unexpected EOF\n"
+	want := instance + ":1:18: [jsonsrc] malformed JSON: unexpected EOF\n"
 	if stdout.String() != want {
 		t.Errorf("run(%q) stdout = %q, want %q", args, stdout.String(), want)
 	}

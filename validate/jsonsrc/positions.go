@@ -29,6 +29,9 @@ type positions struct {
 	// error that is r's own is a fault reading the input, and any other is
 	// the decoder's verdict on the bytes, whatever its type (#2655).
 	fault error
+	// ended reports whether r returned io.EOF: every byte of the input is in
+	// pending or before base.
+	ended bool
 }
 
 func newPositions(r io.Reader) *positions {
@@ -38,6 +41,7 @@ func newPositions(r io.Reader) *positions {
 func (p *positions) Read(b []byte) (int, error) {
 	n, err := p.r.read(b)
 	p.pending = append(p.pending, b[:n]...)
+	p.ended = p.ended || errors.Is(err, io.EOF)
 	if err != nil && !errors.Is(err, io.EOF) && p.fault == nil {
 		p.fault = err
 	}
@@ -49,10 +53,16 @@ func (p *positions) Read(b []byte) (int, error) {
 // white space nor the ':' or ',' separator Token consumes silently. It
 // returns that byte's line and column, and forgets every byte before it. off
 // is never before the last token located, because the decoder's offset only
-// advances. Past the bytes read so far — the input ended — it locates the end.
+// advances.
+//
+// Past the bytes read so far it locates one past the last of them, but at the
+// last where r ended and that byte is '\n': the end of the input, as the
+// package doc's "Locations" section places it. Where r has not ended, as after
+// a fault reading it, a last '\n' read is counted, since the input goes on
+// past it.
 func (p *positions) start(off int64) (line, col int) {
 	i := int(off - p.base)
-	for i < len(p.pending) && skipped(p.pending[i]) {
+	for i < len(p.pending) && skipped(p.pending[i]) && !p.finalNewline(i) {
 		i++
 	}
 	if i > len(p.pending) {
@@ -68,6 +78,11 @@ func (p *positions) start(off int64) (line, col int) {
 	p.pending = p.pending[i:]
 	p.base += int64(i)
 	return p.line, p.col
+}
+
+// finalNewline reports whether pending[i] is the input's last byte and a '\n'.
+func (p *positions) finalNewline(i int) bool {
+	return p.ended && i == len(p.pending)-1 && p.pending[i] == '\n'
 }
 
 // skipped reports whether c is JSON white space (RFC 8259 §2, ws) or a
