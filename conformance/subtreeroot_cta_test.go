@@ -137,11 +137,11 @@ func TestAssessedSubtreeRootTypeTable(t *testing.T) {
 		{"a character reference to a tab in a value a {test} reads", ctaRoot("@kind = 'a'"), `<known kind="a&#9;"><b>1</b></known>`, refuseTypeTableWhitespace},
 	} {
 		c := instanceCase(t, tc.schemaBody, tc.instance, true)
-		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}

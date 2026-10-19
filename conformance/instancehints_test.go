@@ -291,8 +291,7 @@ const xsOpen = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNam
 // the root, beside a hint for the same namespace, and as the root itself
 // (instanceHints, #2180, §4.3.2, §5.1). Each row is decided in both polarities
 // and agrees with the validity it states. Every row declines inline-schema
-// with the change reverted; each valid row declines versioned with
-// closureVersioned reading an inline location from disk.
+// with the change reverted.
 func TestInstanceExecutorReadsInlineSchema(t *testing.T) {
 	files := append([]fixtureFile{{"s.xsd", xsdDoc("", laxKnown)}}, hintedO...)
 	exec := newInstanceExec()
@@ -362,7 +361,7 @@ func TestInlineSchemaCollisionIsSchemaError(t *testing.T) {
 		`<known `+xsiNS+` xsi:noNamespaceSchemaLocation="s.xsd" xsi:schemaLocation="urn:o o.xsd">`+"\n"+
 			`  `+xsOpen+"\n"+`    <xs:element name="c" type="xs:int"/></xs:schema><o:c xmlns:o="urn:o">1</o:c></known>`, true)
 	reachesPerrArm(t, c, "a collision")
-	_, _, _, perr := caseSchema(strict.New(), c)
+	_, _, perr := caseSchema(strict.New(), c)
 	if want := "i.xml#inline-1:3:5: [sch-props-correct]"; !strings.HasPrefix(perr.Error(), want) {
 		t.Errorf("caseSchema error = %v, want it to open %q", perr, want)
 	}
@@ -377,7 +376,7 @@ func TestHintedSchemaUndeclaringPrefixIsRejected(t *testing.T) {
 	c := hintedCase(t,
 		[]fixtureFile{{"s.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="">` + knownRoot + `</xs:schema>`}},
 		`<known `+xsiNS+` xsi:noNamespaceSchemaLocation="s.xsd">x</known>`, false)
-	_, _, why, perr := caseSchema(strict.New(), c)
+	_, why, perr := caseSchema(strict.New(), c)
 	if why != "" {
 		t.Fatalf("caseSchema declined as %q, want the closure read and decided", why)
 	}
@@ -404,7 +403,7 @@ const noNSHint = `<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd">x</
 // error, so no earlier gate declines it ahead of execInstanceCase's perr arm.
 func reachesPerrArm(t *testing.T, c caseSpec, why string) {
 	t.Helper()
-	_, _, refused, perr := caseSchema(strict.New(), c)
+	_, refused, perr := caseSchema(strict.New(), c)
 	if refused != "" || perr == nil {
 		t.Fatalf("%s: caseSchema = (refused %q, %v), want a decidable rejection", why, refused, perr)
 	}

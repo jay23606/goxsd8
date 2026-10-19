@@ -15,16 +15,15 @@ import (
 )
 
 // TestRawReadsAdmitTheLabelXmltreeAdmits pins that the harness's re-reads,
-// assessedSubtreeRoot and instanceHints through rawDecoder and documentCarries
-// through parser/xmltree itself, admit a UTF-8 document's 1.x version label
-// exactly when parser/xmltree admits it, a byte-order mark before the label
-// included (XML 1.0 §2.8 Note, §4.3.3). The marked 1.1 and 1.10 rows fail when
-// rawDecoder hands As10 the mark: As10 then meets no '<?xml', and encoding/xml
-// stops on the unrewritten label with `unsupported version`. The doubled-mark
-// rows fail if the mark is read past more than once: xmltree drops one mark
-// and refuses the second as character data before the document element that
-// is no S ([22] prolog, [27] Misc), which rawDecoder's readers refuse in
-// rootStart.
+// assessedSubtreeRoot and instanceHints through rawDecoder, admit a UTF-8
+// document's 1.x version label exactly when parser/xmltree admits it, a
+// byte-order mark before the label included (XML 1.0 §2.8 Note, §4.3.3). The
+// marked 1.1 and 1.10 rows fail when rawDecoder hands As10 the mark: As10 then
+// meets no '<?xml', and encoding/xml stops on the unrewritten label with
+// `unsupported version`. The doubled-mark rows fail if the mark is read past
+// more than once: xmltree drops one mark and refuses the second as character
+// data before the document element that is no S ([22] prolog, [27] Misc),
+// which rawDecoder's readers refuse in rootStart.
 func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 	const mark = "\xEF\xBB\xBF"
 	const body = `<known>x</known>`
@@ -48,15 +47,12 @@ func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 			t.Fatalf("%q: xmltree fault %v, want admitted %v: the row misstates what the harness is held to", tc.prolog, err, tc.admit)
 		}
 		c := instanceCase(t, knownRoot, doc, true)
-		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 		if err != nil || !decidable {
 			t.Fatalf("%q: assembling the schema: decidable %v, err %v", tc.prolog, decidable, err)
 		}
-		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); (got == "") != tc.admit {
+		if got := assessedSubtreeRoot(strict.New(), schema, c.doc); (got == "") != tc.admit {
 			t.Errorf("%q: assessedSubtreeRoot refused as %q, want admitted %v, as xmltree admits", tc.prolog, got, tc.admit)
-		}
-		if got := documentCarries(c.doc, isVersioningAttr); got == tc.admit {
-			t.Errorf("%q: documentCarries(isVersioningAttr) = %v, want %v, as xmltree admits", tc.prolog, got, !tc.admit)
 		}
 		if _, _, _, got := instanceHints(c.doc); (got == "") != tc.admit {
 			t.Errorf("%q: instanceHints refused as %q, want admitted %v, as xmltree admits", tc.prolog, got, tc.admit)
@@ -65,14 +61,13 @@ func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 }
 
 // TestRawReadsDecodeUTF16 pins that the harness's re-reads, assessedSubtreeRoot
-// and instanceHints through rawDecoder and documentCarries through
-// parser/xmltree itself, read a byte-order-marked UTF-16 document, in either
-// byte order, exactly as parser/xmltree reads it (XML 1.0 §4.3.3,
-// Appendix F.1). The 1.1 rows pin that the transcode happens before As10 meets
-// the label, so the label is admitted as xmltree admits it; XML 1.0 rules
-// nothing on UTF-16 by version, so the rows differ in the label alone. Every
-// row's rawDecoder assertions fail when rawDecoder reads the bytes without
-// xmlenc.Decode: encoding/xml reads the mark as invalid UTF-8.
+// and instanceHints through rawDecoder, read a byte-order-marked UTF-16
+// document, in either byte order, exactly as parser/xmltree reads it (XML 1.0
+// §4.3.3, Appendix F.1). The 1.1 rows pin that the transcode happens before
+// As10 meets the label, so the label is admitted as xmltree admits it; XML 1.0
+// rules nothing on UTF-16 by version, so the rows differ in the label alone.
+// Every row's rawDecoder assertions fail when rawDecoder reads the bytes
+// without xmlenc.Decode: encoding/xml reads the mark as invalid UTF-8.
 func TestRawReadsDecodeUTF16(t *testing.T) {
 	for _, version := range []string{"1.0", "1.1"} {
 		for _, bigEnd := range []bool{false, true} {
@@ -86,15 +81,12 @@ func TestRawReadsDecodeUTF16(t *testing.T) {
 			if err := os.WriteFile(c.doc, raw, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+			schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 			if err != nil || !decidable {
 				t.Fatalf("%s: assembling the schema: decidable %v, err %v", row, decidable, err)
 			}
-			if why := assessedSubtreeRoot(strict.New(), schema, report, c.doc); why != "" {
+			if why := assessedSubtreeRoot(strict.New(), schema, c.doc); why != "" {
 				t.Errorf("%s: assessedSubtreeRoot(%s) refused as %q, want admitted, as xmltree reads it", row, filepath.Base(c.doc), why)
-			}
-			if documentCarries(c.doc, isVersioningAttr) {
-				t.Errorf("%s: documentCarries(%s, isVersioningAttr) = true, want false, as xmltree reads it", row, filepath.Base(c.doc))
 			}
 			if _, _, _, why := instanceHints(c.doc); why != "" {
 				t.Errorf("%s: instanceHints(%s) refused as %q, want admitted, as xmltree reads it", row, filepath.Base(c.doc), why)
@@ -155,36 +147,4 @@ func (f *failOnce) Read([]byte) (int, error) {
 	}
 	f.done = true
 	return 0, f.err
-}
-
-// TestDocumentCarriesReadsIncludedMarkup pins that documentCarries reads a
-// document referencing internal general entities as parser/xmltree includes
-// them (XML 1.0 §4.4.2): a vc: attribute only an entity's replacement text
-// carries is found, and a document whose entities carry none answers false
-// rather than failing closed. The second row fails when documentCarries reads
-// through rawDecoder, which refuses every such reference and so answers true;
-// the first when that decoder is made to read on past them (Strict false),
-// keeping each reference as text and the markup in it unread.
-func TestDocumentCarriesReadsIncludedMarkup(t *testing.T) {
-	const vc = `xmlns:vc="` + versioningNS + `"`
-	for _, tc := range []struct {
-		name, doc string
-		want      bool
-	}{
-		{"vc: attribute only replacement text carries",
-			`<!DOCTYPE r [<!ENTITY e "<a vc:minVersion='1.1'/>">]><r ` + vc + `>&e;</r>`, true},
-		{"entities carrying no vc: attribute",
-			`<!DOCTYPE r [<!ENTITY e "<a b='&d;'/>"><!ENTITY d "x">]><r ` + vc + ` v="&d;">&e;</r>`, false},
-	} {
-		path := filepath.Join(t.TempDir(), "doc.xsd")
-		if err := os.WriteFile(path, []byte(tc.doc), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := readAll(tc.doc); err != nil {
-			t.Fatalf("%s: xmltree rejects the row: %v", tc.name, err)
-		}
-		if got := documentCarries(path, isVersioningAttr); got != tc.want {
-			t.Errorf("%s: documentCarries = %v, want %v", tc.name, got, tc.want)
-		}
-	}
 }

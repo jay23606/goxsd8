@@ -249,7 +249,7 @@ func TestInstanceExecutorDeclinesCaseWithNoGroupSchema(t *testing.T) {
 	} {
 		c := hintedCase(t, nil, tc.instance, false)
 		declinesBothPolarities(t, c, tc.why, tc.refused)
-		if _, _, why, _ := caseSchema(strict.New(), c); why != tc.refused {
+		if _, why, _ := caseSchema(strict.New(), c); why != tc.refused {
 			t.Errorf("%s: caseSchema refused it as %q, want %q", tc.why, why, tc.refused)
 		}
 	}

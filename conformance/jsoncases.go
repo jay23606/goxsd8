@@ -88,7 +88,6 @@ func newJSONExec() laneExecutor {
 // builds alone, because each refusal of that gate is enforced here, by the
 // walk, or unrepresentable in that infoset:
 //
-//   - versioned: refused here, through closureVersioned as the gate does;
 //   - the raw re-read's (gate-unresolved, decode, doctype, prolog-text,
 //     epilog-directive): unrepresentable, jsonsrc building no DOCTYPE, prolog
 //     or epilog, and refusing an instance that will not open
@@ -158,15 +157,12 @@ func newJSONExec() laneExecutor {
 // (nil, err) for malformed JSON and for every input its arms do not map, and
 // neither says anything of the document's validity.
 func execJSONCase(backend value.Backend, c caseSpec) (Status, refusal) {
-	schema, report, decidable, perr := assembleCase(backend, c.schemaDoc, c.schemaExtraDocs)
+	schema, _, decidable, perr := assembleCase(backend, c.schemaDoc, c.schemaExtraDocs)
 	if !decidable {
 		return Fail(), refuseGroupAssembly
 	}
 	if perr != nil {
 		return Fail(), refuseSchemaError
-	}
-	if closureVersioned(report, c.doc) {
-		return Fail(), refuseVersioned
 	}
 	v, err := validate.New(schema, backend)
 	if err != nil {

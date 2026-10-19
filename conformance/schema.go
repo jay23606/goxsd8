@@ -573,8 +573,8 @@ func newSchemaCharge() func(caseSpec) string {
 // built, and the second the parser.AssemblyReport of the documents it read. The
 // schema lane reads the error alone; the instance lane needs the schema, and
 // takes it only where the error is nil, a schema the assembly rejected being not
-// the schema the suite declared — and the report, which its assessedSubtreeRoot
-// gate scans for versioning attributes the assembly may have mishandled.
+// the schema the suite declared — and the report, from which groupSchema reads
+// the namespaces the assembly already covers (closureNamespaces).
 //
 // The resolver is a loader.Dir rooted at doc's own directory, wrapped by
 // pinnedResolver, and the root is named by its BASE name, because
@@ -716,8 +716,7 @@ const (
 
 // pinnedResolver is the resolver every assembleCase read goes through: dir, the
 // case's own loader.Dir, for every location but xlinkLocation, which it serves
-// from xlinkPinned and resolves to that on-disk path, so documentCarries can
-// re-open it from the report.
+// from xlinkPinned and resolves to that on-disk path.
 //
 // The suite's own catalog schema, common/xsts.xsd, imports the XLink namespace
 // from xlinkLocation, which no suite document supplies. src-import (§4.2.6.3)

@@ -734,11 +734,11 @@ func TestAssessedSubtreeRootNilled(t *testing.T) {
 		{"a ·nilled· child with an element child", `<known ` + xsiNS + `><c xsi:nil="true"><d>1</d></c></known>`, refuseElementChild},
 	} {
 		c := instanceCase(t, nilKnown, tc.instance, true)
-		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
@@ -843,11 +843,11 @@ func TestAssessedSubtreeRootUnadmittedAttribute(t *testing.T) {
 		{"a name the wildcard does not admit", `<known foo="x"/>`, refuseAttributeUnadmitted},
 	} {
 		c := instanceCase(t, schemaBody, tc.instance, true)
-		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
@@ -994,11 +994,11 @@ func TestAssessedSubtreeRootOpenContentLDT(t *testing.T) {
 			ldtOpen("xs:date", ""), `<known><e>2008-11-03</e><e><v/></e></known>`, refuseElementChild},
 	} {
 		c := instanceCase(t, tc.schemaBody, tc.instance, true)
-		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
@@ -1229,11 +1229,11 @@ func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 		},
 	} {
 		c := instanceCase(t, tc.schemaBody, tc.instance, true)
-		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
@@ -1579,40 +1579,50 @@ func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
 	}
 }
 
-// TestInstanceExecutorDeclinesVersionedSchema proves a schema document carrying
-// any attribute in the versioning namespace declines the valid observation,
-// even one §4.2.2 retains the element under, as closureVersioned's
-// GAP(conformance) marker states. The attribute counts in EVERY document the
-// assembly read, not only the root one — an <include>d or <import>ed document
-// carrying it declines too (#1789) — whatever the root holds.
-func TestInstanceExecutorDeclinesVersionedSchema(t *testing.T) {
+// TestInstanceExecutorDecidesVersionedSchema pins that an assembly whose
+// documents carry versioning-namespace attributes is decided like any other:
+// the parser applies §4.2.2's conditional-inclusion pre-processing to each
+// schema document it reads (parser's conditionalInclude), so the components
+// the instance is assessed against are S2's (#2805). That holds in EVERY
+// document the assembly read — an <include>d or <import>ed document carrying
+// such an attribute is decided too (#1789). The rows retaining the element
+// (min ≤ 1.1 < max) decide the instance valid; the rows whose condition
+// ignores the declaration leave the root undeclared, and the walk charges
+// cvc-assess-elt. Each row is decided under both polarities, agreeing with
+// its verdict and disagreeing with the other.
+func TestInstanceExecutorDecidesVersionedSchema(t *testing.T) {
 	const (
 		plain     = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`
 		versioned = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"` +
 			` xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning">`
 		vOther = `<xs:element name="other" type="xs:string" vc:minVersion="1.0"/></xs:schema>`
 	)
+	exec := newInstanceExec()
 	for _, tc := range []struct {
 		why, instance string
 		// docs are the schema documents written beside the instance, the first
 		// one being the case's schemaDoc.
-		docs []fixture
+		docs  []fixture
+		valid bool
 	}{
 		{
 			"a root schema document carrying a versioning-namespace attribute",
 			`<known>x</known>`,
 			[]fixture{{"s.xsd", versioned + `<xs:element name="known" type="xs:string" vc:minVersion="1.0"/></xs:schema>`}},
+			true,
 		},
 		{
 			"a root schema document carrying one, under a content-less root",
 			`<known/>`,
 			[]fixture{{"s.xsd", versioned + `<xs:element name="known" vc:minVersion="1.0"><xs:complexType/></xs:element></xs:schema>`}},
+			true,
 		},
 		{
 			"a root schema document carrying one, under a root with an element child",
 			`<known><a>1</a></known>`,
 			[]fixture{{"s.xsd", versioned + `<xs:element name="known" vc:minVersion="1.0"><xs:complexType><xs:sequence>` +
 				`<xs:element name="a" type="xs:int"/></xs:sequence></xs:complexType></xs:element></xs:schema>`}},
+			true,
 		},
 		{
 			"an <include>d schema document carrying one, the root document carrying none",
@@ -1621,6 +1631,7 @@ func TestInstanceExecutorDeclinesVersionedSchema(t *testing.T) {
 				{"s.xsd", plain + `<xs:include schemaLocation="inc.xsd"/>` + knownRoot + `</xs:schema>`},
 				{"inc.xsd", versioned + vOther},
 			},
+			true,
 		},
 		{
 			"an <import>ed schema document carrying one, the root document carrying none",
@@ -1630,6 +1641,19 @@ func TestInstanceExecutorDeclinesVersionedSchema(t *testing.T) {
 				{"imp.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:other"` +
 					` xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning">` + vOther},
 			},
+			true,
+		},
+		{
+			"the root's declaration ignored, vc:minVersion above 1.1",
+			`<known>x</known>`,
+			[]fixture{{"s.xsd", versioned + `<xs:element name="known" type="xs:string" vc:minVersion="1.2"/></xs:schema>`}},
+			false,
+		},
+		{
+			"the root's declaration ignored, vc:maxVersion 1.1",
+			`<known>x</known>`,
+			[]fixture{{"s.xsd", versioned + `<xs:element name="known" type="xs:string" vc:maxVersion="1.1"/></xs:schema>`}},
+			false,
 		},
 	} {
 		dir := t.TempDir()
@@ -1638,43 +1662,16 @@ func TestInstanceExecutorDeclinesVersionedSchema(t *testing.T) {
 		}
 		instancePath := filepath.Join(dir, "i.xml")
 		writeFixture(t, instancePath, tc.instance)
-		declinesBothPolarities(t,
-			caseSpec{kind: kindInstance, doc: instancePath, schemaDoc: filepath.Join(dir, tc.docs[0].name)}, tc.why, refuseVersioned)
-	}
-}
-
-// TestInstanceExecutorDecidesUnversionedComposition is the control for the
-// include and import rows of TestInstanceExecutorDeclinesVersionedSchema: the
-// same composition with no versioning-namespace attribute anywhere is decided,
-// so it is the attribute those rows decline for and not the composition.
-func TestInstanceExecutorDecidesUnversionedComposition(t *testing.T) {
-	exec := newInstanceExec().status()
-	for _, tc := range []struct {
-		why       string
-		other     fixture
-		directive string
-	}{
-		{
-			"an <include>",
-			fixture{"inc.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="other" type="xs:string"/></xs:schema>`},
-			`<xs:include schemaLocation="inc.xsd"/>`,
-		},
-		{
-			"an <import>",
-			fixture{"imp.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:other">` +
-				`<xs:element name="other" type="xs:string"/></xs:schema>`},
-			`<xs:import namespace="urn:other" schemaLocation="imp.xsd"/>`,
-		},
-	} {
-		dir := t.TempDir()
-		schemaPath := filepath.Join(dir, "s.xsd")
-		instancePath := filepath.Join(dir, "i.xml")
-		writeFixture(t, schemaPath, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+tc.directive+knownRoot+`</xs:schema>`)
-		writeFixture(t, filepath.Join(dir, tc.other.name), tc.other.content)
-		writeFixture(t, instancePath, `<known>x</known>`)
-		c := caseSpec{kind: kindInstance, doc: instancePath, schemaDoc: schemaPath, expect: expectValidity(true)}
-		if !exec(c).IsPass() {
-			t.Errorf("%s with no versioning attribute: the executor must decide the root valid", tc.why)
+		c := caseSpec{kind: kindInstance, doc: instancePath, schemaDoc: filepath.Join(dir, tc.docs[0].name)}
+		for _, expect := range []bool{tc.valid, !tc.valid} {
+			c.expect = expectValidity(expect)
+			st, why := exec(c)
+			if why != "" {
+				t.Errorf("%s: declined as %q under expectValid=%v, want decided", tc.why, why, expect)
+			}
+			if st.IsPass() != (expect == tc.valid) {
+				t.Errorf("%s: pass %v under expectValid=%v, want the executor to decide valid=%v", tc.why, st.IsPass(), expect, tc.valid)
+			}
 		}
 	}
 }
@@ -1733,11 +1730,11 @@ func TestAssessedSubtreeRootRootConditions(t *testing.T) {
 		{"white space, a comment and a PI before the root", "\r\n<!-- c --> <?pi?>\n<known>x</known>", ""},
 	} {
 		c := instanceCase(t, schemaBody, tc.instance, true)
-		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
@@ -1763,11 +1760,11 @@ func TestAssessedSubtreeRootContentRefusals(t *testing.T) {
 		{"a decoder error after a child", `<known><a>1</a>`, refuseDecode},
 	} {
 		c := instanceCase(t, schemaBody, tc.instance, true)
-		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}

@@ -244,7 +244,7 @@ func TestJSONExecutorRefusesDivergentAttributeGovernance(t *testing.T) {
 		t.Fatal(err)
 	}
 	backend := strict.New()
-	schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+	schema, _, _, perr := assembleCase(backend, schemaDoc, nil)
 	if perr != nil {
 		t.Fatalf("assembling divergentSchema: %v", perr)
 	}
@@ -265,7 +265,7 @@ func TestJSONExecutorRefusesDivergentAttributeGovernance(t *testing.T) {
 			if err := os.WriteFile(twin, []byte(tc.xml), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if why := assessedSubtreeRoot(backend, schema, report, twin); why != tc.gate {
+			if why := assessedSubtreeRoot(backend, schema, twin); why != tc.gate {
 				t.Fatalf("assessedSubtreeRoot(%s) = %q, want %q: the twin does not have the shape the test claims", tc.xml, why, tc.gate)
 			}
 			c := caseSpec{id: "divergent", kind: kindJSON, doc: doc, schemaDoc: schemaDoc, expect: expectValid()}
@@ -324,7 +324,7 @@ func TestJSONExecutorReadsWalkOwnedAttributeRefusals(t *testing.T) {
 		t.Fatal(err)
 	}
 	backend := strict.New()
-	schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+	schema, _, _, perr := assembleCase(backend, schemaDoc, nil)
 	if perr != nil {
 		t.Fatalf("assembling walkOwnedSchema: %v", perr)
 	}
@@ -346,7 +346,7 @@ func TestJSONExecutorReadsWalkOwnedAttributeRefusals(t *testing.T) {
 			if err := os.WriteFile(twin, []byte(tc.xml), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if why := assessedSubtreeRoot(backend, schema, report, twin); why != tc.gate {
+			if why := assessedSubtreeRoot(backend, schema, twin); why != tc.gate {
 				t.Fatalf("assessedSubtreeRoot(%s) = %q, want %q: the twin does not have the shape the test claims", tc.xml, why, tc.gate)
 			}
 			c := caseSpec{id: tc.name, kind: kindJSON, doc: doc, schemaDoc: schemaDoc, expect: expectValid()}
@@ -612,11 +612,11 @@ func TestJSONExecutorReadsWildcardAttributes(t *testing.T) {
 			writeFixture(t, schemaDoc, wildcardAttributeSchemas[tc.schema])
 			writeFixture(t, doc, tc.json)
 			writeFixture(t, twin, tc.xml)
-			schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+			schema, _, _, perr := assembleCase(backend, schemaDoc, nil)
 			if perr != nil {
 				t.Fatalf("assembling %s: %v", tc.schema, perr)
 			}
-			if why := assessedSubtreeRoot(backend, schema, report, twin); why != tc.gate {
+			if why := assessedSubtreeRoot(backend, schema, twin); why != tc.gate {
 				t.Fatalf("assessedSubtreeRoot(%s) = %q, want %q: the twin does not have the shape the test claims", tc.xml, why, tc.gate)
 			}
 			if charged := chargedRules(t, schema, backend, doc); !slices.Equal(charged, tc.charges) {
@@ -670,11 +670,11 @@ func TestJSONExecutorRefusesInstanceTypeWildcard(t *testing.T) {
 	writeFixture(t, schemaDoc, instanceTypeWildcardSchema)
 	writeFixture(t, doc, `{"r":{"$xmlns":{"t":"urn:t"},"$type":"t:wild","q":"x"}}`)
 	writeFixture(t, twin, `<r xmlns="urn:t" xmlns:t="urn:t" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="t:wild" t:q="x"/>`)
-	schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+	schema, _, _, perr := assembleCase(backend, schemaDoc, nil)
 	if perr != nil {
 		t.Fatalf("assembling instanceTypeWildcardSchema: %v", perr)
 	}
-	if why := assessedSubtreeRoot(backend, schema, report, twin); why != refuseStrictAttribute {
+	if why := assessedSubtreeRoot(backend, schema, twin); why != refuseStrictAttribute {
 		t.Fatalf("assessedSubtreeRoot = %q, want %q: the twin does not have the shape the test claims", why, refuseStrictAttribute)
 	}
 	if charged := chargedRules(t, schema, backend, doc); charged != nil {
@@ -721,11 +721,11 @@ func TestJSONExecutorRefusesTypeTableWildcard(t *testing.T) {
 	writeFixture(t, schemaDoc, tableWildcardSchema)
 	writeFixture(t, doc, `{"r":{"q":"x"}}`)
 	writeFixture(t, twin, `<r xmlns="urn:t" xmlns:t="urn:t" t:q="x"/>`)
-	schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+	schema, _, _, perr := assembleCase(backend, schemaDoc, nil)
 	if perr != nil {
 		t.Fatalf("assembling tableWildcardSchema: %v", perr)
 	}
-	if why := assessedSubtreeRoot(backend, schema, report, twin); why != refuseStrictAttribute {
+	if why := assessedSubtreeRoot(backend, schema, twin); why != refuseStrictAttribute {
 		t.Fatalf("assessedSubtreeRoot = %q, want %q: the twin does not have the shape the test claims", why, refuseStrictAttribute)
 	}
 	if charged := chargedRules(t, schema, backend, doc); charged != nil {

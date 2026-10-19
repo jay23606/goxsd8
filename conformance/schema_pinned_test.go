@@ -13,8 +13,8 @@ import (
 )
 
 // TestPinnedResolverServesXLink pins what pinnedResolver serves for
-// xlinkLocation: the committed copy, byte for byte as its doc records, under a
-// resolved location documentCarries can re-open.
+// xlinkLocation: the committed copy, byte for byte as its doc records, under
+// xlinkPinned as its resolved location.
 func TestPinnedResolverServesXLink(t *testing.T) {
 	const wantSHA = "c83df86c7fdc16eb9c862b83dfb53fc1b1a4bcafd6e1d1217199e0188b82f24a"
 	r := pinnedResolver{dir: loader.Dir(t.TempDir())}
@@ -33,9 +33,6 @@ func TestPinnedResolverServesXLink(t *testing.T) {
 	}
 	if resolved != xlinkPinned {
 		t.Errorf("resolved = %q, want %q", resolved, xlinkPinned)
-	}
-	if documentCarries(resolved, isVersioningAttr) {
-		t.Errorf("documentCarries(%q, isVersioningAttr) = true, want false: the resolved location must open", resolved)
 	}
 }
 
@@ -79,11 +76,8 @@ func TestAssembleCaseResolvesXLinkImport(t *testing.T) {
 	if err := os.WriteFile(doc, []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, report, decidable, perr := assembleCase(strict.New(), doc, nil)
+	_, _, decidable, perr := assembleCase(strict.New(), doc, nil)
 	if !decidable || perr != nil {
 		t.Fatalf("assembleCase = decidable %v, error %v; want decidable, nil", decidable, perr)
-	}
-	if closureVersioned(report, doc) {
-		t.Errorf("closureVersioned = true, want false: every document the assembly read must re-open")
 	}
 }

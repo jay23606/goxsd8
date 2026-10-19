@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -13,8 +12,6 @@ import (
 	"github.com/kud360/goxsd8/internal/xmlenc"
 	"github.com/kud360/goxsd8/internal/xmltok"
 	"github.com/kud360/goxsd8/loader"
-	"github.com/kud360/goxsd8/parser"
-	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
@@ -43,29 +40,18 @@ import (
 // declaration and carrying no xsi:type, which it admits unread because the walk
 // charges that child's parent for it (subtreeGate.resolvedChild).
 
-// versioningNS is the XML Schema versioning namespace §4.2.2 reads vc:minVersion,
-// vc:maxVersion, vc:typeAvailable, vc:typeUnavailable, vc:facetAvailable and
-// vc:facetUnavailable from. parser keeps its own copy unexported; the lane
-// declares the name here rather than parser exporting it for one harness gate,
-// closureVersioned, whose GAP(conformance) marker states why it is held.
-const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
-
-// assessedSubtreeRoot admits the instance document at doc, against schema as
-// assembled into report, where it has the assessed-subtree-root shape an empty
-// validate.Result may be read as "valid" for: a root, with content or without,
-// whose subtree meets every condition subtreeGate.root names, in a document
-// whose DTD, if any, defaults no attribute (rootStart), against an assembly no
-// version condition touched. It answers the zero refusal where it admits the
-// document, and otherwise the refusal naming the first condition it could not
-// establish — a versioned assembly, an unreadable document, a decoder error,
-// an unresolvable component — never a guess.
+// assessedSubtreeRoot admits the instance document at doc, against schema,
+// where it has the assessed-subtree-root shape an empty validate.Result may be
+// read as "valid" for: a root, with content or without, whose subtree meets
+// every condition subtreeGate.root names, in a document whose DTD, if any,
+// defaults no attribute (rootStart). It answers the zero refusal where it
+// admits the document, and otherwise the refusal naming the first condition it
+// could not establish — an unreadable document, a decoder error, an
+// unresolvable component — never a guess.
 //
 // backend is the one the walk was given (execInstanceCase's validate.New), in
 // which a Type Alternative's {test} evaluates (subtreeGate.selectedType).
-func assessedSubtreeRoot(backend value.Backend, schema *xsd.Schema, report *parser.AssemblyReport, doc string) refusal {
-	if closureVersioned(report, doc) {
-		return refuseVersioned
-	}
+func assessedSubtreeRoot(backend value.Backend, schema *xsd.Schema, doc string) refusal {
 	rc, _, err := loader.Dir(filepath.Dir(doc)).Resolve("", filepath.Base(doc))
 	if err != nil {
 		return refuseGateUnresolved
@@ -1163,75 +1149,4 @@ func isNamespaceDeclaration(a xml.Attr) bool {
 func isLocationHint(a xml.Attr) bool {
 	return a.Name.Space == xsd.XMLSchemaInstanceNS &&
 		(a.Name.Local == "schemaLocation" || a.Name.Local == "noNamespaceSchemaLocation")
-}
-
-// closureVersioned reports whether any schema document the assembly read
-// carries an attribute in versioningNS, on any element.
-//
-// GAP(conformance): the harness declines every versioned assembly, and no
-// parser defect now backs the decline — parser applies all six of §4.2.2's
-// attributes, so the components it assembles are S2's. Its two consumers each
-// charge in the withhold direction alone, returning Fail with refuseVersioned:
-// assessedSubtreeRoot withholds the instance lane's "valid" reading, which it
-// is asked for only after the walk charged nothing, and execJSONCase withholds
-// the json lane's verdict either way, since it asks before validating. Neither
-// can produce a pass; each can cost one on a case the suite declares valid.
-// Owned by #2805, which retires the gate or re-justifies it.
-//
-// Each document is re-read from its parser.AssembledDocument.Location, which
-// for the pinnedResolver assembleCase uses is an on-disk path. An inline
-// xs:schema of the instance at doc has a location naming no file
-// (inlineLocation), and the instance itself is read in its place: every
-// attribute of the inline document is one of the instance's, so that reading
-// stays a superset. A document that will not open or decode answers true.
-func closureVersioned(report *parser.AssemblyReport, doc string) bool {
-	for _, d := range report.Documents() {
-		path := d.Location
-		if isInlineLocation(doc, path) {
-			path = doc
-		}
-		if documentCarries(path, isVersioningAttr) {
-			return true
-		}
-	}
-	return false
-}
-
-// isVersioningAttr reports whether a is in versioningNS.
-func isVersioningAttr(a xmltree.Attribute) bool {
-	return a.Name().Space() == versioningNS
-}
-
-// documentCarries reports whether any element of the document at path carries
-// an attribute satisfying is, or the document cannot be read to say: one that
-// will not open or read answers true.
-//
-// It reads through parser/xmltree, the reader the assembly read the document
-// with, and not through rawDecoder: an element or attribute that a reference
-// to an internal general entity includes (XML 1.0 §4.4.2) is one the assembly
-// saw, and encoding/xml, which knows no entity but the five predefined ones,
-// would refuse the document instead of reading it.
-func documentCarries(path string, is func(xmltree.Attribute) bool) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return true
-	}
-	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the verdict
-	r := xmltree.NewReader(path, f)
-	for {
-		tok, err := r.Token()
-		if errors.Is(err, io.EOF) {
-			return false
-		}
-		if err != nil {
-			return true
-		}
-		start, ok := tok.(*xmltree.StartElement)
-		if !ok {
-			continue
-		}
-		if slices.ContainsFunc(start.Attributes(), is) {
-			return true
-		}
-	}
 }

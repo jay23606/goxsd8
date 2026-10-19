@@ -39,20 +39,20 @@ import (
 // CLI's copy ignores; #755 owns the single home both should share (STYLE T4).
 
 // caseSchema assembles the schema c is assessed against, with assembleCase's
-// four results, its decidable false reported as the refusal that declined the
-// case: the group's schema documents where discovery attached them, widened by
+// schema and error, its decidable false reported as the refusal that declined
+// the case: the group's schema documents where discovery attached them, widened by
 // the hints groupSchema adds, otherwise the schema the instance's own hints and
 // inline xs:schema documents locate (#2013, #2180, §4.3.2 clauses 3-5), and
 // for a case with none of these — no group schema, no hint AND no inline
 // xs:schema — the built-in components where builtinsSchema finds the case
 // decidable against them.
-func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.AssemblyReport, refusal, error) {
+func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, refusal, error) {
 	if c.schemaDoc != "" {
 		return groupSchema(backend, c)
 	}
 	root, hints, inline, why := instanceHints(c.doc)
 	if why != "" {
-		return nil, nil, why, nil
+		return nil, why, nil
 	}
 	if len(hints) == 0 && len(inline) == 0 {
 		return builtinsSchema(backend, root)
@@ -86,23 +86,23 @@ func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.Assembl
 // the hint's). A hint resolving to no document is skipped by parser.ParseSet
 // itself (parser.AssemblyReport.UnfollowedRoots), and the widened assembly is
 // used without it.
-func groupSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.AssemblyReport, refusal, error) {
+func groupSchema(backend value.Backend, c caseSpec) (*xsd.Schema, refusal, error) {
 	schema, report, decidable, perr := assembleCase(backend, c.schemaDoc, c.schemaExtraDocs)
 	if !decidable {
-		return nil, nil, refuseGroupAssembly, nil
+		return nil, refuseGroupAssembly, nil
 	}
 	if perr != nil {
-		return schema, report, "", perr
+		return schema, "", perr
 	}
 	hints := uncoveredHints(c, report)
 	if len(hints) == 0 {
-		return schema, report, "", nil
+		return schema, "", nil
 	}
-	hinted, hintedReport, decidable, perr := assembleCaseWith(backend, c.schemaDoc, c.schemaExtraDocs, hints)
+	hinted, _, decidable, perr := assembleCaseWith(backend, c.schemaDoc, c.schemaExtraDocs, hints)
 	if decidable && perr == nil {
-		return hinted, hintedReport, "", nil
+		return hinted, "", nil
 	}
-	return schema, report, "", nil
+	return schema, "", nil
 }
 
 // uncoveredHints returns, as parser.HintAt roots, the hints of c's instance root
@@ -185,29 +185,29 @@ const builtinsSchemaDoc = "testdata/builtins/builtins.xsd"
 // Handed the schema, the walk would decide either undecided arm on its
 // cvc-assess-elt charge for a root with no top-level declaration and no
 // resolving xsi:type, a ·strict assessment· the spec does not make there.
-func builtinsSchema(backend value.Backend, root xml.StartElement) (*xsd.Schema, *parser.AssemblyReport, refusal, error) {
+func builtinsSchema(backend value.Backend, root xml.StartElement) (*xsd.Schema, refusal, error) {
 	i := slices.IndexFunc(root.Attr, func(a xml.Attr) bool { return a.Name == xsiType })
 	if i < 0 {
 		if slices.ContainsFunc(root.Attr, unknownXsi) {
-			return nil, nil, refuseNoHintUnknownXsi, nil
+			return nil, refuseNoHintUnknownXsi, nil
 		}
-		return nil, nil, refuseNoHint, nil
+		return nil, refuseNoHint, nil
 	}
 	name, ok := resolveQName(root.Attr, root.Attr[i].Value)
 	if !ok {
-		return nil, nil, refuseNoHintXsiTypeUnresolved, nil
+		return nil, refuseNoHintXsiTypeUnresolved, nil
 	}
-	schema, report, decidable, perr := assembleCase(backend, builtinsSchemaDoc, nil)
+	schema, _, decidable, perr := assembleCase(backend, builtinsSchemaDoc, nil)
 	if !decidable {
-		return nil, nil, refuseBuiltinsAssembly, nil
+		return nil, refuseBuiltinsAssembly, nil
 	}
 	if perr != nil {
-		return schema, report, "", perr
+		return schema, "", perr
 	}
 	if _, ok := schema.Type(name); !ok {
-		return nil, nil, refuseNoHintXsiTypeUnresolved, nil
+		return nil, refuseNoHintXsiTypeUnresolved, nil
 	}
-	return schema, report, "", nil
+	return schema, "", nil
 }
 
 // unknownXsi reports whether a is an attribute in the xsi namespace whose
@@ -554,12 +554,6 @@ func inlineLocation(base string, n int) string {
 	return base + inlineFragment + strconv.Itoa(n)
 }
 
-// isInlineLocation reports whether location is an inlineLocation of the
-// instance at doc.
-func isInlineLocation(doc, location string) bool {
-	return strings.HasPrefix(location, filepath.Base(doc)+inlineFragment)
-}
-
 // window is an io.Writer holding the bytes written to it from offset base on,
 // and the 1-based line and column, in bytes, of base: hintReader's record of
 // the decoded instance, advanced past every token it no longer needs, so it
@@ -649,7 +643,7 @@ func isInlineSchema(n xml.Name) bool {
 // hints enter parser.ParseSet in document order, then each inline xs:schema as
 // a parser.RootAt root, in document order: either way the assembly is one
 // schema (§4.3.2 clause 5).
-func assembleHints(backend value.Backend, doc string, root xsd.QName, hints []parser.Root, inline []inlineSchema) (*xsd.Schema, *parser.AssemblyReport, refusal, error) {
+func assembleHints(backend value.Backend, doc string, root xsd.QName, hints []parser.Root, inline []inlineSchema) (*xsd.Schema, refusal, error) {
 	texts := make(map[string]string, len(inline))
 	roots := slices.Clone(hints)
 	for _, s := range inline {
@@ -659,21 +653,21 @@ func assembleHints(backend value.Backend, doc string, root xsd.QName, hints []pa
 	resolver := loader.Chain(loader.Map(texts), pinnedResolver{dir: loader.Dir(filepath.Dir(doc))})
 	for _, s := range inline {
 		if _, ok := rootReadable(resolver, s.location); !ok {
-			return nil, nil, refuseInlineUnread, nil
+			return nil, refuseInlineUnread, nil
 		}
 	}
 	schema, report, perr := parser.ParseSet(roots, parser.WithResolver(resolver), parser.WithBackend(backend))
 	if len(report.UnfollowedRoots()) > 0 {
-		return nil, nil, refuseHintUnfollowed, nil
+		return nil, refuseHintUnfollowed, nil
 	}
 	if assemblyDeclined(report, perr) {
-		return nil, nil, refuseHintAssembly, nil
+		return nil, refuseHintAssembly, nil
 	}
 	if perr != nil {
-		return schema, report, "", perr
+		return schema, "", perr
 	}
 	if _, ok := schema.Element(root); !ok {
-		return nil, nil, refuseHintUndeclared, nil
+		return nil, refuseHintUndeclared, nil
 	}
-	return schema, report, "", nil
+	return schema, "", nil
 }

@@ -475,12 +475,9 @@ import (
 // never reaches it: Datatype Valid holds for every literal against a ·special·
 // datatype, and validate decides so itself (#1788).
 //
-// Two declines sit outside the clauses altogether. The gate declines any
-// assembly one of whose documents carries an attribute in the versioning
-// namespace, which no hazard now backs: closureVersioned's GAP(conformance)
-// marker owns that decline. It declines a DOCTYPE too whose DTD could default
-// an attribute the gate does not see: one with an external subset, an
-// <!ATTLIST or a parameter-entity reference (rootStart).
+// One decline sits outside the clauses altogether. The gate declines a DOCTYPE
+// whose DTD could default an attribute the gate does not see: one with an
+// external subset, an <!ATTLIST or a parameter-entity reference (rootStart).
 //
 // The one shape that looks like case 1 and is not: a root with no top-level
 // declaration whose xsi:type ·resolves·. Its ·instance-specified type
@@ -616,7 +613,6 @@ const (
 	refuseUnevaluated        refusal = "unevaluated"           // validate.Result.Unevaluated is not empty; see unevaluatedRefusal
 
 	// assessedSubtreeRoot's pre-gate refusals (subtreeroot.go).
-	refuseVersioned       refusal = "versioned"        // closureVersioned
 	refuseGateUnresolved  refusal = "gate-unresolved"  // the instance will not resolve for the re-read
 	refuseEpilogDirective refusal = "epilog-directive" // documentEnd: a directive after the root
 
@@ -666,7 +662,7 @@ func newInstanceExec() laneExecutor {
 // not-well-formed schema document is "not valid" without an assessment; every
 // other rejected assembly declines. A decided case carries no refusal.
 func execInstanceCase(backend value.Backend, c caseSpec) (Status, refusal) {
-	schema, report, why, perr := caseSchema(backend, c)
+	schema, why, perr := caseSchema(backend, c)
 	if why != "" {
 		return Fail(), why
 	}
@@ -714,7 +710,7 @@ func execInstanceCase(backend value.Backend, c caseSpec) (Status, refusal) {
 	if unevaluated := result.Unevaluated(); len(unevaluated) > 0 {
 		return Fail(), unevaluatedRefusal(unevaluated)
 	}
-	if why := assessedSubtreeRoot(backend, schema, report, c.doc); why != "" {
+	if why := assessedSubtreeRoot(backend, schema, c.doc); why != "" {
 		return Fail(), why
 	}
 	return decideAgreement(true, c.expect.wantsValid()), ""

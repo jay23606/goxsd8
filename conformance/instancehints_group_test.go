@@ -81,7 +81,7 @@ func TestGroupSchemaDecidesFromUncoveredHint(t *testing.T) {
 			true, xsd.QName{Local: "known"}},
 	} {
 		c := groupedCase(t, tc.files, tc.instance, tc.valid)
-		schema, _, refused, perr := caseSchema(strict.New(), c)
+		schema, refused, perr := caseSchema(strict.New(), c)
 		if refused != "" || perr != nil {
 			t.Fatalf("%s: caseSchema = (refused %q, %v), want the widened schema", tc.why, refused, perr)
 		}
@@ -123,7 +123,7 @@ func TestGroupSchemaWithholdsCoveredHint(t *testing.T) {
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd">x</known>`,
 			xsd.QName{Local: "other"}},
 	} {
-		schema, _, refused, perr := caseSchema(strict.New(), groupedCase(t, tc.files, tc.instance, true))
+		schema, refused, perr := caseSchema(strict.New(), groupedCase(t, tc.files, tc.instance, true))
 		if refused != "" || perr != nil {
 			t.Fatalf("%s: caseSchema = (refused %q, %v), want the group's schema", tc.why, refused, perr)
 		}
@@ -148,7 +148,7 @@ func TestGroupSchemaReadsRootHintsAlone(t *testing.T) {
 	exec := newInstanceExec()
 	for _, valid := range []bool{true, false} {
 		c := groupedCase(t, files, instance, valid)
-		schema, _, refused, perr := caseSchema(strict.New(), c)
+		schema, refused, perr := caseSchema(strict.New(), c)
 		if refused != "" || perr != nil {
 			t.Fatalf("caseSchema = (refused %q, %v), want the widened schema", refused, perr)
 		}
