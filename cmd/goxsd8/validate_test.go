@@ -1035,6 +1035,33 @@ func TestJSONErrorLine(t *testing.T) {
 	}
 }
 
+// TestValidateJSONScalarWhereObjectExpected pins the clause jsonsrc appends to
+// the cvc-complex-type charge at a scalar member whose element's type has
+// element-only content: README's order.xsd, readme-order.xsd here, on
+// readme-text.json, {"order":"just text"}, which exits 1 on one line opening
+// at the scalar's location and naming "order" in the clause.
+func TestValidateJSONScalarWhereObjectExpected(t *testing.T) {
+	const instance = "testdata/readme-text.json"
+	args := []string{"validate", "-schema", "testdata/readme-order.xsd", instance}
+	var stdout, stderr bytes.Buffer
+	if code := run(args, &stdout, &stderr); code != exitInvalid {
+		t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, exitInvalid, stdout.String(), stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("run(%q) stderr = %q, want empty: the report is on stdout", args, stderr.String())
+	}
+	lines := strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("run(%q) stdout =\n%s\nwant 1 line", args, stdout.String())
+	}
+	const prefix = instance + ":1:10: [cvc-complex-type] "
+	const clause = `; JSON member "order" has the scalar value "just text", but the type of its element has element-only content: object expected, {"order":{...}}`
+	if !strings.HasPrefix(lines[0], prefix) || !strings.HasSuffix(lines[0], clause) {
+		t.Errorf("run(%q) line = %q, want it to open %q and end %q", args, lines[0], prefix, clause)
+	}
+	mustCiteOpenableLocations(t, "stdout", stdout.String())
+}
+
 // TestValidateSchemaFlagIsRepeatable pins the grammar doc.go states and the
 // flag.Value implements: every schema needs its own -schema, so a second
 // location standing beside the first is a positional argument — an instance —

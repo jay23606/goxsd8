@@ -128,8 +128,8 @@ type Result struct {
 }
 
 // Violations returns the violations the assessment charged, in document
-// order. The slice is copied: mutating the result does not affect r. No
-// violation yields nil.
+// order. The slice is copied; each *xsderr.Error is r's own, so writing
+// through one writes r's. No violation yields nil.
 func (r *Result) Violations() []*xsderr.Error {
 	if len(r.violations) == 0 {
 		return nil

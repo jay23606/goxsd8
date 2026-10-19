@@ -116,6 +116,19 @@ func WithURI(uri string) Option {
 // with an empty [validate.Result.Unevaluated] means not proven invalid, not
 // valid, and a non-empty Unevaluated leaves the document undecided against the
 // rules its entries name.
+//
+// A violation's rule ID and location are the engine's, and so is its message
+// but for one clause Validate appends to it, opening "; JSON member" and
+// naming the member's key as spelled, an array item's being its array's:
+//
+//   - the cvc-complex-type charge at the scalar of an element whose type has
+//     empty content (clause 1.1), or element-only content where the scalar's
+//     lexical form is not all white space (clause 1.3): object expected.
+//
+// The clause goes on that element's own charge alone, never on another charge
+// at the same rule and location, such as the parent's at an array item, and
+// only where the mapping determines the type that governs the element
+// (walker.noteCharacters' GAP(jsonsrc) markers).
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
 		return nil, fmt.Errorf("jsonsrc: Validate: nil *validate.Validator")
@@ -136,6 +149,7 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 	if err := w.end(root); err != nil {
 		return nil, err
 	}
+	w.annotate(res)
 	return res, nil
 }
 
@@ -163,8 +177,9 @@ func (e *DeclineError) Loc() xsderr.Loc {
 
 // walker is the one token stream a whole mapping pulls from: a single
 // json.Decoder over the positions its tokens are located by, the schema view
-// members are classified against, the selection a {type table} makes, and the
-// one fault that can stop it.
+// members are classified against, the selection a {type table} makes, the
+// notes Validate's message clauses come from, and the one fault that can stop
+// it.
 type walker struct {
 	dec    *json.Decoder
 	pos    *positions
@@ -178,6 +193,10 @@ type walker struct {
 	// reading the input or a decline. Every cursor reports this one field
 	// and none keeps a copy of it (STYLE D3).
 	err error
+	// notes is what the mapping knows, in JSON terms, about each member whose
+	// charge Validate appends a clause to, kept by the rule and location of
+	// that charge (walker.annotate).
+	notes map[noteAt]characters
 }
 
 func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected func(xsd.TypeTable, []validate.Attribute, []validate.Attribute) (xsd.TypeDefinitionOrRef, bool)) *walker {
@@ -186,7 +205,7 @@ func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected fun
 	// A number's lexical form is its source text, never a float64 round trip:
 	// 12345678901234567890 under xs:integer is that integer.
 	dec.UseNumber()
-	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected}
+	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected, notes: map[noteAt]characters{}}
 }
 
 // token pulls the next token and the location it starts at.
@@ -1366,6 +1385,7 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 	if !ok {
 		panic(fmt.Sprintf("jsonsrc: Token yielded %T", v.tok))
 	}
+	w.noteCharacters(m, key, lexical, v.loc, at)
 	return w.scalar(m.elementName(), loc, lexical, v.loc, v.scope), nil
 }
 

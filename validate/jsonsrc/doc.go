@@ -5,9 +5,10 @@
 // values over the stdlib streaming json.Decoder token walk — member order
 // preserved, the document never held whole (STYLE P4) — and hands them to
 // [validate.Validator.Assess] through [Validate]. Verdicts are the engine's,
-// with the same cvc-* rule IDs as for the XML document the JSON maps to; the
-// json conformance lane pins the mapping with curated cases
-// (conformance/testdata/json).
+// with the same cvc-* rule IDs as for the XML document the JSON maps to, and
+// [Validate]'s doc lists the clause it appends to a violation's message in
+// the instance's own terms; the json conformance lane pins the mapping with
+// curated cases (conformance/testdata/json).
 //
 // # The JSON shape in brief
 //
