@@ -1062,6 +1062,50 @@ func TestValidateJSONScalarWhereObjectExpected(t *testing.T) {
 	mustCiteOpenableLocations(t, "stdout", stdout.String())
 }
 
+// TestValidateJSONMemberClauses pins the clauses jsonsrc appends to the charge
+// a parent's content takes at a child member, on README's order.xsd,
+// readme-order.xsd here: an unknown key, which lists the keys the type
+// carries; "_kind", which also names kind as the attribute's key; and an
+// object under the simple-typed item, which says a scalar is expected. Each
+// instance exits 1 on one line opening at the member's location and rule and
+// ending with the whole clause.
+func TestValidateJSONMemberClauses(t *testing.T) {
+	for _, c := range []struct {
+		name, doc, at, clause string
+	}{
+		{"unknown key", `{"order":{"kind":"x","colour":"red","item":"a"}}`, ":1:22: [cvc-complex-content] ",
+			`; JSON member "colour" names no child element declaration and no attribute use of the type of "order", whose members are keyed "kind", "item"`},
+		{"attribute key behind _", `{"order":{"_kind":"x","item":"a"}}`, ":1:11: [cvc-complex-content] ",
+			`; JSON member "_kind" names no child element declaration and no attribute use of the type of "order", whose members are keyed "kind", "item"; an attribute member is keyed by the attribute's own name, "kind", not "_kind"`},
+		{"object where a scalar is expected", `{"order":{"item":"a","item":{"y":"b"}}}`, ":1:30: [cvc-type] ",
+			`; JSON member "y" is a member of the object of "item", whose type is a simple type: scalar expected, {"item":<string, number or boolean>}`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			instance := filepath.Join(t.TempDir(), "order.json")
+			if err := os.WriteFile(instance, []byte(c.doc), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"validate", "-schema", "testdata/readme-order.xsd", instance}
+			var stdout, stderr bytes.Buffer
+			if code := run(args, &stdout, &stderr); code != exitInvalid {
+				t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, exitInvalid, stdout.String(), stderr.String())
+			}
+			if stderr.Len() != 0 {
+				t.Errorf("run(%q) stderr = %q, want empty: the report is on stdout", args, stderr.String())
+			}
+			lines := strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n")
+			if len(lines) != 1 {
+				t.Fatalf("run(%q) stdout =\n%s\nwant 1 line", args, stdout.String())
+			}
+			prefix := instance + c.at
+			if !strings.HasPrefix(lines[0], prefix) || !strings.HasSuffix(lines[0], c.clause) {
+				t.Errorf("run(%q) line = %q, want it to open %q and end %q", args, lines[0], prefix, c.clause)
+			}
+			mustCiteOpenableLocations(t, "stdout", stdout.String())
+		})
+	}
+}
+
 // TestValidateSchemaFlagIsRepeatable pins the grammar doc.go states and the
 // flag.Value implements: every schema needs its own -schema, so a second
 // location standing beside the first is a positional argument — an instance —

@@ -124,11 +124,21 @@ func WithURI(uri string) Option {
 //   - the cvc-complex-type charge at the scalar of an element whose type has
 //     empty content (clause 1.1), or element-only content where the scalar's
 //     lexical form is not all white space (clause 1.3): object expected.
+//   - the cvc-complex-content charge the parent's content model makes at a
+//     child member that no child element declaration and no attribute use of
+//     the parent's type names, where that type has no element wildcard and no
+//     {attribute wildcard}: the clause lists the keys that map to the type's
+//     attribute uses and child element declarations, and, for a key that is
+//     "_" before an attribute use's name, names that name as the key.
+//   - the cvc-type clause 3.1.2 charge at the first child member of the
+//     object of an element whose type is a simple type: scalar expected.
 //
-// The clause goes on that element's own charge alone, never on another charge
-// at the same rule and location, such as the parent's at an array item, and
-// only where the mapping determines the type that governs the element
-// (walker.noteCharacters' GAP(jsonsrc) markers).
+// The clause goes on that one charge alone, never on another charge at the
+// same rule and location, such as the parent's at an array item or the
+// child's own at its member, and only where the mapping determines the type
+// that governs the element the charge is against, or every type that may
+// govern it agrees on the charge and on the keys the clause lists
+// (walker.noteCharacters' and walker.noteChild's GAP(jsonsrc) markers).
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
 		return nil, fmt.Errorf("jsonsrc: Validate: nil *validate.Validator")
@@ -196,7 +206,7 @@ type walker struct {
 	// notes is what the mapping knows, in JSON terms, about each member whose
 	// charge Validate appends a clause to, kept by the rule and location of
 	// that charge (walker.annotate).
-	notes map[noteAt]characters
+	notes map[noteAt]note
 }
 
 func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected func(xsd.TypeTable, []validate.Attribute, []validate.Attribute) (xsd.TypeDefinitionOrRef, bool)) *walker {
@@ -205,7 +215,7 @@ func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected fun
 	// A number's lexical form is its source text, never a float64 round trip:
 	// 12345678901234567890 under xs:integer is that integer.
 	dec.UseNumber()
-	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected, notes: map[noteAt]characters{}}
+	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected, notes: map[noteAt]note{}}
 }
 
 // token pulls the next token and the location it starts at.
@@ -440,16 +450,28 @@ func (w *walker) notNCName(key string, o *object, loc xsderr.Loc) error {
 		return w.declinef(loc, base, key)
 	}
 	local := key[1:]
-	m, err := w.classifyKey(o, local, keyName{name: xsd.QName{Local: local}}, loc, true)
-	if err != nil {
-		return w.declinef(loc, base, key)
-	}
-	a, ok := m.(attributeMember)
-	if !ok || !slices.ContainsFunc(o.uses, func(u xsd.AttributeUse) bool { return u.DeclarationName() == a.name }) {
+	name, ok := w.attributeKeyed(o, local, loc)
+	if !ok {
 		return w.declinef(loc, base, key)
 	}
 	return w.declinef(loc, base+", and an attribute member's key takes no \"@\" or \"-\": the attribute use %s of the type of %s is named by the key %q",
-		key, a.name, o.owner, local)
+		key, name, o.owner, local)
+}
+
+// attributeKeyed is the expanded name of the attribute use among o.uses that
+// walker.classifyKey maps the unprefixed key local, at loc, to under o and
+// each of o.selectable alike, and false where classifyKey declines local or
+// maps it to anything else.
+func (w *walker) attributeKeyed(o *object, local string, loc xsderr.Loc) (xsd.QName, bool) {
+	m, err := w.classifyKey(o, local, keyName{name: xsd.QName{Local: local}}, loc, true)
+	if err != nil {
+		return xsd.QName{}, false
+	}
+	a, ok := m.(attributeMember)
+	if !ok || !slices.ContainsFunc(o.uses, func(u xsd.AttributeUse) bool { return u.DeclarationName() == a.name }) {
+		return xsd.QName{}, false
+	}
+	return a.name, true
 }
 
 // object is what an object-valued element's members are classified against,
@@ -536,51 +558,102 @@ type overriding struct {
 
 // governingType is one type that may govern an object's owner
 // (object.governing), with matcher, its content model, fed the owner's child
-// elements in document order (object.attribute): nil where it has no element
-// content, and from the first child it rejects on, after which validate
-// advances it no further (validate's contentCheck.element).
+// elements in document order (object.attribute), nil where it has no element
+// content; and charged, the owner's content having been charged at a child
+// under it, after which validate's content check charges no further child and
+// advances the matcher no further (validate's contentCheck.charged).
 type governingType struct {
 	typ     xsd.TypeDefinition
 	matcher *xsd.Matcher
+	charged bool
 }
 
 // attribute feeds name, the expanded name of the owner's next child element,
-// to the matcher of each of o.governing, and returns what each ·attributes·
-// that child to (§3.4.4.4), in o.governing's order: nil where nothing does —
-// no element content, or a child at or before it rejected (cvc-complex-content
-// charges the parent) — and false where the mapping cannot attribute it
+// to the matcher of each of o.governing, and returns, in o.governing's order,
+// what each ·attributes· that child to (§3.4.4.4), nil where nothing does —
+// no element content, or a child at or before it charged — and the rule each
+// charges the owner's content under at that child, "" where it charges none
+// (contentCharge); false where the mapping cannot attribute it
 // (object.unattributed, or o.governing empty). Every child element of the
 // owner is fed in document order, whatever its value, as validate's walk feeds
 // its matcher, so each attribution depends on the siblings before it alone
 // (STYLE P4).
-func (o *object) attribute(name xsd.QName) ([]xsd.Attribution, bool) {
+//
+// Under each type the owner's content is charged at the first child its
+// matcher rejects, or at its first child where it has no matcher, and at no
+// child after that one, as validate's contentCheck.element charges: only a
+// content charge closes that check (validate's contentCheck.charge, which
+// cvc-complex-type clause 5's and e-validity clause 1.1.3's charges at a
+// child do not call), an object spells no character content, so no charge of
+// the owner's text closes it first, and a null, xsi:nil's one spelling, has
+// no members.
+func (o *object) attribute(name xsd.QName) ([]xsd.Attribution, []xsderr.Rule, bool) {
 	if len(o.governing) == 0 || o.unattributed {
-		return nil, false
+		return nil, nil, false
 	}
 	as := make([]xsd.Attribution, len(o.governing))
+	charges := make([]xsderr.Rule, len(o.governing))
 	for i := range o.governing {
 		gt := &o.governing[i]
-		if gt.matcher == nil {
+		if gt.charged {
 			continue
 		}
-		a, ok := gt.matcher.Next(name)
-		if !ok {
-			gt.matcher = nil
+		if gt.matcher != nil {
+			if a, ok := gt.matcher.Next(name); ok {
+				as[i] = a
+				continue
+			}
 		}
-		as[i] = a
+		gt.charged = true
+		charges[i] = contentCharge(gt.typ)
 	}
-	return as, true
+	return as, charges, true
+}
+
+// contentCharge is the rule validate's contentCheck.element charges an
+// element governed by t under, at the element information item [[child]] it
+// charges: cvc-type clause 3.1.2 under a simple type; cvc-complex-content,
+// where the {content type} has element content, at a child the content model
+// ·attributes· to nothing; and cvc-complex-type clauses 1.1 and 1.2 where it
+// is empty or simple.
+func contentCharge(t xsd.TypeDefinition) xsderr.Rule {
+	ct, ok := t.(xsd.ComplexType)
+	if !ok {
+		return ruleCvcType
+	}
+	if _, element := ct.ContentType().(xsd.ElementContent); element {
+		return ruleCvcComplexContent
+	}
+	return ruleCvcComplexType
 }
 
 // placement is where a child element stands among its parent's members:
 // parent, the object it is a member of, nil for the root; a, what each of
 // parent.governing ·attributes· it to, in its order, nil where nothing does;
-// and attributed, false where the mapping cannot attribute it
+// charges, the rule each charges the parent's content under at it, "" where
+// it charges none; and attributed, false where the mapping cannot attribute it
 // (object.attribute).
 type placement struct {
 	parent     *object
 	a          []xsd.Attribution
+	charges    []xsderr.Rule
 	attributed bool
+}
+
+// parentCharge is the rule the parent's content is charged under at the
+// child at stands for, "" where it is charged none, whichever of
+// parent.governing governs the parent; false where those differ or the
+// mapping cannot attribute the child.
+func (at placement) parentCharge() (xsderr.Rule, bool) {
+	if !at.attributed {
+		return "", false
+	}
+	for _, r := range at.charges[1:] {
+		if r != at.charges[0] {
+			return "", false
+		}
+	}
+	return at.charges[0], true
 }
 
 // inherited is the [inherited attributes] of the element standing at at, and
@@ -1359,7 +1432,9 @@ func (w *walker) entry(sc *scope, key string, loc xsderr.Loc) (value, error) {
 // its value as walker.value read it, and in, the members cursor of the
 // parent's object — nil for the root. Every element below the root is
 // ·attributed· under its parent's governing type as it is built
-// (object.attribute), whatever its value.
+// (object.attribute), whatever its value, and keeps the notes walker.annotate
+// reads for the parent's content charge at it (walker.noteChild) and for its
+// own text charge (walker.noteCharacters).
 //
 // It DECLINES an array item that is itself an array. That has no XML twin, so
 // no marker tracks it: an item maps to exactly one element, and an array to
@@ -1368,7 +1443,8 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 	var at placement
 	if in != nil {
 		at.parent = in.object
-		at.a, at.attributed = in.object.attribute(m.elementName())
+		at.a, at.charges, at.attributed = in.object.attribute(m.elementName())
+		w.noteChild(m, key, loc, v.scope, in, at)
 	}
 	switch t := v.tok.(type) {
 	case nil:
@@ -1379,7 +1455,7 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 			// where a value is due.
 			return nil, w.declinef(v.loc, "an array is an item of the array of member %q; only an object or a scalar maps to one element", key)
 		}
-		return w.objectElement(m, loc, v, at)
+		return w.objectElement(m, loc, key, v, at)
 	}
 	lexical, ok := scalarLexical(v.tok)
 	if !ok {
@@ -1389,14 +1465,15 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 	return w.scalar(m.elementName(), loc, lexical, v.loc, v.scope), nil
 }
 
-// objectElement builds an object-valued element from its value v, standing at
-// at among its parent's members: its scope, v's, its "$type" (typeMember),
-// then its attribute members (attributes), each classified under the type its
-// members are (elementMember.object), the type that governs it where its
-// "$type" leaves that to a {type table}'s selection (walker.governOverriding),
-// what it hands its children (walker.handDown), and a cursor over the rest.
-func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, at placement) (*element, error) {
-	e := &element{w: w, name: m.elementName(), loc: loc, scope: v.scope}
+// objectElement builds an object-valued element under the member key from its
+// value v, standing at at among its parent's members: its scope, v's, its
+// "$type" (typeMember), then its attribute members (attributes), each
+// classified under the type its members are (elementMember.object), the type
+// that governs it where its "$type" leaves that to a {type table}'s selection
+// (walker.governOverriding), what it hands its children (walker.handDown), and
+// a cursor over the rest.
+func (w *walker) objectElement(m elementMember, loc xsderr.Loc, key string, v value, at placement) (*element, error) {
+	e := &element{w: w, name: m.elementName(), key: key, loc: loc, scope: v.scope}
 	typ, tok, tokAt, err := w.typeMember(e, v.next, v.nextLoc)
 	if err != nil {
 		return nil, err

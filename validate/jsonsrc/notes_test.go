@@ -201,26 +201,335 @@ func TestNoteHints(t *testing.T) {
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			res, err := Validate(validatorOver(t, c.schema), strings.NewReader(c.doc), WithURI(jsonURI))
-			if err != nil {
-				t.Fatalf("Validate(%s): %v", c.doc, err)
-			}
-			v := res.Violations()
-			if len(v) != len(c.want) {
-				t.Fatalf("Validate(%s) violations = %v, want %d", c.doc, v, len(c.want))
-			}
-			for i, w := range c.want {
-				if v[i].Rule != w.rule || v[i].Loc.String() != jsonURI+w.loc {
-					t.Fatalf("Validate(%s) violation %d = %v, want a %s charge at %s", c.doc, i+1, v[i], w.rule, jsonURI+w.loc)
-				}
-				_, hint, found := strings.Cut(v[i].Msg, "; JSON member ")
-				if found {
-					hint = "; JSON member " + hint
-				}
-				if hint != w.hint {
-					t.Errorf("Validate(%s) violation %d message %q\nends with %q, want %q", c.doc, i+1, v[i].Msg, hint, w.hint)
-				}
-			}
+			wantCharges(t, c.schema, c.doc, c.want)
+		})
+	}
+}
+
+// wantCharges validates doc against schema and fails unless its violations are
+// want, in order: each one's rule and location, and the clause from the first
+// "; JSON member" on, "" where its message carries none.
+func wantCharges(t *testing.T, schema, doc string, want []charge) {
+	t.Helper()
+	res, err := Validate(validatorOver(t, schema), strings.NewReader(doc), WithURI(jsonURI))
+	if err != nil {
+		t.Fatalf("Validate(%s): %v", doc, err)
+	}
+	v := res.Violations()
+	if len(v) != len(want) {
+		t.Fatalf("Validate(%s) violations = %v, want %d", doc, v, len(want))
+	}
+	for i, w := range want {
+		if v[i].Rule != w.rule || v[i].Loc.String() != jsonURI+w.loc {
+			t.Fatalf("Validate(%s) violation %d = %v, want a %s charge at %s", doc, i+1, v[i], w.rule, jsonURI+w.loc)
+		}
+		_, hint, found := strings.Cut(v[i].Msg, "; JSON member ")
+		if found {
+			hint = "; JSON member " + hint
+		}
+		if hint != w.hint {
+			t.Errorf("Validate(%s) violation %d message %q\nends with %q, want %q", doc, i+1, v[i].Msg, hint, w.hint)
+		}
+	}
+}
+
+// childSchema holds the parents whose content a scalarExpected or unnamed note
+// answers the charge of, and the children whose own charges share the
+// member's rule and location. item is of xs:string and num of xs:int; t is of
+// abs, an abstract complex type, and conc extends abs with an optional c; eo
+// has element-only content and e0 empty content; r's one particle is an
+// optional n; w's is a lax ##local wildcard and sk's a skip one; lst holds r
+// items. kT has an attribute use m and an optional child n, kExt extends it
+// with an optional y, and kR restricts it to the same keys. tt's child k is of
+// kT, and its {type table} selects kExt for an element with an attribute m;
+// tr's k selects kR so, and tw's k selects kR by a {test} outside the engine's
+// §3.12.6 compiler's subset, so that the engine withholds its selection. st is
+// of kT and ab of abs; uT, from which neither kT nor aW is derived, has the
+// attribute use u; sa is of aW, whose {attribute wildcard} is a lax ##local
+// one. Under p5 the second x is ·attributed to· the lax wildcard, so the
+// top-level x, of kExt, governs it, while its members are classified under kT,
+// the local x's type. xu's type has an attribute use of xsi:type, cu's an
+// attribute use and a child declaration both named kind, and pr's simple
+// content an attribute use kind.
+const childSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>
+  <xs:complexType name="abs" abstract="true">
+    <xs:sequence><xs:element name="z" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="conc"><xs:complexContent><xs:extension base="abs">
+    <xs:sequence><xs:element name="c" type="xs:string" minOccurs="0"/></xs:sequence>
+  </xs:extension></xs:complexContent></xs:complexType>
+  <xs:element name="t" type="abs"/>
+  <xs:element name="item" type="xs:string"/>
+  <xs:element name="num" type="xs:int"/>
+  <xs:element name="eo">
+    <xs:complexType><xs:sequence><xs:element name="q" type="xs:string"/></xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:element name="e0"><xs:complexType/></xs:element>
+  <xs:element name="r">
+    <xs:complexType><xs:sequence><xs:element name="n" type="xs:int" minOccurs="0"/></xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:element name="w">
+    <xs:complexType><xs:sequence><xs:any namespace="##local" processContents="lax"/></xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:element name="sk">
+    <xs:complexType><xs:sequence><xs:any namespace="##local" processContents="skip"/></xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:element name="lst"><xs:complexType><xs:sequence><xs:element ref="r" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
+  <xs:complexType name="kT">
+    <xs:sequence><xs:element name="n" type="xs:string" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="m"/>
+  </xs:complexType>
+  <xs:complexType name="kExt"><xs:complexContent><xs:extension base="kT">
+    <xs:sequence><xs:element name="y" type="xs:string" minOccurs="0"/></xs:sequence>
+  </xs:extension></xs:complexContent></xs:complexType>
+  <xs:complexType name="kR"><xs:complexContent><xs:restriction base="kT">
+    <xs:sequence><xs:element name="n" type="xs:string" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="m"/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="tt">
+    <xs:complexType><xs:sequence>
+      <xs:element name="k" type="kT"><xs:alternative test="@m" type="kExt"/></xs:element>
+    </xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:element name="tr">
+    <xs:complexType><xs:sequence>
+      <xs:element name="k" type="kT"><xs:alternative test="@m" type="kR"/></xs:element>
+    </xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:element name="tw">
+    <xs:complexType><xs:sequence>
+      <xs:element name="k" type="kT"><xs:alternative test="count(@m) > 0" type="kR"/></xs:element>
+    </xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:complexType name="uT">
+    <xs:sequence><xs:element name="n" type="xs:string" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="u"/>
+  </xs:complexType>
+  <xs:complexType name="aW">
+    <xs:sequence><xs:element name="n" type="xs:string" minOccurs="0"/></xs:sequence>
+    <xs:anyAttribute namespace="##local" processContents="lax"/>
+  </xs:complexType>
+  <xs:element name="sa" type="aW"/>
+  <xs:element name="st" type="kT"/>
+  <xs:element name="ab" type="abs"/>
+  <xs:element name="x" type="kExt"/>
+  <xs:element name="p5"><xs:complexType><xs:sequence>
+    <xs:element name="x" type="kT" minOccurs="0"/>
+    <xs:any namespace="##local" processContents="lax" maxOccurs="unbounded"/>
+  </xs:sequence></xs:complexType></xs:element>
+  <xs:element name="xu">
+    <xs:complexType>
+      <xs:sequence><xs:element name="c" type="xs:string" minOccurs="0"/></xs:sequence>
+      <xs:attribute ref="xsi:type"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="cu">
+    <xs:complexType>
+      <xs:sequence><xs:element name="kind" type="xs:string" minOccurs="0"/></xs:sequence>
+      <xs:attribute name="kind"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pr">
+    <xs:complexType><xs:simpleContent><xs:extension base="xs:string">
+      <xs:attribute name="kind"/>
+    </xs:extension></xs:simpleContent></xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// selectedSimpleSchema declares a, of ·xs:anyType·, and ta, whose {type
+// table} selects xs:string for an element with no attribute m, and pt, whose
+// child c carries that table.
+const selectedSimpleSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="a"/>
+  <xs:element name="ta"><xs:alternative test="@m" type="xs:anyType"/><xs:alternative type="xs:string"/></xs:element>
+  <xs:element name="pt">
+    <xs:complexType><xs:sequence>
+      <xs:element name="c"><xs:alternative test="@m" type="xs:anyType"/><xs:alternative type="xs:string"/></xs:element>
+    </xs:sequence></xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// kindsSchema declares, in urn:t, du, whose type has an optional child c and
+// the attribute uses kind, unqualified, and t:kind, of two expanded names.
+const kindsSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
+  <xs:element name="du">
+    <xs:complexType>
+      <xs:sequence><xs:element name="c" type="xs:string" minOccurs="0"/></xs:sequence>
+      <xs:attribute name="kind"/>
+      <xs:attribute ref="t:kind"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:attribute name="kind"/>
+</xs:schema>`
+
+// scalarExpectedHint is the clause a scalarExpected note appends for the
+// member key of the object of owner.
+func scalarExpectedHint(key, owner string) string {
+	return `; JSON member "` + key + `" is a member of the object of "` + owner + `", whose type is a simple type: scalar expected, {"` + owner + `":<string, number or boolean>}`
+}
+
+// unnamedHint is the clause an unnamed note appends for the member key of the
+// object of owner, whose type carries keys, each quoted, "" for none.
+func unnamedHint(key, owner, keys string) string {
+	hint := `; JSON member "` + key + `" names no child element declaration and no attribute use of the type of "` + owner + `"`
+	if keys != "" {
+		hint += ", whose members are keyed " + keys
+	}
+	return hint
+}
+
+// TestChildNoteHints pins the clause Validate appends to the charge the
+// parent's content takes at a child member: an unnamed note's at a child the
+// type of the parent names none of, and a scalarExpected note's at the first
+// child of a parent whose type is a simple type; and that it appends neither
+// to any other charge, the child's own at the same rule and location, the
+// parent's at a later child, a parent's whose type names the child or has a
+// wildcard, and one whose content is empty or simple, included. The key list
+// is the keys of the type that governs the parent — the type its {type table}
+// selects, the one its "$type" names where that ·overrides·, the top-level
+// declaration's a lax wildcard's child resolves to — and not those of the type
+// its members are classified under where the two differ; it omits a key the
+// mapping declines, and the "_" clause names only a use the mapping names by
+// the key.
+func TestChildNoteHints(t *testing.T) {
+	const (
+		content = ruleCvcComplexContent
+		simple  = ruleCvcType
+	)
+	for _, c := range []struct {
+		name, schema, doc string
+		want              []charge
+	}{
+		{"unknown key", readmeSchema, `{"order":{"kind":"x","colour":"red","item":"a"}}`, []charge{
+			{content, ":1:22", unnamedHint("colour", "order", `"kind", "item"`)},
+		}},
+		{"attribute key behind _", readmeSchema, `{"order":{"_kind":"x","item":"a"}}`, []charge{
+			{content, ":1:11", unnamedHint("_kind", "order", `"kind", "item"`) + `; an attribute member is keyed by the attribute's own name, "kind", not "_kind"`},
+		}},
+		{"object where a scalar is expected", readmeSchema, `{"order":{"item":"a","item":{"y":"b"}}}`, []charge{
+			{simple, ":1:30", scalarExpectedHint("y", "item")},
+		}},
+		{"object where a scalar is expected, as an array item", readmeSchema, `{"order":{"item":["a",{"y":"b"}]}}`, []charge{
+			{simple, ":1:24", scalarExpectedHint("y", "item")},
+		}},
+		{"own cvc-type at a second member of a simple parent", childSchema, `{"item":{"y":"b","num":"abc"}}`, []charge{
+			{simple, ":1:10", scalarExpectedHint("y", "item")},
+			{simple, ":1:18", ""},
+		}},
+		{"own cvc-type clause 3.1.3 at the first member", childSchema, `{"item":{"num":"abc"}}`, []charge{
+			{simple, ":1:10", scalarExpectedHint("num", "item")},
+			{simple, ":1:10", ""},
+		}},
+		{"own cvc-type clause 2 at the first member", childSchema, `{"item":{"t":{"z":"1"}}}`, []charge{
+			{simple, ":1:10", scalarExpectedHint("t", "item")},
+			{simple, ":1:10", ""},
+		}},
+		{"own cvc-complex-content at an unnamed member", childSchema, `{"r":{"n":1,"eo":{}}}`, []charge{
+			{content, ":1:13", unnamedHint("eo", "r", `"n"`)},
+			{content, ":1:13", ""},
+		}},
+		{"own cvc-type and cvc-complex-content at an unnamed member", childSchema, `{"r":{"n":1,"t":{}}}`, []charge{
+			{content, ":1:13", unnamedHint("t", "r", `"n"`)},
+			{simple, ":1:13", ""},
+			{content, ":1:13", ""},
+		}},
+		{"unnamed member after the parent's content is charged", childSchema, `{"r":{"n":1,"n":2,"eo":{}}}`, []charge{
+			{content, ":1:13", ""},
+			{content, ":1:19", ""},
+		}},
+		{"unnamed array item with a scalar", childSchema, `{"r":{"n":1,"eo":["x"]}}`, []charge{
+			{content, ":1:19", unnamedHint("eo", "r", `"n"`)},
+			{ruleCvcComplexType, ":1:19", charactersHint("eo", "x", "element-only")},
+		}},
+		{"array item with a scalar under a simple parent", childSchema, `{"item":{"eo":["x"]}}`, []charge{
+			{simple, ":1:16", scalarExpectedHint("eo", "item")},
+			{ruleCvcComplexType, ":1:16", charactersHint("eo", "x", "element-only")},
+		}},
+		{"a \"$type\" naming a simple type", selectedSimpleSchema, `{"a":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string","y":"1","z":"2"}}`, []charge{
+			{simple, ":1:78", scalarExpectedHint("y", "a")},
+		}},
+		{"a root {type table} selecting a simple type", selectedSimpleSchema, `{"ta":{"y":"1","z":"2"}}`, []charge{
+			{simple, ":1:8", scalarExpectedHint("y", "ta")},
+		}},
+		{"a {type table} below the root selecting a simple type", selectedSimpleSchema, `{"pt":{"c":{"y":"1","z":"2"}}}`, []charge{
+			{simple, ":1:13", scalarExpectedHint("y", "c")},
+		}},
+		{"unknown key under an empty parent", childSchema, `{"e0":{"zz":"1"}}`, []charge{
+			{ruleCvcComplexType, ":1:8", ""},
+		}},
+		{"attribute key behind _ under a simple-content parent", childSchema, `{"pr":{"_kind":"1"}}`, []charge{
+			{ruleCvcComplexType, ":1:8", ""},
+		}},
+		{"a {type table} below the root selecting a type with more keys", childSchema, `{"tt":{"k":{"m":"1","zz":"1"}}}`, []charge{
+			{content, ":1:21", unnamedHint("zz", "k", `"m", "n", "y"`)},
+		}},
+		{"a {type table} below the root selecting the declared type", childSchema, `{"tt":{"k":{"zz":"1"}}}`, []charge{
+			{content, ":1:13", unnamedHint("zz", "k", `"m", "n"`)},
+		}},
+		{"a {type table} below the root selecting a type with the same keys", childSchema, `{"tr":{"k":{"m":"1","zz":"1"}}}`, []charge{
+			{content, ":1:21", unnamedHint("zz", "k", `"m", "n"`)},
+		}},
+		{"a withheld {type table} selection among types with the same keys", childSchema, `{"tw":{"k":{"m":"1","zz":"1"}}}`, nil},
+		{"declared child repeated", childSchema, `{"r":{"n":1,"n":2}}`, []charge{
+			{content, ":1:13", ""},
+		}},
+		{"wildcard-named child rejected", childSchema, `{"w":{"a":"1","b":"2"}}`, []charge{
+			{content, ":1:15", ""},
+		}},
+		{"cvc-type at an unnamed member of a complex parent", childSchema, `{"r":{"t":{"z":"1"}}}`, []charge{
+			{content, ":1:7", unnamedHint("t", "r", `"n"`)},
+			{simple, ":1:7", ""},
+		}},
+		{"a \"$type\" that overrides", childSchema, `{"st":{"$type":"kExt","zz":"1"}}`, []charge{
+			{content, ":1:23", unnamedHint("zz", "st", `"m", "n", "y"`)},
+		}},
+		{"a \"$type\" that does not override", childSchema, `{"st":{"$type":"abs","zz":"1"}}`, []charge{
+			{"cvc-elt", ":1:2", ""},
+			{content, ":1:22", unnamedHint("zz", "st", `"m", "n"`)},
+		}},
+		{"_ before a use of the \"$type\" that does not override", childSchema, `{"st":{"$type":"uT","_u":"1"}}`, []charge{
+			{"cvc-elt", ":1:2", ""},
+			{content, ":1:21", unnamedHint("_u", "st", `"m", "n"`)},
+		}},
+		{"a \"$type\" that does not override a type with an {attribute wildcard}", childSchema, `{"sa":{"$type":"uT","zz":"1"}}`, []charge{
+			{"cvc-elt", ":1:2", ""},
+			{content, ":1:21", ""},
+		}},
+		{"an abstract parent with \"$type\"", childSchema, `{"ab":{"$type":"conc","zz":"1"}}`, []charge{
+			{content, ":1:23", unnamedHint("zz", "ab", `"z", "c"`)},
+		}},
+		{"an unbound \"$type\" prefix", childSchema, `{"st":{"$type":"u:kExt","zz":"1"}}`, []charge{
+			{"cvc-attribute", ":1:8", ""},
+			{content, ":1:25", unnamedHint("zz", "st", `"m", "n"`)},
+		}},
+		{"a skipped parent", childSchema, `{"sk":{"r":{"zz":"1"}}}`, nil},
+		{"a parent a lax wildcard's child resolves", childSchema, `{"w":{"r":{"zz":"1"}}}`, []charge{
+			{content, ":1:12", unnamedHint("zz", "r", `"n"`)},
+		}},
+		{"a parent governed by the top-level declaration a lax wildcard resolves to", childSchema, `{"p5":{"x":[{},{"zz":"1"}]}}`, []charge{
+			{content, ":1:17", unnamedHint("zz", "x", `"m", "n", "y"`)},
+		}},
+		{"a child the governing type names and the classifying type does not", childSchema, `{"p5":{"x":[{},{"y":"1","y":"2"}]}}`, []charge{
+			{content, ":1:25", ""},
+		}},
+		{"unnamed members of array items", childSchema, `{"lst":{"r":[{"n":1,"zz":2},{"zz":3}]}}`, []charge{
+			{content, ":1:21", unnamedHint("zz", "r", `"n"`)},
+			{content, ":1:30", unnamedHint("zz", "r", `"n"`)},
+		}},
+		{"_ before an xsi-namespace use's name", childSchema, `{"xu":{"_type":"1"}}`, []charge{
+			{content, ":1:8", unnamedHint("_type", "xu", `"c"`)},
+		}},
+		{"_ before a name a child declaration and a use carry", childSchema, `{"cu":{"_kind":"1"}}`, []charge{
+			{content, ":1:8", unnamedHint("_kind", "cu", "")},
+		}},
+		{"_ before the local name of uses of two expanded names", kindsSchema, `{"t:du":{"$xmlns":{"t":"urn:t"},"_kind":"1"}}`, []charge{
+			{content, ":1:33", unnamedHint("_kind", "t:du", `"c"`)},
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			wantCharges(t, c.schema, c.doc, c.want)
 		})
 	}
 }

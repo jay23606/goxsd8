@@ -93,6 +93,10 @@ type element struct {
 	// the namespace of a parent whose type has no wildcard, or, at the root,
 	// none gives the key (walker.wildcardMember, walker.rootMember).
 	name xsd.QName
+	// key is the member's key as spelled, an array item's being its array's,
+	// for an object-valued element, which a note on a member of its object
+	// names it by (walker.noteChild); empty for a scalar or null one.
+	key string
 	// loc is where the member's key, or the array item, begins.
 	loc xsderr.Loc
 	// attrs is the element's [[attributes]], read whole as the element was
