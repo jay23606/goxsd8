@@ -495,7 +495,6 @@ func TestChildNoteHints(t *testing.T) {
 		}},
 		{"a \"$type\" that does not override a type with an {attribute wildcard}", childSchema, `{"sa":{"$type":"uT","zz":"1"}}`, []charge{
 			{"cvc-elt", ":1:2", ""},
-			{content, ":1:21", ""},
 		}},
 		{"an abstract parent with \"$type\"", childSchema, `{"ab":{"$type":"conc","zz":"1"}}`, []charge{
 			{content, ":1:23", unnamedHint("zz", "ab", `"z", "c"`)},

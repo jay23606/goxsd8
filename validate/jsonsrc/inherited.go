@@ -40,10 +40,12 @@ type inheritor interface {
 // govern the element, hands down the same ones (handedUnder), so that the
 // one the engine determines does too; and not where o.governing is empty or
 // inherited is not known. An element carrying a "$type" hands down under the
-// types walker.instanceGoverning finds may govern it, and not under the one
-// its members are classified under (walker.instanceGoverned), which governs
-// it only where its verdict stands uncharged: where cvc-elt clause 4 charges
-// it, its ·selected type definition· governs it and its children alike.
+// types walker.instanceGoverning finds may govern it, or walker.overrode and
+// walker.governOverriding settle once its attributes are read, and not under
+// the one its members are classified under before them
+// (walker.instanceGoverned), which is the type the "$type" names, standing
+// for several, where its declaration's {type table} can select types that
+// settle differently.
 //
 // key-p-inherited clause 2, the same [validation context], holds for every
 // pair this is asked of: one mapping builds one infoset under one ·validation

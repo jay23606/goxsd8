@@ -159,7 +159,7 @@
   </testGroup>
   <testGroup name="type">
     <annotation>
-      <documentation>A "$xmlns" member leading an object binds prefixes for the element and its descendants; a "$type" member after it is the element's xsi:type: {"item":{"$xmlns":{"t":"urn:x"},"$type":"t:Derived"}} is &lt;item xmlns:t="urn:x" xsi:type="t:Derived"/&gt;. The members after "$type" are classified under the type that governs the element: at the root, the type it names wherever that resolves; below it, the "governed" group says.</documentation>
+      <documentation>A "$xmlns" member leading an object binds prefixes for the element and its descendants; a "$type" member after it is the element's xsi:type: {"item":{"$xmlns":{"t":"urn:x"},"$type":"t:Derived"}} is &lt;item xmlns:t="urn:x" xsi:type="t:Derived"/&gt;. The members after "$type" are classified under the type that governs the element: at the root, the type it names where that resolves and overrides the type the root's declaration selects, and that selected type where it does not (cvc-elt clause 4); below it, the "governed" group says.</documentation>
     </annotation>
     <schemaTest name="type">
       <schemaDocument xlink:href="type.xsd"/>
@@ -174,7 +174,7 @@
     </instanceTest>
     <instanceTest name="type-unrelated.i">
       <annotation>
-        <documentation>expects cvc-elt: Other is not validly substitutable for Base, so it does not override it (clause 4). c is classified under Other and assessed under Base, which governs, so cvc-complex-content is charged beside it.</documentation>
+        <documentation>expects cvc-elt: Other is not validly substitutable for Base, so it does not override it (clause 4). c is classified under Base, which governs, as a child Base does not declare, so cvc-complex-content is charged beside it.</documentation>
       </annotation>
       <instanceDocument xlink:href="type-unrelated.i.json"/>
       <expected validity="invalid"/>
