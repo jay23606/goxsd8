@@ -158,19 +158,22 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 //
 // Each {test} reads E's attributes, then each of inherited whose ·expanded
 // name· no member of attributes has (key-cta-ta-select clauses 1.1.2 and
-// 1.1.3); inherited is required, and nil only where E has no [inherited
-// attributes], as at the validation root (§3.3.5.6, key-p-inherited clause 1).
-// inherited holds only attributes whose {inheritable} is true (key-p-inherited
-// clause 3; [xsd.Schema.ResolvedInheritable] answers it for a use), and at most
-// one per ·expanded name·, its nearest ancestor's (e-inherited_attributes clause
-// 2): this method filters neither, and a {test} reads every duplicate it is
-// handed, so raw ancestor attributes can select differently from Assess.
-// It is the selection [Validator.Assess] makes for E, by the same scan: a
-// dynamic or type error inside a {test} counts as false (key-cta-ta-select
-// clause 2), and ok is false exactly where the scan reaches an alternative
-// whose {test} the engine cannot evaluate before any succeeds — which {test}s
-// it compiles is [xpath.CompileCTATest]'s to say — never where no alternative
-// succeeds.
+// 1.1.3). inherited is required, and nil or empty only where E has no
+// [inherited attributes]: an empty, non-nil inherited is read exactly as nil. A
+// validation root has none — an inference from §3.3.5.6 sic-inheritedAttrs,
+// which gives the property to each child of a non-·skipped· element that is not
+// ·attributed to· a skip wildcard, and a validation root is assessed as no such
+// child. inherited holds only attributes whose {inheritable} is true
+// (key-p-inherited clause 3; [xsd.Schema.ResolvedInheritable] answers it for a
+// use), and at most one per ·expanded name·, its nearest ancestor's
+// (e-inherited_attributes clause 2): this method filters neither, and a {test}
+// reads every duplicate it is handed, so raw ancestor attributes can select
+// differently from Assess. It is the selection [Validator.Assess] makes for E,
+// by the same scan: a dynamic or type error inside a {test} counts as false
+// (key-cta-ta-select clause 2), and ok is false exactly where the scan reaches
+// an alternative whose {test} the engine cannot evaluate before any succeeds —
+// which {test}s it compiles is [xpath.CompileCTATest]'s to say — never where no
+// alternative succeeds.
 //
 // ok false is an undecided selection, not a false one: the type is withheld,
 // meaning no answer is given at all — neither the alternative's type nor the

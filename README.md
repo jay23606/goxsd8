@@ -287,10 +287,13 @@ if err != nil {
 
 Start at `go doc github.com/kud360/goxsd8` and follow the package list;
 each package's godoc is its contract. Plain-text `go doc` does not print
-the runnable `Example*` funcs, so for working, tested end-to-end code
-(seed builtins → parse a lexical → assert capabilities) read the example
-tests directly: `validate/jsonsrc/example_test.go` (`ExampleValidate`),
-`value/example_test.go` (`ExampleOverride`),
+the runnable `Example*` funcs; pkg.go.dev
+(`https://pkg.go.dev/github.com/kud360/goxsd8`) renders them beside each
+package's documentation. For working, tested end-to-end code (seed builtins →
+parse a lexical → assert capabilities) in a checkout, read the example tests
+directly: `validate/jsonsrc/example_test.go` (`ExampleValidate`),
+`validate/example_test.go` (`ExampleValidator_ConditionallySelected`),
+`value/example_test.go` (`ExampleOverride`, `ExampleValidateLexical`),
 `builtin/example_test.go` (`ExampleSeed`, `ExampleSeed_missingPrimitive`),
 `builtin/strict/example_test.go` (`ExampleNew`),
 `loader/example_test.go` (`Example_chain`), `xsd/example_test.go`

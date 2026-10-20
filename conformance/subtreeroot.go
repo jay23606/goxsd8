@@ -73,8 +73,9 @@ func assessedSubtreeRoot(backend value.Backend, schema *xsd.Schema, doc string) 
 // end tag, and refuses unless it meets element's conditions against its
 // ·governing element declaration· or, with none, undeclaredRoot's. cvc-elt
 // clause 1 (§3.3.4.6 ·governing element declaration· clause 4): the root's
-// declaration is the top-level one its ·expanded name· resolves to. The
-// ·validation root· has no [inherited attributes] (key-p-inherited clause 2).
+// declaration is the top-level one its ·expanded name· resolves to. The root
+// has no ancestor, so no attribute is ·potentially inherited· by it and it has
+// no [inherited attributes] (key-p-inherited clause 1).
 func (g *subtreeGate) root(start xml.StartElement) refusal {
 	d, ok := g.schema.Element(expandedName(start.Name))
 	if !ok {

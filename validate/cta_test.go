@@ -404,7 +404,9 @@ func TestXSITypeOverridesTheConditionallySelectedType(t *testing.T) {
 // first alternative whose {test} is true, the {default type definition}'s
 // where none is or a {test} raises a dynamic error, ok false only where an
 // unevaluable {test} is reached before any success, and the inherited half
-// read behind E's own attributes, shadowed by a same-named one of them.
+// read behind E's own attributes, shadowed by a same-named one of them. The
+// empty-inherited row is its nil twin, the first row, with []Attribute{} in
+// place of nil, and wants that twin's slot and ok.
 func TestConditionallySelectedExport(t *testing.T) {
 	kind := func(v string) Attribute { return &testAttribute{name: local("kind"), value: v} }
 	for _, tc := range []struct {
@@ -414,6 +416,7 @@ func TestConditionallySelectedExport(t *testing.T) {
 		want                  string // the selected slot's type name; "" for ok false
 	}{
 		{"an alternative's {test} true", []ctaAlt{{"@kind = 'book'", "First"}}, []Attribute{kind("book")}, nil, "First"},
+		{"an empty, non-nil inherited reads as nil", []ctaAlt{{"@kind = 'book'", "First"}}, []Attribute{kind("book")}, []Attribute{}, "First"},
 		{"no {test} true", []ctaAlt{{"@kind = 'book'", "First"}}, []Attribute{kind("cd")}, nil, "Fallback"},
 		{"the first true wins", []ctaAlt{{"@kind", "Second"}, {"@kind = 'book'", "First"}}, []Attribute{kind("book")}, nil, "Second"},
 		{"a dynamic error is false", []ctaAlt{{"@kind cast as xs:integer = 3", "First"}}, []Attribute{kind("book")}, nil, "Fallback"},
