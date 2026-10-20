@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -528,6 +529,47 @@ func TestNonQNameXSITypeChargesClauseThree(t *testing.T) {
 		}
 		_, undecided := assessRecorded(t, schema, eRoot(map[string]string{"type": lexical}))
 		wantDeclines(t, undecided, Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "so clause 5 is undecided"})
+	}
+}
+
+// A value backend whose xs:QName mapping reports a fault of the type rather than
+// a VERDICT ([value.IsDatatypeVerdict]) leaves cvc-attribute (§3.2.4.1) clause
+// 3 undecided for an xsi:type lexical, recorded as [Unevaluated] at the
+// attribute, and hands the lexical to clause 5 — #774's GAP(validate) arm of
+// [walk.instanceTypeLexical]. A verdict on the same lexical charges clause 3
+// instead, so the arm declines faults and not every error. The schema seeds a
+// simple xs:QName, so the decline is the fault arm's and not the
+// no-simple-xs:QName arm's, which logs and records the same clause.
+//
+// Deleting the fault arm fails the fault row three times: it logs 3/charged
+// 5/declined, records clause 5's "no ·actual value·" decline in place of clause
+// 3's, and charges clause 3 in place of clause 5.
+func TestQNameMappingFaultDeclinesClauseThree(t *testing.T) {
+	schema := eSchema(t, false, nil)
+	if _, simple := schema.ResolvedSimpleType(xsd.TypeDefinitionRef{Name: qnameTypeName}); !simple {
+		t.Fatal("eSchema carries no simple xs:QName: the row would reach the no-simple-xs:QName arm")
+	}
+	const lexical = "23.789" // outside xs:QName's lexical space, so a verdict charges it
+	for _, row := range []struct {
+		name     string
+		backend  value.Backend
+		outcomes []string
+		clause   string
+		decline  string
+	}{
+		{"fault", gapBackend(qnameTypeName), []string{"3/declined", "5/charged"}, "cvc-attribute clause 5", "cvc-attribute clause 3 is undecided"},
+		{"verdict", testBackend(), []string{"3/charged", "5/declined"}, "cvc-attribute clause 3", "so clause 5 is undecided"},
+	} {
+		got, visits := cAssessLoggedWith(t, row.backend, schema, eRoot(map[string]string{"type": lexical}))
+
+		if outcomes := attributeOutcomes(*visits); !slices.Equal(outcomes, row.outcomes) {
+			t.Errorf("%s: logged %v, want %v", row.name, outcomes, row.outcomes)
+		}
+		if len(got) != 1 || got[0].Rule != "cvc-attribute" || got[0].Loc != loc(1, 10) || !strings.Contains(got[0].Msg, row.clause) {
+			t.Errorf("%s: Violations() = %v, want exactly one cvc-attribute charge at %s naming %q", row.name, got, loc(1, 10), row.clause)
+		}
+		_, undecided := assessRecordedWith(t, row.backend, schema, eRoot(map[string]string{"type": lexical}))
+		wantDeclines(t, undecided, Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: row.decline})
 	}
 }
 

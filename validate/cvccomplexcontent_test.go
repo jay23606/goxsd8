@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -516,8 +517,14 @@ func cWantLogged(t *testing.T, visits *[]string, want ...string) {
 // half of cvc-complex-content took an item.
 func cAssessLogged(t *testing.T, schema *xsd.Schema, root Element) ([]*xsderr.Error, *[]string) {
 	t.Helper()
+	return cAssessLoggedWith(t, testBackend(), schema, root)
+}
+
+// cAssessLoggedWith is cAssessLogged under backend.
+func cAssessLoggedWith(t *testing.T, backend value.Backend, schema *xsd.Schema, root Element) ([]*xsderr.Error, *[]string) {
+	t.Helper()
 	log, visits := recordingLogger()
-	v, err := New(schema, testBackend(), WithLogger(log))
+	v, err := New(schema, backend, WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
