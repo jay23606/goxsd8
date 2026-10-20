@@ -36,8 +36,8 @@ const bom = "\xEF\xBB\xBF"
 func outcome(t *testing.T, r io.Reader, schema string) string {
 	t.Helper()
 	res, err := Validate(validatorOver(t, schema), r, WithURI(jsonURI))
-	var d *DeclineError
-	if errors.As(err, &d) {
+	var e *Error
+	if errors.As(err, &e) && e.Class() == Decline {
 		return "error " + err.Error() + " (decline)"
 	}
 	if err != nil {
@@ -118,7 +118,7 @@ func TestByteOrderMarkElsewhere(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := outcome(t, strings.NewReader(tc.doc), readmeSchema)
 			if !strings.HasPrefix(got, "error "+tc.prefix) || strings.HasSuffix(got, "(decline)") {
-				t.Errorf("Validate = %s\nwant a plain error opening %q", got, tc.prefix)
+				t.Errorf("Validate = %s\nwant a malformed-JSON error opening %q", got, tc.prefix)
 			}
 		})
 	}

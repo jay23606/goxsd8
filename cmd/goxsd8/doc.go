@@ -287,9 +287,9 @@
 // carrying malformed JSON, content after the top-level object, an I/O fault
 // reading the instance once it is open (which jsonsrc reports as a fault
 // reading the input) and every input jsonsrc's mapping declines, and jsonsrc's
-// doc makes none of them a validity verdict. jsonsrc types its declines alone,
-// as *jsonsrc.DeclineError, but the line names no class, and nothing tells a
-// shape the mapping rejects from an arm it does not implement, so charging 1
+// doc makes none of them a validity verdict. jsonsrc classes each one in a
+// *jsonsrc.Error, but the line names no class, and nothing tells a shape the
+// mapping rejects from an arm it does not implement, so charging 1
 // would charge every decline as invalid: all of them are undecided — unlike
 // malformed XML, and an I/O fault reading an XML instance, which exit 1. It
 // aggregates like any 4: beside an invalid instance the run exits 1. Its line

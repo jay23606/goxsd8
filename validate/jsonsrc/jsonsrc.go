@@ -86,28 +86,33 @@ func WithURI(uri string) Option {
 // U+FEFF anywhere else is malformed JSON outside a string and content inside
 // one.
 //
-// Every error it returns is of one of four classes. Only a decline has a type
-// of its own; the other three are plain errors, by design, and no sentinel
-// value marks any of them:
+// Every error it returns is of one of four classes. Past a nil argument, each
+// is an [*Error], matched with [errors.As]: [Error.Class] is its class,
+// [Error.Loc] the location of the construct it names, and [Error.Msg] its
+// message alone, with no "jsonsrc: " and no location. Its Error() is always
+//
+//	"jsonsrc: " + Loc().String() + ": " + Msg()
+//
+// No sentinel value marks any class:
 //
 //   - A nil argument: "jsonsrc: Validate: nil *validate.Validator" or
-//     "jsonsrc: Validate: nil io.Reader". It wraps nothing.
-//   - Malformed JSON: an input that is not exactly one JSON value (RFC 8259
-//     §2), spelled "malformed JSON: …", "the document holds no JSON value; …"
-//     or "content follows the top-level object". The first may wrap an error,
-//     whose identity is not part of this contract; the other two wrap
-//     nothing.
-//   - A fault reading r: "fault reading the input: …", wrapping the error r
-//     returned, which [errors.Is] reaches. Because r may return any error,
-//     io.ErrUnexpectedEOF among them, no matchable value separates this class
-//     from malformed JSON: a caller that needs the split checks whether its
-//     own r returned an error.
-//   - A decline: a [*DeclineError], matched with [errors.As]. It wraps
-//     nothing.
+//     "jsonsrc: Validate: nil io.Reader", a plain error and no *Error. It
+//     wraps nothing.
+//   - Malformed JSON, class [Malformed]: an input that is not exactly one JSON
+//     value (RFC 8259 §2), whose message is "malformed JSON: …", "the
+//     document holds no JSON value; …" or "content follows the top-level
+//     object". The first may wrap an error, whose identity is not part of
+//     this contract; the other two wrap nothing.
+//   - A fault reading r, class [ReadFault]: "fault reading the input: …",
+//     wrapping the error r returned, which [errors.Is] reaches. The class is
+//     decided by whether the decoder's error is the one r returned, never by
+//     its type: bytes r returned that are malformed ahead of r's error are
+//     [Malformed], and a document r's error cuts off is [ReadFault].
+//   - A decline, class [Decline], matched with errors.As(err, &e) &&
+//     e.Class() == Decline. It wraps nothing.
 //
-// Every error is prefixed "jsonsrc: " and, past the nil checks, the location of
-// the construct it names. None is an [xsderr.Error]: none is a validity verdict
-// about a document.
+// None is an [xsderr.Error], and none wraps one Validate builds: none is a
+// validity verdict about a document. A read fault wraps whatever r returned.
 //
 // Read the verdict off a returned result as the "Contract" section of package
 // [validate] says, but for the one difference from an xmlsrc result stated
@@ -177,26 +182,72 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 	return res, nil
 }
 
-// DeclineError is the error [Validate] returns for an input the mapping
-// declines: one the implemented arms do not map, as the package doc's
-// "Declines" section lists. Validate is what builds one, and its doc states
-// what a decline wraps and the other error classes it returns.
-type DeclineError struct {
-	loc xsderr.Loc
-	msg string
+// Error is the error [Validate] returns for every fault it locates. Validate's
+// doc owns its classes, what each wraps, and how it renders.
+type Error struct {
+	loc   xsderr.Loc
+	class Class
+	// msg is the message's own prose; Msg appends cause's text to it, and no
+	// field holds that text a second time (STYLE D3).
+	msg   string
+	cause error
 }
 
-// Error renders the decline as "jsonsrc: <loc>: <message>", the message naming
-// the arm the input is not.
-func (e *DeclineError) Error() string {
-	return fmt.Sprintf("jsonsrc: %s: %s", e.loc, e.msg)
+// Error renders the error as [Validate]'s doc states.
+func (e *Error) Error() string {
+	return "jsonsrc: " + e.loc.String() + ": " + e.Msg()
 }
 
-// Loc is the location of the construct the decline names, as the package doc's
+// Unwrap returns the error e wraps, nil for a class [Validate]'s doc states
+// wraps nothing.
+func (e *Error) Unwrap() error {
+	return e.cause
+}
+
+// Loc is the location of the construct e names, as the package doc's
 // "Locations" section places it, under the URI [WithURI] gives: empty, and
 // rendered "?", without one.
-func (e *DeclineError) Loc() xsderr.Loc {
+func (e *Error) Loc() xsderr.Loc {
 	return e.loc
+}
+
+// Msg is e's message without its "jsonsrc: " and its location.
+func (e *Error) Msg() string {
+	if e.cause == nil {
+		return e.msg
+	}
+	return e.msg + ": " + e.cause.Error()
+}
+
+// Class is e's class, one of those [Validate]'s doc lists.
+func (e *Error) Class() Class {
+	return e.class
+}
+
+// Class is the class of an [*Error], as [Validate]'s doc lists them. The zero
+// value is invalid, and no *Error carries it.
+type Class uint8
+
+// The Class values.
+const (
+	// Malformed is an input that is not exactly one JSON value.
+	Malformed Class = iota + 1
+	// ReadFault is a fault reading the input.
+	ReadFault
+	// Decline is an input the mapping declines.
+	Decline
+)
+
+// malformed builds the [Malformed] error at loc, wrapping cause where it is
+// not nil.
+func malformed(loc xsderr.Loc, msg string, cause error) *Error {
+	return &Error{loc: loc, class: Malformed, msg: msg, cause: cause}
+}
+
+// readFault builds the [ReadFault] error at loc, cause being the non-nil error
+// the reader itself returned.
+func readFault(loc xsderr.Loc, cause error) *Error {
+	return &Error{loc: loc, class: ReadFault, msg: "fault reading the input", cause: cause}
 }
 
 // walker is the one token stream a whole mapping pulls from: a single
@@ -256,10 +307,10 @@ func (w *walker) token() (json.Token, xsderr.Loc, error) {
 		return nil, loc, err
 	}
 	if w.pos.fault != nil && errors.Is(err, w.pos.fault) {
-		return nil, loc, fmt.Errorf("jsonsrc: %s: fault reading the input: %w", loc, err)
+		return nil, loc, readFault(loc, err)
 	}
 	if err != nil {
-		return nil, loc, fmt.Errorf("jsonsrc: %s: malformed JSON: %w", loc, err)
+		return nil, loc, malformed(loc, "malformed JSON", err)
 	}
 	return tok, loc, nil
 }
@@ -271,9 +322,9 @@ func (w *walker) fail(err error) {
 	}
 }
 
-// declinef builds the [*DeclineError] for an input the mapping declines at loc.
+// declinef builds the [Decline] error for an input the mapping declines at loc.
 func (w *walker) declinef(loc xsderr.Loc, format string, args ...any) error {
-	return &DeclineError{loc: loc, msg: fmt.Sprintf(format, args...)}
+	return &Error{loc: loc, class: Decline, msg: fmt.Sprintf(format, args...)}
 }
 
 // root reads the top-level object up to the value of its one member and
@@ -289,11 +340,11 @@ func (w *walker) declinef(loc xsderr.Loc, format string, args ...any) error {
 // one document element (XML 1.0 §2.1 [1]), and each of these spells none or
 // several, or a name no XML Name is. An input holding no JSON value is no
 // decline but malformed, JSON text being one value (RFC 8259 §2), and its
-// error is a plain one.
+// error's class is [Malformed].
 func (w *walker) root() (*element, error) {
 	tok, loc, err := w.token()
 	if errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("jsonsrc: %s: the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {\"<root>\":...}", loc)
+		return nil, malformed(loc, `the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {"<root>":...}`, nil)
 	}
 	if err != nil {
 		return nil, err
@@ -3482,8 +3533,8 @@ func (w *walker) item(o *object, run *arrayRun, sc *scope, scalar bool) (element
 // It DECLINES a second member of the top-level object, which has no XML twin,
 // so no marker tracks it: it would be a second document element (XML 1.0 §2.1
 // [1]). Content after the object is no decline but malformed, JSON text being
-// one value (RFC 8259 §2), and its error is a plain one, whether the decoder
-// reads that content as a value or as a syntax error.
+// one value (RFC 8259 §2), and its error's class is [Malformed], whether the
+// decoder reads that content as a value or as a syntax error.
 func (w *walker) end(root *element) error {
 	root.finish()
 	if w.err != nil {
@@ -3503,7 +3554,7 @@ func (w *walker) end(root *element) error {
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("jsonsrc: %s: content follows the top-level object", loc)
+	return malformed(loc, "content follows the top-level object", nil)
 }
 
 // unexpectedEOF turns the io.EOF token reports at the end of the input into
@@ -3511,7 +3562,7 @@ func (w *walker) end(root *element) error {
 // and passes any other error through.
 func unexpectedEOF(err error, loc xsderr.Loc) error {
 	if errors.Is(err, io.EOF) {
-		return fmt.Errorf("jsonsrc: %s: malformed JSON: %w", loc, io.ErrUnexpectedEOF)
+		return malformed(loc, "malformed JSON", io.ErrUnexpectedEOF)
 	}
 	return err
 }

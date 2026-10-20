@@ -269,9 +269,9 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 
 // TestRootNaming pins the top-level shapes that name no validation root, none
 // of which has an XML twin (walker.root), and the shapes after the root's
-// value, each with its class: a decline is a *DeclineError, and an absent or
-// malformed document and content after the top-level object are not (#2710).
-// How the root's key names it is TestPrefixedKey's and
+// value, each with its class: a decline is an *Error of class Decline, and an
+// absent or malformed document and content after the top-level object are not
+// (#2710). How the root's key names it is TestPrefixedKey's and
 // TestRootOfTwoExpandedNames'.
 func TestRootNaming(t *testing.T) {
 	v := validatorOver(t, orderSchema)
@@ -279,7 +279,7 @@ func TestRootNaming(t *testing.T) {
 		name, json string
 		prefix     string
 		says       string
-		decline    bool // whether errors.As matches a *DeclineError
+		decline    bool // whether the error is an *Error of class Decline
 	}{
 		{"top level not an object", `["order"]`,
 			"jsonsrc: instance.json:1:1: ", "the top-level value is not an object", true},
@@ -310,9 +310,9 @@ func TestRootNaming(t *testing.T) {
 			if !strings.HasPrefix(err.Error(), tc.prefix) || !strings.Contains(err.Error(), tc.says) {
 				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, tc.says)
 			}
-			var d *DeclineError
-			if got := errors.As(err, &d); got != tc.decline {
-				t.Errorf("Validate(%s): errors.As(err, *DeclineError) = %v, want %v", tc.json, got, tc.decline)
+			var e *Error
+			if got := errors.As(err, &e) && e.Class() == Decline; got != tc.decline {
+				t.Errorf("Validate(%s): a decline = %v, want %v", tc.json, got, tc.decline)
 			}
 		})
 	}
@@ -499,42 +499,106 @@ func TestNilArguments(t *testing.T) {
 	}
 }
 
-// TestDeclineError pins the decline class a caller matches with errors.As
-// (#2710): a decline is a *DeclineError carrying the location its message
-// opens with, and is no *xsderr.Error; a fault reading the input and a nil
-// argument are not declines. TestRootNaming pins the class of the top-level
-// shapes, malformed JSON included.
-func TestDeclineError(t *testing.T) {
-	v := validatorOver(t, attributeDeclinesSchema)
-	_, err := Validate(v, strings.NewReader(`{"r":{"price":1,"a":"x"}}`), WithURI(jsonURI))
-	var d *DeclineError
-	if !errors.As(err, &d) {
-		t.Fatalf("attribute after a child: errors.As(%v, *DeclineError) = false, want the decline", err)
-	}
-	if want := (xsderr.Loc{URI: jsonURI, Line: 1, Col: 17}); d.Loc() != want {
-		t.Errorf("attribute after a child: Loc() = %v, want %v", d.Loc(), want)
-	}
-	var x *xsderr.Error
-	if errors.As(err, &x) {
-		t.Errorf("attribute after a child: %v is an *xsderr.Error; a decline is no validity verdict", err)
+// TestError pins every located class Validate returns as an *Error that
+// errors.As reaches (#2792): its Class, its Loc, and its Msg, the message
+// alone, with no "jsonsrc: " and no location, under a URI carrying colons.
+// Error() is "jsonsrc: " + Loc + ": " + Msg, a read fault still reaches the
+// reader's error, and none is an *xsderr.Error. The nil-argument errors are no
+// *Error. TestRootNaming pins the class of the top-level shapes.
+func TestError(t *testing.T) {
+	const uri = "dir:a/order:1.json"
+	boom := errors.New("disk on fire")
+	at := func(line, col int) xsderr.Loc { return xsderr.Loc{URI: uri, Line: line, Col: col} }
+	orders := validatorOver(t, orderSchema)
+	for _, tc := range []struct {
+		name  string
+		v     *validate.Validator
+		r     io.Reader
+		class Class
+		loc   xsderr.Loc
+		msg   string
+	}{
+		{"malformed JSON", orders, strings.NewReader(`{"order":{"size":1,}}`), Malformed, at(1, 20),
+			"malformed JSON: invalid character '}' looking for beginning of object key string"},
+		{"malformed JSON at the end of the input", orders, strings.NewReader(`{"order":{"size":1`), Malformed, at(1, 19),
+			"malformed JSON: unexpected EOF"},
+		{"no JSON value", orders, strings.NewReader(``), Malformed, at(1, 1),
+			`the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {"<root>":...}`},
+		{"content follows", orders, strings.NewReader(`{"order":null}{}`), Malformed, at(1, 15),
+			"content follows the top-level object"},
+		// Bytes the decoder rejects before it reads on to the reader's error:
+		// the decoder's error is not r's, so the class is Malformed.
+		{"malformed bytes, then a fault reading the input", orders,
+			io.MultiReader(strings.NewReader(`{"order",`), iotest.ErrReader(boom)), Malformed, at(1, 10),
+			"malformed JSON: invalid character ',' after object key"},
+		{"malformed bytes in the read that faults", orders, &bytesThenErr{b: []byte(`{"order",`), err: boom}, Malformed, at(1, 10),
+			"malformed JSON: invalid character ',' after object key"},
+		{"read fault", orders, iotest.ErrReader(boom), ReadFault, at(1, 1),
+			"fault reading the input: disk on fire"},
+		{"read fault mid-document", orders, io.MultiReader(strings.NewReader(`{"order":{"si`), iotest.ErrReader(boom)), ReadFault, at(1, 11),
+			"fault reading the input: disk on fire"},
+		{"decline", orders, strings.NewReader(`{"z:nosuch":{}}`), Decline, at(1, 2),
+			`member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`},
+		{"decline after a child", validatorOver(t, attributeDeclinesSchema), strings.NewReader(`{"r":{"price":1,"a":"x"}}`), Decline, at(1, 17),
+			`attribute member "a" follows a child member of {urn:t}r; move attribute members ahead of the first child member, or declare a struct's attribute fields before its child fields, as an element's attributes are read before its children`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Validate(tc.v, tc.r, WithURI(uri))
+			var e *Error
+			if !errors.As(err, &e) {
+				t.Fatalf("Validate = %v; errors.As does not reach an *Error", err)
+			}
+			if e.Class() != tc.class {
+				t.Errorf("Class() = %d, want %d", e.Class(), tc.class)
+			}
+			if e.Loc() != tc.loc {
+				t.Errorf("Loc() = %v, want %v", e.Loc(), tc.loc)
+			}
+			if e.Msg() != tc.msg {
+				t.Errorf("Msg() = %q, want %q", e.Msg(), tc.msg)
+			}
+			if want := "jsonsrc: " + tc.loc.String() + ": " + tc.msg; err.Error() != want {
+				t.Errorf("Error() = %q, want %q", err, want)
+			}
+			if tc.class == ReadFault && !errors.Is(err, boom) {
+				t.Errorf("Validate = %q; errors.Is does not reach the reader's error", err)
+			}
+			var x *xsderr.Error
+			if errors.As(err, &x) {
+				t.Errorf("Validate = %v is an *xsderr.Error; no jsonsrc error is a validity verdict", err)
+			}
+		})
 	}
 	for _, tc := range []struct {
 		name string
 		v    *validate.Validator
 		r    io.Reader
 	}{
-		{"read fault", v, iotest.ErrReader(errors.New("disk on fire"))},
 		{"nil validator", nil, strings.NewReader(`{}`)},
-		{"nil reader", v, nil},
+		{"nil reader", orders, nil},
 	} {
-		_, err := Validate(tc.v, tc.r, WithURI(jsonURI))
-		if err == nil {
-			t.Fatalf("%s: Validate returned no error", tc.name)
-		}
-		if errors.As(err, &d) {
-			t.Errorf("%s: errors.As(%v, *DeclineError) = true; only a decline is one", tc.name, err)
+		_, err := Validate(tc.v, tc.r, WithURI(uri))
+		var e *Error
+		if err == nil || errors.As(err, &e) {
+			t.Errorf("%s: Validate = %v, want an error that is no *Error", tc.name, err)
 		}
 	}
+}
+
+// bytesThenErr returns b, and err from the Read that returns b's last byte and
+// every Read after it.
+type bytesThenErr struct {
+	b   []byte
+	err error
+}
+
+func (r *bytesThenErr) Read(p []byte) (int, error) {
+	n := copy(p, r.b)
+	r.b = r.b[n:]
+	if len(r.b) > 0 {
+		return n, nil
+	}
+	return n, r.err
 }
 
 // TestErrorWraps pins the error classes Validate's doc states as wrapping

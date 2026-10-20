@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -246,11 +245,11 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 	defer closeSrc()
-	read := &watchedReader{r: opened}
 
 	if format == formatJSON {
-		return vn.assessJSON(instance, read, stdout, stderr)
+		return vn.assessJSON(instance, opened, stdout, stderr)
 	}
+	read := &watchedReader{r: opened}
 	v, src, code := vn.validatorFor(instance, read, stderr)
 	if code != exitOK {
 		return code
@@ -288,27 +287,30 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 // (#2627), so a JSON instance carries none, and -no-hints changes nothing for
 // it. instanceHints, an XML tokenizer, is never run over JSON bytes.
 //
-// jsonsrc's error channel is one (nil, err): malformed JSON, content after the
-// top-level object, an I/O fault mid-read (which jsonsrc reports as a fault
-// reading the input), and every input the mapping declines, which alone comes
-// back as a *jsonsrc.DeclineError. jsonsrc's doc makes none of them a validity
-// verdict, and nothing tells a shape the mapping rejects from an arm it does
-// not implement, so the line — jsonErrorLine's "<loc>: [jsonsrc] <message>",
-// naming no class — lands on stdout with the report and is charged
-// exitUndecided whatever the class: charging exitInvalid would charge every
-// decline as invalid. Malformed XML is charged exitInvalid instead, on one's
-// reasoning for xmlsrc's fault.
+// jsonsrc's error channel is one (nil, err), every error of which but a nil
+// argument's is a *jsonsrc.Error of a class jsonsrc.Validate's doc lists:
+// malformed JSON, a fault reading src, or an input the mapping declines.
+// jsonsrc's doc makes none of them a validity verdict, and nothing tells a
+// shape the mapping rejects from an arm it does not implement, so the line —
+// "<loc>: [jsonsrc] <message>", built from the error's Loc and Msg and naming
+// no class — lands on stdout with the report and is charged exitUndecided
+// whatever the class: charging exitInvalid would charge every decline as
+// invalid. Malformed XML is charged exitInvalid instead, on one's reasoning for
+// xmlsrc's fault.
 //
-// Every line but a decline's and one for a fault src returned ends with
-// formatHint's clause: malformed JSON, content after the top-level object and
-// an input holding no JSON value alike, which jsonsrc.Validate's doc classes
-// together as an input that is not exactly one JSON value.
-func (vn *validation) assessJSON(instance string, src *watchedReader, stdout, stderr io.Writer) int {
+// A line of class jsonsrc.Malformed, and no other, ends with formatHint's
+// clause. An error that is no *jsonsrc.Error, which only the nil arguments
+// assessJSON never passes are, is located at instance alone, with its own
+// text as the message and no clause.
+func (vn *validation) assessJSON(instance string, src io.Reader, stdout, stderr io.Writer) int {
 	result, err := jsonsrc.Validate(vn.base, src, jsonsrc.WithURI(instance))
 	if err != nil {
-		line := jsonErrorLine(instance, err)
-		var decline *jsonsrc.DeclineError
-		if !errors.As(err, &decline) && src.fault == nil {
+		var e *jsonsrc.Error
+		if !errors.As(err, &e) {
+			return reportLines(stdout, stderr, instance, []string{fmt.Sprintf("%s: [%s] %s", instance, jsonsrcToken, err)}, exitUndecided)
+		}
+		line := fmt.Sprintf("%s: [%s] %s", e.Loc(), jsonsrcToken, e.Msg())
+		if e.Class() == jsonsrc.Malformed {
 			line += vn.formatHint(instance)
 		}
 		return reportLines(stdout, stderr, instance, []string{line}, exitUndecided)
@@ -321,11 +323,10 @@ func (vn *validation) assessJSON(instance string, src *watchedReader, stdout, st
 
 // formatHint is the clause an instance's line ends with where -format forced a
 // format its extension does not name and the instance is not well-formed in
-// it: assessJSON appends it to every line of jsonsrc's error channel but a
-// decline's, and one to the [xml-wf] line of xmlsrc.Validate's error or of its
-// result's validate.Result.Err, each only where no fault reading the instance
-// raised the error. It names the format the flag forced and the one the
-// extension names.
+// it: assessJSON appends it to the line of a jsonsrc.Malformed error, and one
+// to the [xml-wf] line of xmlsrc.Validate's error or of its result's
+// validate.Result.Err where no fault reading the instance raised the error. It
+// names the format the flag forced and the one the extension names.
 //
 // It is "" where -format was not given; where the extension names no format,
 // as standard input's absent one names none; where it names the forced one;
@@ -342,17 +343,17 @@ func (vn *validation) formatHint(instance string) string {
 	return fmt.Sprintf("; -format %s read %s as %s, but its extension names %s: drop -format, or pass -format %s", vn.forced, instance, vn.forced, named, named)
 }
 
-// watchedReader is an instance's reader, keeping fault, the first error other
-// than io.EOF it returned: jsonsrc's doc leaves a caller that needs to tell a
-// read fault from malformed JSON to check its own reader, and xmlsrc charges a
-// read fault [xml-wf] as it does malformed XML.
+// watchedReader is an XML instance's reader, keeping fault, the first error
+// other than io.EOF it returned: xmlsrc charges a read fault [xml-wf] as it
+// does malformed XML, so only the reader tells one's line not to take
+// formatHint's clause.
 type watchedReader struct {
 	r     io.Reader
 	fault error
 }
 
-// Read is io.Reader's Read over r, keeping fault, for jsonsrc.Validate, and
-// for instanceHints and xmlsrc.Validate.
+// Read is io.Reader's Read over r, keeping fault, for instanceHints and
+// xmlsrc.Validate.
 func (w *watchedReader) Read(p []byte) (int, error) {
 	n, err := w.r.Read(p)
 	if err != nil && !errors.Is(err, io.EOF) && w.fault == nil {
@@ -362,52 +363,10 @@ func (w *watchedReader) Read(p []byte) (int, error) {
 }
 
 // jsonsrcToken stands where a diagnostic line's [<rule>] stands on every line
-// jsonErrorLine renders. It names the source that raised the error, not a spec
-// rule: no jsonsrc error is an xsderr.Error (#2721).
+// assessJSON renders from jsonsrc's error channel. It names the source that
+// raised the error, not a spec rule: no jsonsrc error is an xsderr.Error
+// (#2721).
 const jsonsrcToken = "jsonsrc"
-
-// jsonErrorLine renders an error from jsonsrc's error channel, uri being the
-// name assessJSON passed to jsonsrc.WithURI, as the contract's
-// "<loc>: [jsonsrc] <message>", so a line-oriented consumer splits it like a
-// violation's line.
-//
-// It reads err's text, the one encoding every error of the channel has:
-// malformed JSON, content after the top-level object and a read fault are
-// plain errors, and only a decline is a *jsonsrc.DeclineError with a Loc.
-// jsonsrc.Validate's doc spells each one "jsonsrc: " and the location, which
-// renders as uri followed by its line and column, then ": " and the message.
-// The location is therefore split off by uri and not at the first colon, which
-// a path may carry, and ends at the first ": " after uri, which the line and
-// column cannot contain. An error not spelled that way — the nil-argument
-// errors are the only ones Validate's doc names, and assessJSON passes neither
-// — is located at uri alone, with its own text as the message.
-func jsonErrorLine(uri string, err error) string {
-	msg := strings.TrimPrefix(err.Error(), jsonsrcToken+": ")
-	rest, _ := strings.CutPrefix(msg, uri)
-	lineCol, message, ok := strings.Cut(rest, ": ")
-	if !strings.HasPrefix(msg, uri) || !ok || !isLineCol(lineCol) {
-		return fmt.Sprintf("%s: [%s] %s", uri, jsonsrcToken, msg)
-	}
-	return fmt.Sprintf("%s%s: [%s] %s", uri, lineCol, jsonsrcToken, message)
-}
-
-// isLineCol reports whether s is what an xsderr.Loc renders after its URI: ""
-// when it has no line, ":<line>" or ":<line>:<col>".
-func isLineCol(s string) bool {
-	if s == "" {
-		return true
-	}
-	parts := strings.Split(s, ":")
-	if parts[0] != "" || len(parts) > 3 {
-		return false
-	}
-	for _, p := range parts[1:] {
-		if _, err := strconv.ParseUint(p, 10, 0); err != nil {
-			return false
-		}
-	}
-	return true
-}
 
 // validatorFor returns the validator instance is assessed against and the
 // reader to assess it from, or a non-exitOK code that is the instance's whole

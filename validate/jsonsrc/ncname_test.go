@@ -135,9 +135,9 @@ func TestKeyNotNCNameDeclines(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(tc.v, strings.NewReader(tc.json), WithURI(jsonURI))
-			var d *DeclineError
-			if !errors.As(err, &d) {
-				t.Fatalf("Validate(%s) = %v, %v; want a *DeclineError", tc.json, res, err)
+			var e *Error
+			if !errors.As(err, &e) || e.Class() != Decline {
+				t.Fatalf("Validate(%s) = %v, %v; want a decline", tc.json, res, err)
 			}
 			if res != nil {
 				t.Errorf("Validate(%s) returned a result beside its decline", tc.json)

@@ -294,13 +294,13 @@ func TestUsageCoversContract(t *testing.T) {
 	}
 	// Why every jsonsrc error exits 4, whether the input is malformed, a shape
 	// the mapping rejects or an arm it does not implement (#2686), now that
-	// jsonsrc types its declines (#2710). Matched over the text with its line
-	// breaks folded, as the sentence wraps.
+	// jsonsrc classes its errors (#2710, #2792). Matched over the text with
+	// its line breaks folded, as the sentence wraps.
 	why := "They share 4 because the line names no class, and nothing tells a shape the mapping rejects from an arm it does not implement, so charging 1 would charge every decline as invalid."
 	if !strings.Contains(strings.Join(strings.Fields(usage), " "), why) {
 		t.Errorf("usage does not state why every jsonsrc error exits 4 (%q)", why)
 	}
-	// The jsonsrc error line's shape, which jsonErrorLine renders (#2721).
+	// The jsonsrc error line's shape, which assessJSON renders (#2721).
 	shape := "each prints " + fmt.Sprintf("<loc>: [%s] <message>", jsonsrcToken) + " on stdout"
 	if !strings.Contains(strings.Join(strings.Fields(usage), " "), shape) {
 		t.Errorf("usage does not state the jsonsrc error line's shape (%q)", shape)

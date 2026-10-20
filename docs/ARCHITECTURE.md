@@ -113,7 +113,7 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and imports
 `parser/xmltree`, `validate`, `xsd` and `xsderr` — and neither `loader` nor
 `parser`, which an imports test pins; `validate/jsonsrc` exports
-`Validate`/`Option`/`WithURI` and `DeclineError`, imports `validate`, `xsd`, `xsderr`,
+`Validate`/`Option`/`WithURI` and `Error`/`Class` with its constants, imports `validate`, `xsd`, `xsderr`,
 `internal/xmlname`, `internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
 view `Validator.Schema` returns, to name the root and classify members, and
 reads `xsd.Schema.ContentMatcher` off that view through a capability
@@ -650,7 +650,7 @@ charges reach a `value.Backend` through `New`'s required second parameter,
 which must be the backend the schema was compiled with.
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and drives that walk
 over an XML instance decoded by `parser/xmltree`; `validate/jsonsrc`
-exports the same three and `DeclineError`, and drives it over a JSON instance
+exports the same three and `Error`/`Class` with its constants, and drives it over a JSON instance
 on the arms its `doc.go` names as implemented (M8); `validate/bersrc` is
 `doc.go`-only (M11). Everything below not covered
 by that seam is the destination, stated in present tense because it is a

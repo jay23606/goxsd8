@@ -4,12 +4,18 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
+
+	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/validate"
 )
 
 // The fixtures every outcome test turns on: the schema parse's own tests
@@ -1019,18 +1025,44 @@ func TestValidateJSONErrorLineSplitsByURI(t *testing.T) {
 	}
 }
 
-// TestJSONErrorLine pins jsonErrorLine on the spellings no instance the CLI
-// reads produces: a location with no line, and an error not located at the
-// URI at all, which is located at the URI with its own text.
-func TestJSONErrorLine(t *testing.T) {
-	for _, c := range []struct{ uri, err, want string }{
-		{"a.json", "jsonsrc: a.json: no line", "a.json: [jsonsrc] no line"},
-		{"a.json", "jsonsrc: a.json:3: line only", "a.json:3: [jsonsrc] line only"},
-		{"a.json", "jsonsrc: Validate: nil io.Reader", "a.json: [jsonsrc] Validate: nil io.Reader"},
-		{"a", "jsonsrc: a.json:1:2: elsewhere", "a: [jsonsrc] a.json:1:2: elsewhere"},
+// TestAssessJSONHintFollowsClass pins that the class of the jsonsrc error, and
+// not whether src returned an error, decides formatHint's clause: bytes src
+// returns that are malformed ahead of src's error are malformed JSON and take
+// it, and a document src's error cuts off is a fault reading the input and
+// does not (#2792). Each instance name's extension names xml, under -format
+// json.
+func TestAssessJSONHintFollowsClass(t *testing.T) {
+	path, err := rootLocation(orderSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := strict.New()
+	schema, _, err := compileSet([]parser.Root{parser.RootAt(path)}, backend, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := validate.New(schema, backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vn := &validation{base: v, backend: backend, forced: formatJSON}
+	boom := errors.New("disk on fire")
+	for _, c := range []struct {
+		name string
+		src  io.Reader
+		want string
+	}{
+		{"malformed bytes, then a fault", io.MultiReader(strings.NewReader(`{"order",`), iotest.ErrReader(boom)),
+			"order.xml:1:10: [jsonsrc] malformed JSON: invalid character ',' after object key; -format json read order.xml as json, but its extension names xml: drop -format, or pass -format xml\n"},
+		{"a document a fault cuts off", io.MultiReader(strings.NewReader(`{"order":{"si`), iotest.ErrReader(boom)),
+			"order.xml:1:11: [jsonsrc] fault reading the input: disk on fire\n"},
 	} {
-		if got := jsonErrorLine(c.uri, errors.New(c.err)); got != c.want {
-			t.Errorf("jsonErrorLine(%q, %q) = %q, want %q", c.uri, c.err, got, c.want)
+		var stdout, stderr bytes.Buffer
+		if code := vn.assessJSON("order.xml", c.src, &stdout, &stderr); code != exitUndecided {
+			t.Errorf("%s: assessJSON = %d, want %d (stderr %q)", c.name, code, exitUndecided, stderr.String())
+		}
+		if stdout.String() != c.want {
+			t.Errorf("%s: stdout = %q, want %q", c.name, stdout.String(), c.want)
 		}
 	}
 }

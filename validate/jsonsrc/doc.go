@@ -38,8 +38,8 @@
 //     top-level object.
 //   - A scalar is the element's simple content, null is xsi:nil="true", and an
 //     array is one child per item, for repeated children.
-//   - An input the mapping declines is a [*DeclineError] from [Validate],
-//     which returns no [validate.Result] for it.
+//   - An input the mapping declines is an [*Error] of class [Decline] from
+//     [Validate], which returns no [validate.Result] for it.
 //
 // Against a schema declaring {urn:o}order with an attribute kind and a
 // repeated child item, this instance maps to <o:order xmlns:o="urn:o"
@@ -375,8 +375,8 @@
 //	  unattributed element
 //	unresolved {type definition}          none: a permanent limitation
 //
-// An input the implemented arms do not map is a [*DeclineError] from
-// [Validate], naming the arm it is not — never a silent drop and never a
+// An input the implemented arms do not map is an [*Error] of class [Decline]
+// from [Validate], naming the arm it is not — never a silent drop and never a
 // guessed mapping. [Validate]'s doc states every error class it returns. Each
 // entry below whose XML twin the engine assesses is tracked by a GAP(jsonsrc)
 // marker at the function that declines it — rootMember, childNamed, useNamed,
