@@ -13,24 +13,6 @@ import (
 // (walker.selector, walker.attributes), whose {test}s read them beside an
 // element's own [attributes] (key-cta-ta-select clause 1.1.3).
 
-// inheritor is the four methods of *xsd.Schema walker.handDown reads beyond
-// validate.SchemaView: xsd.Schema.ResolvedInheritable, an attribute use's
-// {inheritable} (key-p-inherited clause 3.1); xsd.Schema.Attribute, the
-// top-level declaration an attribute's name ·resolves· to, whose {inheritable}
-// clause 3.2 reads; xsd.Schema.AllowsAttributeWildcardName, whether a skip
-// {attribute wildcard} ·skips· an attribute, which leaves it no declaration;
-// and xsd.Schema.EffectiveValueConstraint, the value a ·defaulted attribute·
-// takes. Reading them through this capability keeps one encoding of each
-// (STYLE T4) without widening SchemaView's exported surface, as governor
-// does. Under a view without it, which validate.Validator.Schema never
-// returns, the mapping determines no [inherited attributes] below the root.
-type inheritor interface {
-	ResolvedInheritable(u xsd.AttributeUse) bool
-	Attribute(name xsd.QName) (xsd.AttributeDeclaration, bool)
-	AllowsAttributeWildcardName(w xsd.Wildcard, name xsd.QName) bool
-	EffectiveValueConstraint(u xsd.AttributeUse) (xsd.ValueConstraint, bool)
-}
-
 // handDown is the [inherited attributes] of every element child of the
 // element whose [attributes] are attrs, whose members are classified against
 // o, and whose own [inherited attributes] are inherited, where known says the
@@ -59,13 +41,12 @@ type inheritor interface {
 // each type is read off is validate.Validator.Governing's, and the hand-down
 // under it is restated here.
 func (w *walker) handDown(attrs []validate.Attribute, o *object, inherited []validate.Attribute, known bool) ([]validate.Attribute, bool) {
-	s, ok := w.schema.(inheritor)
-	if !ok || !known || len(o.governing) == 0 {
+	if !known || len(o.governing) == 0 {
 		return nil, false
 	}
-	handed := handedUnder(s, attrs, o.governing[0].typ, inherited)
+	handed := handedUnder(w.schema, attrs, o.governing[0].typ, inherited)
 	for _, gt := range o.governing[1:] {
-		if !slices.EqualFunc(handed, handedUnder(s, attrs, gt.typ, inherited), sameAttribute) {
+		if !slices.EqualFunc(handed, handedUnder(w.schema, attrs, gt.typ, inherited), sameAttribute) {
 			return nil, false
 		}
 	}
@@ -87,7 +68,7 @@ func (w *walker) handDown(attrs []validate.Attribute, o *object, inherited []val
 // any child has, and every candidate from further up had its shadowing
 // settled when inherited was computed. A non-inheritable attribute of the
 // element shadows nothing above it.
-func handedUnder(s inheritor, attrs []validate.Attribute, t xsd.TypeDefinition, inherited []validate.Attribute) []validate.Attribute {
+func handedUnder(s validate.SchemaView, attrs []validate.Attribute, t xsd.TypeDefinition, inherited []validate.Attribute) []validate.Attribute {
 	ct, complex := t.(xsd.ComplexType)
 	var own []validate.Attribute
 	for _, a := range attrs {
@@ -127,7 +108,7 @@ func handedUnder(s inheritor, attrs []validate.Attribute, t xsd.TypeDefinition, 
 // wildcard} of ct ·skips· it, leaving it no declaration; and otherwise the
 // {inheritable} of the top-level declaration its name ·resolves· to (clause
 // 3.2, key-governing-ad clause 3), false where it resolves to none.
-func inheritable(s inheritor, ct xsd.ComplexType, complex bool, a validate.Attribute) bool {
+func inheritable(s validate.SchemaView, ct xsd.ComplexType, complex bool, a validate.Attribute) bool {
 	if complex {
 		for _, u := range ct.AttributeUses() {
 			if u.DeclarationName() == a.Name() {
@@ -150,7 +131,7 @@ func inheritable(s inheritor, ct xsd.ComplexType, complex bool, a validate.Attri
 // and no attribute of attrs of its ·expanded name·; and if so, that
 // constraint, whose {lexical form} is the value Attribute Default Value
 // (§3.4.5.1) supplies.
-func defaultedConstraint(s inheritor, u xsd.AttributeUse, attrs []validate.Attribute) (xsd.ValueConstraint, bool) {
+func defaultedConstraint(s validate.SchemaView, u xsd.AttributeUse, attrs []validate.Attribute) (xsd.ValueConstraint, bool) {
 	if u.Required() {
 		return xsd.ValueConstraint{}, false
 	}

@@ -435,17 +435,16 @@ func cloneSlice[T any](s []T) []T {
 }
 
 // ElementResolver is the minimal capability a consumer needs to look up a
-// top-level element declaration by its expanded name (STYLE T3). Its intended
-// consumer is the instance validator (cvc-resolve-instance §3.17.6.3, a future
-// consumer) and any tooling that needs only element lookup, not the whole
-// schema.
+// top-level element declaration by its expanded name (STYLE T3). Its consumers
+// are validate.SchemaView, which embeds it, and element-reference resolution
+// during finalize (src-resolve clause 1.3).
 type ElementResolver interface {
 	Element(name QName) (ElementDeclaration, bool)
 }
 
 // AttributeResolver is the minimal capability a consumer needs to look up a
-// top-level attribute declaration by its expanded name (STYLE T3). Its intended
-// consumer is the instance validator (a future consumer) and attribute-use
+// top-level attribute declaration by its expanded name (STYLE T3). Its
+// consumers are validate.SchemaView, which embeds it, and attribute-use
 // resolution during finalize (#173).
 type AttributeResolver interface {
 	Attribute(name QName) (AttributeDeclaration, bool)

@@ -242,14 +242,13 @@ func (typeLexical) answers() chargeOrder { return firstCharge }
 // GAP(jsonsrc): no note is kept where the mapping attributes the child to
 // nothing (placement.attributed): its parent's content model, or one above it,
 // is one xsd.Schema.ContentMatcher declines (object.unattributed, its GAP(xsd)
-// marker, the maxPartitionStates ceiling RULED permanent there), or the schema
-// view lacks the governor capability, which validate.Validator.Schema never
-// returns. validate records its decline where the parent's own model is the
-// one declined (contentCheck.match) and walks the XML twin's subtree undecided
-// below it (its GAP(validate) marker in walk.child), and charges the parent's
-// content at no child, so walker.annotate, the note's one consumer, leaves no
-// charge the engine makes without a clause it would carry. Owned by #2670,
-// which retires with #1601's ruling.
+// marker, the maxPartitionStates ceiling RULED permanent there). validate
+// records its decline where the parent's own model is the one declined
+// (contentCheck.match) and walks the XML twin's subtree undecided below it
+// (its GAP(validate) marker in walk.child), and charges the parent's content
+// at no child, so walker.annotate, the note's one consumer, leaves no charge
+// the engine makes without a clause it would carry. Owned by #2670, which
+// retires with #1601's ruling.
 //
 // GAP(jsonsrc): no note is kept where the types that may govern the parent
 // differ on the charge at the child, or, for an unnamed, on the keys they
@@ -518,13 +517,11 @@ func (w *walker) noteTypeLexical(e *element, typ *attribute) {
 // GAP(jsonsrc): no note is kept where the mapping attributes the element to
 // nothing (placement.attributed): its parent's content model, or one above it,
 // is one xsd.Schema.ContentMatcher declines (object.unattributed, its GAP(xsd)
-// marker, the maxPartitionStates ceiling RULED permanent there), or the schema
-// view lacks the governor capability, which validate.Validator.Schema never
-// returns. validate walks the XML twin's subtree undecided there (its
-// GAP(validate) marker in walk.child) and charges it no text, so
-// walker.annotate, the note's one consumer, leaves no charge the engine makes
-// without a clause it would carry. Owned by #2670, which retires with #1601's
-// ruling.
+// marker, the maxPartitionStates ceiling RULED permanent there). validate
+// walks the XML twin's subtree undecided there (its GAP(validate) marker in
+// walk.child) and charges it no text, so walker.annotate, the note's one
+// consumer, leaves no charge the engine makes without a clause it would carry.
+// Owned by #2670, which retires with #1601's ruling.
 //
 // GAP(jsonsrc): no note is kept where the declaration carries a {type table}
 // whose selection the engine withholds, a {test} it reaches being outside its

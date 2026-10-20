@@ -618,8 +618,7 @@ type object struct {
 	overriding *overriding
 	// unattributed is the mapping attributing none of the owner's children
 	// under governing: the element content of one of them is one
-	// xsd.Schema.ContentMatcher declines, or the schema view lacks the
-	// governor capability (walker.govern).
+	// xsd.Schema.ContentMatcher declines (walker.govern).
 	unattributed bool
 	// unassessed is the engine assessing none of the owner's children with
 	// their governance decided: it walks them undecided, the owner's {type
@@ -1671,10 +1670,8 @@ func (w *walker) objectElement(m elementMember, loc xsderr.Loc, key string, v va
 // below one whose ·governing type definition· the engine does not determine
 // either, so that it walks the subtree undecided: one whose selection it
 // withholds (walker.unselected), or one whose parent's content model
-// xsd.Schema.ContentMatcher declines, or under a schema view without the
-// governor capability, which validate.Validator.Schema never returns
-// (object.unattributed). Governing answers no error here, the element read
-// with no xsi:type.
+// xsd.Schema.ContentMatcher declines (object.unattributed). Governing answers
+// no error here, the element read with no xsi:type.
 func (w *walker) selector(d xsd.ElementDeclaration, at placement) (from xsd.ElementDeclaration, declares, read bool) {
 	if at.parent == nil {
 		return d, true, true
@@ -1816,17 +1813,6 @@ func (w *walker) instanceType(e *element, lexical string) (xsd.TypeDefinition, b
 	return w.schema.ResolvedType(xsd.TypeDefinitionRef{Name: xsd.QName{Space: space, Local: local}})
 }
 
-// governor is the method of *xsd.Schema the mapping reads beyond
-// validate.SchemaView to attribute an element's children:
-// xsd.Schema.ContentMatcher, the cvc-accept walk validate's contentCheck.match
-// ·attributes· a child by. Reading it through this capability keeps one
-// encoding of it (STYLE T4) without widening SchemaView's exported surface.
-// Under a view without it, which validate.Validator.Schema never returns, the
-// mapping attributes no child (walker.govern, object.unattributed).
-type governor interface {
-	ContentMatcher(t xsd.ComplexType) (*xsd.Matcher, bool)
-}
-
 // anyTypeRef names ·xs:anyType·, the type a ·laxly assessed· element is
 // validated against (key-lva).
 var anyTypeRef = xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}}
@@ -1834,9 +1820,10 @@ var anyTypeRef = xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsd.XMLSchemaNS, L
 // govern makes ts, which may be empty, the types that may govern o's owner
 // (object.governing), and readies the attribution of the owner's children
 // under each: a matcher over its element content, where it has one
-// (governingType.matcher). It marks the children unattributed
-// (object.unattributed) where xsd.Schema.ContentMatcher declines the content
-// of one of them, or the schema view lacks the governor capability.
+// (governingType.matcher), read off xsd.Schema.ContentMatcher, the cvc-accept
+// walk validate's contentCheck.match ·attributes· a child by. It marks the
+// children unattributed (object.unattributed) where ContentMatcher declines
+// the content of one of them.
 func (w *walker) govern(o *object, ts []xsd.TypeDefinition) {
 	if len(ts) == 0 {
 		return
@@ -1844,11 +1831,6 @@ func (w *walker) govern(o *object, ts []xsd.TypeDefinition) {
 	o.governing = make([]governingType, 0, len(ts))
 	for _, t := range ts {
 		o.governing = append(o.governing, governingType{typ: t})
-	}
-	g, ok := w.schema.(governor)
-	if !ok {
-		o.unattributed = true
-		return
 	}
 	for i := range o.governing {
 		ct, ok := o.governing[i].typ.(xsd.ComplexType)
@@ -1858,7 +1840,7 @@ func (w *walker) govern(o *object, ts []xsd.TypeDefinition) {
 		if _, element := ct.ContentType().(xsd.ElementContent); !element {
 			continue
 		}
-		m, ok := g.ContentMatcher(ct)
+		m, ok := w.schema.ContentMatcher(ct)
 		if !ok {
 			o.unattributed = true
 			return
@@ -2167,8 +2149,7 @@ func openContent(t xsd.ComplexType) bool {
 // The parent's governing types are empty where xsd.Schema.ContentMatcher
 // declines the content model of a type that may govern the grandparent
 // (object.unattributed), the parent's "$type" included
-// (walker.instanceGoverning), and where the schema view lacks the governor
-// capability, which validate.Validator.Schema never returns.
+// (walker.instanceGoverning).
 //
 // GAP(jsonsrc): a "$type" declines where the types its parent's or an
 // ancestor's {type table} can select settle it on different types, and the

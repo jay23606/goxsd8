@@ -115,9 +115,9 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `parser`, which an imports test pins; `validate/jsonsrc` exports
 `Validate`/`Option`/`WithURI` and `Error`/`Class` with its constants, imports `validate`, `xsd`, `xsderr`,
 `internal/xmlname`, `internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
-view `Validator.Schema` returns, to name the root and classify members, and
-reads `xsd.Schema.ContentMatcher` off that view through a capability
-interface, the `xsd` method beyond it the mapping needs, reads each
+view `Validator.Schema` returns, alone and with no capability assertion, to
+name the root, classify members, attribute children and hand down
+inherited attributes, reads each
 element's governance off `Validator.Governing`, and settles a root's
 attribute members by the type `Validator.ConditionallySelected` selects for
 them;
@@ -782,11 +782,6 @@ compiles, is documented, and has **zero** callers module-wide.
   `regex.FlavorFO` sat here on the same terms until `xpath` and `icpath`
   took it for their NCName prefix scanners (#979; `validate`'s scanner moved
   to `icpath`); the F&O functions it was built for still arrive at M6/M7.
-- **`xsd.AttributeResolver`** — whose godoc still names "the instance
-  validator (a future consumer)" — has no consumer, `validate` having shipped
-  and resolved attributes by another route. `validate.Validator.Schema()`
-  left this list when `validate/jsonsrc` became its consumer through
-  `validate.SchemaView`, which embeds `xsd.ElementResolver` (#848 re-scope).
 - **`parser.Element` / `Node` / `Text` and the raw-tree accessors** — the
   bulk consumer is still `conformance`'s decidability model
   (`conformance/schema.go`'s `schemaShapeDecidable` and its predicates hold

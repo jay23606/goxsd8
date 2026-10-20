@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -511,52 +510,6 @@ func TestUnresolvedWildcardType(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
 	twin(t, v, `{"zw":{"z":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}`,
 		`<zw xmlns="urn:t" xmlns:t="urn:t" `+xsiDecl+`><z/><z xsi:type="t:X" k="zz"/></zw>`, complexType)
-}
-
-// viewOnly is a schema view without the governor capability.
-type viewOnly struct{ validate.SchemaView }
-
-// TestTypeWithoutGovernor pins the governor capability's absence: under a
-// schema view without it the mapping attributes no child of p
-// (object.unattributed), as where xsd.Schema.ContentMatcher declines p's
-// content model, and a "$type" below the root is settled on p alone
-// (walker.instanceUnder). The governance itself is
-// validate.Validator.Governing's, which reads no capability of the view. Xe
-// ·overrides· x's ·locally declared type· L, so the second x's b maps as Xe's
-// attribute and nothing is charged. q has no ·locally declared type· within
-// p and ·resolves· to the top-level q, whose type Xe does not ·override·, so
-// every ·attribution· p may give it charges it, and its members are
-// classified under Xe rather than that type: b maps as an attribute, which
-// the engine, governing q by the type Xe does not ·override·, charges under
-// cvc-complex-type clause 2.1, where under q's type it would map as a child.
-func TestTypeWithoutGovernor(t *testing.T) {
-	v := validatorOver(t, governedSchema)
-	for _, c := range []struct {
-		doc    string
-		charge string
-	}{
-		{`{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:Xe","b":"1"}]}}`, ""},
-		{`{"p":{"$xmlns":{"t":"urn:t"},"t:q":{"$type":"t:Xe","b":"1"}}}`, "the attribute b matches no attribute use"},
-	} {
-		w := newWalker(jsonURI, strings.NewReader(c.doc), viewOnly{v.Schema()}, v.ConditionallySelected, v.Governing)
-		root, err := w.root()
-		if err != nil {
-			t.Fatalf("root: %v", err)
-		}
-		res := v.Assess(root)
-		if w.err != nil {
-			t.Fatalf("walking %s latched %v, want it to map", c.doc, w.err)
-		}
-		got := res.Violations()
-		if c.charge == "" && len(got) != 0 {
-			t.Errorf("walking %s charged %v, want nothing: b is an attribute Xe declares", c.doc, got)
-		}
-		if c.charge != "" && !slices.ContainsFunc(got, func(e *xsderr.Error) bool {
-			return e.Rule == ruleCvcComplexType && strings.HasPrefix(e.Msg, c.charge)
-		}) {
-			t.Errorf("walking %s charged %v, want a cvc-complex-type charge opening %q: b is an attribute", c.doc, got, c.charge)
-		}
-	}
 }
 
 // TestAbsentAffiliationLax pins the governance validate.Validator.Governing

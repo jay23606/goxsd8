@@ -100,24 +100,36 @@ func New(schema *xsd.Schema, backend value.Backend, opts ...Option) (*Validator,
 // declaration's {type definition} resolved to its component, and the
 // declarations and wildcards a complex type's content model contains, against
 // which an adapter whose source need spell no namespace classifies a child by
-// local name, or names one only a wildcard admits.
+// local name, or names one only a wildcard admits. It carries too the content
+// model of a complex type as the cvc-accept walk that ·attributes· a child
+// (ContentMatcher), and what an adapter that hands down [inherited
+// attributes] before the engine sees the element reads (key-p-inherited): a
+// top-level attribute declaration resolved by expanded name (Attribute), an
+// attribute use's {inheritable} (ResolvedInheritable), whether an attribute
+// wildcard admits a name (AllowsAttributeWildcardName), and the
+// ·effective value constraint· of an attribute use (EffectiveValueConstraint).
 //
 // Each method is the [xsd.Schema] method of the same name and answers on its
 // terms.
 type SchemaView interface {
 	xsd.ElementResolver
+	xsd.AttributeResolver
 	Elements() []xsd.ElementDeclaration
 	ResolvedType(ref xsd.TypeDefinitionOrRef) (xsd.TypeDefinition, bool)
 	ContainedElementDeclarations(within xsd.ComplexType) []xsd.ElementDeclaration
 	ContainedWildcards(within xsd.ComplexType) []xsd.Wildcard
+	ContentMatcher(t xsd.ComplexType) (*xsd.Matcher, bool)
+	ResolvedInheritable(u xsd.AttributeUse) bool
+	AllowsAttributeWildcardName(w xsd.Wildcard, name xsd.QName) bool
+	EffectiveValueConstraint(u xsd.AttributeUse) (xsd.ValueConstraint, bool)
 }
 
 var _ SchemaView = (*xsd.Schema)(nil)
 
 // Schema returns the [SchemaView] of the compiled schema v assesses against.
-// The walk reads the *xsd.Schema itself and not this narrowing, so widening
-// the view is the job of a CALLER that needs more, never of a rule inside the
-// package.
+// The walk reads the *xsd.Schema itself and not this narrowing. A schema read
+// a source adapter newly makes widens SchemaView, so an adapter reads the
+// schema through this view alone.
 func (v *Validator) Schema() SchemaView { return v.schema }
 
 // Result is the outcome of one [Validator.Assess] call.
