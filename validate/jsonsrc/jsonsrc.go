@@ -109,7 +109,11 @@ func WithURI(uri string) Option {
 //     its type: bytes r returned that are malformed ahead of r's error are
 //     [Malformed], and a document r's error cuts off is [ReadFault].
 //   - A decline, class [Decline], matched with errors.As(err, &e) &&
-//     e.Class() == Decline. It wraps nothing.
+//     e.Class() == Decline. It wraps nothing. Class() == Decline is the whole
+//     machine-readable answer: no identifier tells one decline from another.
+//     What its Msg names is as stated above; the wording is not part of the
+//     stable contract, because the package doc's "What declines" table is
+//     organised by remedy and its rows change as gaps close.
 //
 // None is an [xsderr.Error], and none wraps one Validate builds: none is a
 // validity verdict about a document. A read fault wraps whatever r returned.
