@@ -469,9 +469,9 @@
 //     reading's type declines a member it reads; and where none stands, as
 //     where the type selected for the attributes the run reads, one the
 //     "$type" does not ·override·, classifies an attribute the selection reads
-//     otherwise, so that neither classification is a fixed point (#2831). The
-//     engine charges cvc-elt clause 4 on the twin of each such reading whose
-//     type the "$type"'s does not ·override·;
+//     otherwise, so that neither classification is a fixed point, RULED
+//     permanent by #2831. The engine charges cvc-elt clause 4 on the twin of
+//     each such reading whose type the "$type"'s does not ·override·;
 //   - any other "$"-prefixed reserved member, "$" being no XML NameStartChar;
 //   - an array item that is itself an array;
 //   - a member of an object under a declaration carrying a {type table} that

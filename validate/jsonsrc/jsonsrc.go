@@ -3399,9 +3399,10 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 // GAP(jsonsrc): a "$type" declines where the type its element's {type table}
 // selects for the attributes its members are classified with under r.owner
 // is one it does not ·override·, that type governs the element, and it
-// classifies an attribute the selection reads otherwise: classified under
-// either type, the attributes select the other, so neither classification
-// is a fixed point, though the engine assesses each XML twin. Owned by #2831.
+// classifies an attribute the selection reads otherwise. RULED permanent by
+// #2831: classified under either type, the attributes select the other, so
+// neither classification is a fixed point, though the engine assesses each
+// XML twin.
 func (w *walker) overrode(r *attributeRun, next *runMember, sc *scope, closed *peeked) ([]validate.Attribute, []peeked, *object, error) {
 	t, slot, withheld, err := w.overridden(r, r.attributes())
 	if err != nil {
