@@ -504,6 +504,38 @@ func TestResultViolationsAreCopied(t *testing.T) {
 	}
 }
 
+// TestResultStanding pins Result.Standing over every shape of its three
+// inputs: a violation charges whatever else the Result holds, and an
+// unevaluated check or a source fault without one leaves it undecided.
+func TestResultStanding(t *testing.T) {
+	v := []*xsderr.Error{xsderr.New("cvc-elt.1", loc(1, 1), "sample")}
+	u := []Unevaluated{newUnevaluated("cvc-assertion", loc(1, 1), "sample")}
+	e := errors.New("source fault")
+	for _, s := range []Standing{Charged, Undecided, NotProvenInvalid} {
+		if s == 0 {
+			t.Errorf("an arm is the zero Standing, which must be no arm")
+		}
+	}
+	for _, c := range []struct {
+		name string
+		res  Result
+		want Standing
+	}{
+		{"none", Result{}, NotProvenInvalid},
+		{"U", Result{unevaluated: u}, Undecided},
+		{"E", Result{err: e}, Undecided},
+		{"U,E", Result{unevaluated: u, err: e}, Undecided},
+		{"V", Result{violations: v}, Charged},
+		{"V,U", Result{violations: v, unevaluated: u}, Charged},
+		{"V,E", Result{violations: v, err: e}, Charged},
+		{"V,U,E", Result{violations: v, unevaluated: u, err: e}, Charged},
+	} {
+		if got := c.res.Standing(); got != c.want {
+			t.Errorf("%s: Standing() = %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
 func TestAssessRejectsNilRoot(t *testing.T) {
 	v, err := New(emptySchema(t), testBackend())
 	if err != nil {

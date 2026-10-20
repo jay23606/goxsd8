@@ -114,13 +114,11 @@ func WithURI(uri string) Option {
 // None is an [xsderr.Error], and none wraps one Validate builds: none is a
 // validity verdict about a document. A read fault wraps whatever r returned.
 //
-// Read the verdict off a returned result as the "Contract" section of package
-// [validate] says, but for the one difference from an xmlsrc result stated
-// above: every fault comes back as err, and [validate.Result.Err] is nil. The
-// rest of that caveat applies unchanged: an empty [validate.Result.Violations]
-// with an empty [validate.Result.Unevaluated] means not proven invalid, not
-// valid, and a non-empty Unevaluated leaves the document undecided against the
-// rules its entries name.
+// Read the verdict off a returned result's [validate.Result.Standing], as for
+// an xmlsrc result but for the one difference stated above: every fault comes
+// back as err, with no result standing, and [validate.Result.Err] is nil, so a
+// result is [validate.Undecided] by its [validate.Result.Unevaluated] alone.
+// [validate.NotProvenInvalid] means not proven invalid, not valid.
 //
 // A violation's rule ID and location are the engine's, and so is its message
 // but for one clause Validate appends to it, opening "; JSON member" and

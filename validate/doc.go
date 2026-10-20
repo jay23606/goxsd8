@@ -116,22 +116,21 @@
 // descent assesses — against a ·governing element declaration·, against a
 // ·governing type definition· alone, or, ·laxly assessed·, against xs:anyType.
 //
-// Read the verdict off [Result.Violations]; [Result.Err] reports whether the
-// walk finished, not whether the document is valid. An empty Violations means
-// NOT PROVEN INVALID rather than valid: [Validator.Assess] decides local
-// validity alone, which is clause 1.1.1 of the [validity] property
-// (§3.3.5.1), plus clause 1.1.3 for an element [[child]] ·attributed· to a
-// strict ·wildcard particle· whose own validity is notKnown, charged at the
-// ENCLOSING element (assess.go). It evaluates neither clause 1.1.2 — an
-// invalid descendant or attribute — nor clause 2, which makes an item that was
-// not ·strictly assessed· notKnown rather than valid. A consumer that may
-// accept only what has been shown valid cannot read an empty result as that
-// showing.
+// Read the verdict off [Result.Standing], whose doc states its arms and their
+// order; [Result.Err] reports whether the walk finished, not whether the
+// document is valid. [NotProvenInvalid] means NOT PROVEN INVALID rather than
+// valid: [Validator.Assess] decides local validity alone, which is clause
+// 1.1.1 of the [validity] property (§3.3.5.1), plus clause 1.1.3 for an
+// element [[child]] ·attributed· to a strict ·wildcard particle· whose own
+// validity is notKnown, charged at the ENCLOSING element (assess.go). It
+// evaluates neither clause 1.1.2 — an invalid descendant or attribute — nor
+// clause 2, which makes an item that was not ·strictly assessed· notKnown
+// rather than valid. A consumer that may accept only what has been shown valid
+// cannot read NotProvenInvalid as that showing.
 //
-// An empty [Result.Violations] with a non-empty [Result.Unevaluated] is not a
-// pass either: each entry there is a check the assessment REACHED and did not
-// perform, so the document stands undecided against exactly the rules those
-// entries name.
+// [Undecided] is not a pass either: each [Result.Unevaluated] entry is a check
+// the assessment REACHED and did not perform, so the document stands undecided
+// against exactly the rules those entries name.
 //
 // All four charges below that DELEGATE to String Valid (§3.16.4,
 // cvc-simple-type) carry the delegated verdict as their wrapped cause, so

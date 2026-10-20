@@ -235,14 +235,23 @@ res, err := xmlsrc.Validate(v, f, xmlsrc.WithURI("order.xml"))
 if err != nil {
 	log.Fatal(err)
 }
-// An empty Violations() proves nothing unless res.Err() is nil AND
-// res.Unevaluated() is empty: a non-nil Err() means the assessment is
-// INCOMPLETE, and each Unevaluated entry is a rule it left undecided.
-if err := res.Err(); err != nil {
-	log.Fatal(err)
+// Standing() is the acceptance test, not an empty Violations(): it is Charged
+// when a violation was charged, Undecided when none was but a check was left
+// unperformed or res.Err() stopped the walk, and NotProvenInvalid otherwise,
+// which means not proven invalid rather than valid.
+switch res.Standing() {
+case validate.Charged:
+	fmt.Println("charged")
+case validate.Undecided:
+	fmt.Println("undecided")
+case validate.NotProvenInvalid:
+	fmt.Println("not proven invalid")
 }
 for _, e := range res.Violations() { // []*xsderr.Error, in document order
 	fmt.Println(e)
+}
+if err := res.Err(); err != nil { // the assessment is INCOMPLETE, not invalid
+	fmt.Println(err)
 }
 for _, u := range res.Unevaluated() { // no String method: this is the CLI's form
 	fmt.Println(fmt.Sprintf("%s: [%s] %s", u.Loc(), u.Rule(), u.Msg()))
@@ -266,14 +275,14 @@ defer jf.Close()
 
 // err is every fault: a nil argument, malformed JSON or content after it, a
 // read fault, and every input the mapping declines. res.Err() is nil on every
-// result jsonsrc returns, but Unevaluated() still applies: an empty
-// Violations() proves nothing unless Unevaluated() is empty too. Pass WithURI:
-// without it, a decline or a violation is located at ?, as in ?:1:2.
+// result jsonsrc returns, so Standing() is Undecided by Unevaluated() alone.
+// Pass WithURI: without it, a decline or a violation is located at ?, as in
+// ?:1:2.
 res, err = jsonsrc.Validate(v, jf, jsonsrc.WithURI("order.json"))
 if err != nil {
 	log.Fatal(err)
 }
-// Read res.Violations() and res.Unevaluated() as above.
+// Read res.Standing(), res.Violations() and res.Unevaluated() as above.
 ```
 
 Start at `go doc github.com/kud360/goxsd8` and follow the package list;

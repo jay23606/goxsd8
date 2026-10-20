@@ -461,7 +461,10 @@ func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, rep
 //
 // The code comes back with the lines because it is the one thing their
 // rendering does not carry: undecided records print exactly like charges, so
-// nothing in the text tells a reader which kind of report this is.
+// nothing in the text tells a reader which kind of report this is. It is the
+// result's [validate.Result.Standing] (standingCode), raised through worse to
+// exitInvalid by a stopped walk, which this CLI ranks above undecided where
+// the library's Standing does not.
 //
 // errClause ends the source fault's line, and no other: one passes
 // formatHint's clause, assessJSON "".
@@ -479,14 +482,26 @@ func assessmentLines(result *validate.Result, errClause string) ([]string, int) 
 		lines = append(lines, undecidedLine(u))
 	}
 
-	code := exitOK
-	if len(undecided) > 0 {
-		code = exitUndecided
-	}
-	if len(violations) > 0 || result.Err() != nil {
-		code = exitInvalid
+	code := standingCode(result.Standing())
+	if result.Err() != nil {
+		code = worse(code, exitInvalid)
 	}
 	return lines, code
+}
+
+// standingCode maps each [validate.Standing] arm to the exit code it earns. A
+// value no arm matches answers exitInvalid, never exitOK: a Standing this
+// switch has not been taught must not pass a gate.
+func standingCode(s validate.Standing) int {
+	switch s {
+	case validate.Charged:
+		return exitInvalid
+	case validate.Undecided:
+		return exitUndecided
+	case validate.NotProvenInvalid:
+		return exitOK
+	}
+	return exitInvalid
 }
 
 // undecidedLine renders one check the assessment declined in the rendering a

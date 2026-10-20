@@ -132,7 +132,16 @@ var _ SchemaView = (*xsd.Schema)(nil)
 // schema through this view alone.
 func (v *Validator) Schema() SchemaView { return v.schema }
 
-// Result is the outcome of one [Validator.Assess] call.
+// Result is the outcome of one [Validator.Assess] call. Read it through
+// [Result.Standing], the acceptance test, and not through an empty
+// [Result.Violations]. Standing answers one of three arms: [Charged] when
+// the assessment charged a violation, whatever else the Result holds;
+// [Undecided] when it charged none but reached a check it did not perform
+// ([Result.Unevaluated]) or stopped at a fault in the source ([Result.Err]),
+// which leaves the assessment INCOMPLETE rather than the document invalid; and
+// [NotProvenInvalid] when the Result holds none of the three, which is NOT PROVEN
+// INVALID rather than valid. Only NotProvenInvalid leaves nothing charged and
+// nothing undecided.
 type Result struct {
 	violations  []*xsderr.Error
 	unevaluated []Unevaluated
@@ -142,6 +151,8 @@ type Result struct {
 // Violations returns the violations the assessment charged, in document
 // order. The slice is copied; each *xsderr.Error is r's own, so writing
 // through one writes r's. No violation yields nil.
+//
+// An empty slice is not acceptance: [Result.Standing] is the acceptance test.
 func (r *Result) Violations() []*xsderr.Error {
 	if len(r.violations) == 0 {
 		return nil
@@ -229,8 +240,8 @@ func (u Unevaluated) Msg() string { return u.msg }
 // in document order. The slice is copied: mutating the result does not affect
 // r. No such check yields nil.
 //
-// An empty [Result.Violations] together with a non-empty result here is NOT a
-// pass; doc.go's Contract section states what that combination means.
+// A non-empty result here beside an empty [Result.Violations] is [Undecided],
+// NOT a pass; [Result.Standing] answers it.
 func (r *Result) Unevaluated() []Unevaluated {
 	if len(r.unevaluated) == 0 {
 		return nil
@@ -241,8 +252,48 @@ func (r *Result) Unevaluated() []Unevaluated {
 // Err reports the fault in the source that stopped the walk, or nil when
 // the walk reached the end of the document. A non-nil Err means the
 // assessment is INCOMPLETE, not that the document is invalid: an invalid
-// document is reported through [Result.Violations].
+// document is reported through [Result.Violations]. Beside no violation, a
+// non-nil Err is [Undecided].
 func (r *Result) Err() error { return r.err }
+
+// Standing is where one returned [Result] leaves its document: [Charged],
+// [Undecided] or [NotProvenInvalid], ranked by severity in that order. The
+// numeric values promise no order, and the zero value is no arm.
+//
+// It answers a Result that was returned. An error a source adapter
+// (validate/xmlsrc, validate/jsonsrc) returns in its place means no Result
+// stands, and so no Standing. A consumer that ranks a source fault above
+// Undecided, as the goxsd8 CLI's exit code does, reads [Result.Err] itself
+// beside Standing.
+type Standing int
+
+const (
+	// Charged is a Result whose [Result.Violations] is non-empty, whatever its
+	// [Result.Unevaluated] and [Result.Err] hold.
+	Charged Standing = iota + 1
+	// Undecided is a Result with no violation whose [Result.Unevaluated] is
+	// non-empty or whose [Result.Err] is non-nil. It is not a pass, as the
+	// package's Contract section details.
+	Undecided
+	// NotProvenInvalid is a Result with no violation, no unevaluated check and
+	// no source fault. It means NOT PROVEN INVALID, not valid: the assessment
+	// evaluates neither clause 1.1.2 nor clause 2 of the [validity] property
+	// (§3.3.5.1), as the package's Contract section details, and
+	// [Unevaluated]'s doc names the one decline that is not recorded.
+	NotProvenInvalid
+)
+
+// Standing returns where r leaves its document, computed from its
+// violations, its unevaluated checks and its source fault on every call.
+func (r *Result) Standing() Standing {
+	if len(r.violations) > 0 {
+		return Charged
+	}
+	if len(r.unevaluated) > 0 || r.err != nil {
+		return Undecided
+	}
+	return NotProvenInvalid
+}
 
 // resultMark is a position in a [Result]: how many violations and how many
 // [Unevaluated] it held when [Result.mark] took it. [walk.element] reads what
