@@ -216,10 +216,11 @@ type members struct {
 	// object is what the owner's members are classified against, read once
 	// per element.
 	object *object
-	// ahead is what walker.attributes read past the leading attribute run, in
-	// member order and not yet classified: the member or close it ended the
-	// run on, then any member walker.readAhead read after that one. Reads
-	// take from it first, and from the stream once it is empty.
+	// ahead is what walker.attributes read past the attributes it settled on,
+	// in member order and not yet classified: the member or close the reading
+	// of the members it settled on ends at, then any member walker.readAhead
+	// or walker.overrode read after that one. Reads take from it first, and
+	// from the stream once it is empty.
 	ahead []peeked
 	// run is the array-valued member the stream stands inside, and nil
 	// outside one.

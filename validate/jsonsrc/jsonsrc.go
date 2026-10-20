@@ -633,11 +633,15 @@ type object struct {
 // element off, where its ·governing element declaration· carries a {type
 // table} (object.overriding): parent, the one type that governs the element's
 // parent, and a, what parent ·attributes· the element to, both nil at the
-// root; and instance, the type the element's xsi:type names.
+// root; instance, the type the element's xsi:type names; and decl, the
+// declaration whose {type table} the selection is read off (walker.selector),
+// whose types walker.overrode reads each reading of the element's members
+// under.
 type overriding struct {
 	parent   xsd.TypeDefinition
 	a        xsd.Attribution
 	instance xsd.TypeDefinition
+	decl     xsd.ElementDeclaration
 }
 
 // governingType is one type that may govern an object's owner
@@ -2220,7 +2224,7 @@ func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeD
 func (w *walker) instanceGoverning(o *object, e *element, typ *attribute, d xsd.ElementDeclaration, instance, td xsd.TypeDefinition, at placement) error {
 	from, declares, read := w.selector(d, at)
 	if _, tabled := from.TypeTable(); declares && read && tabled {
-		o.overriding = &overriding{instance: instance}
+		o.overriding = &overriding{instance: instance, decl: from}
 		if at.parent != nil {
 			o.overriding.parent, o.overriding.a = at.parent.governing[0].typ, at.a[0]
 		}
@@ -2446,11 +2450,14 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 // their prefixes read through sc, the element's scope, from tok at loc, the
 // first after its reserved members, each an attribute of the element after
 // typ, its xsi:type where a "$type" presents one and nil where none does; and
-// returns them, typ first, with what it read past the run, for the element's
-// members cursor to start from — the member that ends the run, the first
-// whose key names a child or whose value is an array, as far as walker.value
-// read it, or the object's close, then any member walker.readAhead read after
-// it — and the object the members after the run are classified against.
+// returns them, typ first, with what it read past them, for the element's
+// members cursor to start from — the member the attributes end at, as far as
+// walker.value read it, or the object's close, then every member read after
+// it — and the object the members after them are classified against. The
+// run ends at the first member whose key names a child or whose value is an
+// array; the reading walker.readAhead or walker.overrode takes can end the
+// attributes after that member, or, under walker.overrode, at a member of
+// the run.
 //
 // The engine reads an element's [[attributes]] at its entry, before its
 // [[children]], and again after them, so they must be whole and unchanged
@@ -2473,8 +2480,9 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 //
 // Where o.table is nil, each member is classified under o and alike under
 // each of o.selectable (walker.classify), and the members after the run are
-// classified so against o, or, where o.overriding is set, against the type
-// walker.overrode settles. Where o.table is the {type table} the element's
+// classified so against o; where o.overriding is set, the run is the one
+// reading walker.overrode settles, and the members after it are classified
+// against the type that governs under it. Where o.table is the {type table} the element's
 // selection is read off (walker.selector), the run is the one the table's own
 // selection settles (walker.settled), each {test} reading the element's
 // attributes and then inherited, its [inherited attributes] (key-cta-ta-select clauses
@@ -2494,6 +2502,9 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 	r.live = r.candidates()
 	for {
 		key, ok := tok.(string)
+		if !ok && r.owner.overriding != nil {
+			return w.overrode(r, nil, sc, &peeked{tok: tok, loc: loc})
+		}
 		if !ok {
 			final, _, err := w.settled(r, nil, loc)
 			if err != nil {
@@ -2517,6 +2528,9 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 			if unsettled, err = w.candidates(r, next); err != nil {
 				return nil, nil, nil, err
 			}
+		}
+		if unsettled == nil && next.child() && r.owner.overriding != nil {
+			return w.overrode(r, next, sc, nil)
 		}
 		if unsettled == nil && next.child() {
 			var final *object
@@ -2912,11 +2926,11 @@ func (w *walker) extend(r *attributeRun, next *runMember) (unsettled, err error)
 // [attributes] are given, each reading is an element of its own, and no clause
 // ranks the readings, so the mapping has no reading to name.
 func (w *walker) readAhead(r *attributeRun, next *runMember, sc *scope, unsettled error) ([]validate.Attribute, []peeked, *object, error) {
-	la, err := w.lookAhead(r, next, sc)
+	la, err := w.lookAhead(r, next, sc, r.candidates())
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rd, ok := w.oneReading(r, la)
+	rd, ok := w.oneReading(r, la, r.candidates())
 	if !ok {
 		return nil, nil, nil, unsettled
 	}
@@ -2951,19 +2965,19 @@ func (la lookahead) scalars() int {
 // lookAhead reads the members of the element's object, of the scope sc, from
 // next, the member after r's run, as far as a reading can take them as
 // attributes: up to and including the first whose value is no scalar, or the
-// object's close, but no further than the member by which every candidate
-// type rules out every longer reading, having classified a member of the run
+// object's close, but no further than the member by which every one of cands
+// rules out every longer reading, having classified a member of the run
 // otherwise than the run took it or one after the run as no attribute. Every
-// type the table selects is one of r.candidates, so no reading past that
-// member stands. A candidate's decline of a member rules nothing out, being
-// the one fact read of it (walker.keepsRun). It holds only the members a
-// reading can still take as attributes, and the one after them, as
-// walker.attributes holds the run (STYLE P4).
+// type that can govern the element under a reading is one of cands
+// (r.candidates; walker.readers), so no reading past that member stands. A
+// candidate's decline of a member rules nothing out, being the one fact read
+// of it (walker.keepsRun). It holds only the members a reading can still take
+// as attributes, and the one after them, as walker.attributes holds the run
+// (STYLE P4).
 //
 // It DECLINES a reserved key and a key keyName declines, as walker.attributes
 // does on reaching them.
-func (w *walker) lookAhead(r *attributeRun, next *runMember, sc *scope) (lookahead, error) {
-	cands := r.candidates()
+func (w *walker) lookAhead(r *attributeRun, next *runMember, sc *scope, cands []*object) (lookahead, error) {
 	out := make([]bool, len(cands))
 	for i, c := range cands {
 		out[i] = !w.keepsRun(c, r.run)
@@ -3011,7 +3025,8 @@ func (w *walker) lookAhead(r *attributeRun, next *runMember, sc *scope) (lookahe
 
 // reading is one reading of an element's object past its run: the first k of a
 // lookahead's items taken as attributes, of names, and the rest as children,
-// under typ, the type the run's attributes and those select.
+// under typ, the type that governs the element under the run's attributes and
+// those (walker.readingType).
 type reading struct {
 	k     int
 	names []xsd.QName
@@ -3036,23 +3051,23 @@ const (
 // oneReading is the one reading of la, past r's run, that stands (walker.judge),
 // and false where none does, where two do, where one is undecided, and where
 // a candidate's assignments outnumber nameBudget. It reads each reading's
-// selection under the names each candidate type gives its attributes
-// (walker.namesUnder): a reading that stands is the one its own selected
-// type, a candidate, names so, but for the names of members that type
-// declines, which are read in each class attributeNames gives them
+// selection under the names each of cands gives its attributes
+// (walker.namesUnder): a reading that stands is the one the type that governs
+// the element under it, one of cands, names so, but for the names of members
+// that type declines, which are read in each class attributeNames gives them
 // (assignments).
-func (w *walker) oneReading(r *attributeRun, la lookahead) (reading, bool) {
+func (w *walker) oneReading(r *attributeRun, la lookahead, cands []*object) (reading, bool) {
 	var found []reading
 	for k := 0; k <= la.scalars(); k++ {
 		if k == len(la.items) && la.closed == nil {
 			break
 		}
-		for _, c := range r.candidates() {
+		for _, c := range cands {
 			names, free, ok := w.namesUnder(c, r, la, k)
 			if !ok {
 				continue
 			}
-			as, ok := assignments(*r.owner.table, la.items[:k], names, free)
+			as, ok := assignments(r.table(), la.items[:k], names, free)
 			if !ok {
 				return reading{}, false
 			}
@@ -3154,26 +3169,22 @@ func assignments(table xsd.TypeTable, items []*runMember, names []xsd.QName, fre
 }
 
 // judge is the reading of la taking its first k items as attributes, of
-// names, beside r's run, and how the type their selection names
-// (walker.selected, key-cta-select) fits it: undecided where the engine
-// withholds that type or it does not resolve; else the worst fit of each
-// member of the run and each of those items, which the type must take as the
-// attributes the reading does (walker.fitsAttribute), and of the item after
-// them, which it must take as no attribute (walker.fitsChild). A reading that
-// fits but repeats an expanded name among its attributes is undecided: it has
-// no XML twin, and walker.readAhead's GAP(jsonsrc) marker RULED permanent by
-// #2700 tracks the decline, another reading standing or not.
+// names, beside r's run, and how the type that governs the element under
+// them (walker.readingType) fits it: undecided where the mapping decides no
+// such type; else the worst fit of each member of the run and each of those
+// items, which the type must take as the attributes the reading does
+// (walker.fitsAttribute), and of the item after them, which it must take as
+// no attribute (walker.fitsChild). A reading that fits but repeats an
+// expanded name among its attributes is undecided: it has no XML twin, and
+// walker.readAhead's GAP(jsonsrc) marker RULED permanent by #2700 tracks the
+// decline, another reading standing or not.
 func (w *walker) judge(r *attributeRun, la lookahead, k int, names []xsd.QName) (reading, fit) {
 	attrs := r.attributes()
 	for i, it := range la.items[:k] {
 		lexical, _ := scalarLexical(it.val.tok) // k <= la.scalars
 		attrs = append(attrs, &attribute{name: names[i], value: lexical, loc: it.loc})
 	}
-	slot, decided := w.selected(*r.owner.table, attrs, r.inherited)
-	if !decided {
-		return reading{}, undecided
-	}
-	s, ok := w.schema.ResolvedType(slot)
+	s, ok := w.readingType(r, attrs)
 	if !ok {
 		return reading{}, undecided
 	}
@@ -3253,10 +3264,7 @@ func (w *walker) take(r *attributeRun, la lookahead, rd reading) ([]validate.Att
 	}
 	so := w.object(r.owner.owner, rd.typ)
 	w.govern(so, []xsd.TypeDefinition{rd.typ})
-	ahead := make([]peeked, 0, len(la.items)-rd.k+1)
-	for _, it := range la.items[rd.k:] {
-		ahead = append(ahead, peeked{tok: it.key, loc: it.loc, val: it.val})
-	}
+	ahead := children(la.items[rd.k:])
 	if la.closed != nil {
 		ahead = append(ahead, *la.closed)
 	}
@@ -3269,20 +3277,19 @@ func (w *walker) take(r *attributeRun, la lookahead, rd reading) ([]validate.Att
 // or a nil object, where the run goes on under the candidates that take next
 // as an attribute (walker.extend).
 //
+// Where r reads no selection, the run ends under r.owner (walker.unselected).
 // Under a "$type" whose element's {type table} selection the mapping reads
-// (object.overriding), the run ends as walker.overrode says. Where r reads no
-// selection otherwise, the run ends under r.owner (walker.unselected).
-// Otherwise it ends where the type S the run's attributes select
-// (walker.selected, key-cta-select) classifies each of them as the run did
-// and next as no attribute (walker.agrees): the members after it are
-// classified against S alone, which governs the element (key-selected-type clause
-// 1, key-governing-type-elem clause 4) and is the one type both an XML twin
-// of these members and its selection settle on. Where S classifies them
-// otherwise, the run goes on under the candidates that take next as an
-// attribute. Where S ends the run while a candidate takes next as an
-// attribute, a longer reading may be consistent too, so it returns a nil
-// object and unsettled, the decline walker.readAhead gives where reading past
-// next settles no one reading.
+// (object.overriding), walker.overrode ends it instead. Otherwise it ends where
+// the type S the run's attributes select (walker.selected, key-cta-select)
+// classifies each of them as the run did and next as no attribute
+// (walker.agrees): the members after it are classified against S alone, which
+// governs the element (key-selected-type clause 1, key-governing-type-elem clause
+// 4) and is the one type both an XML twin of these members and its selection
+// settle on. Where S classifies them otherwise, the run goes on under the
+// candidates that take next as an attribute. Where S ends the run while a
+// candidate takes next as an attribute, a longer reading may be consistent too,
+// so it returns a nil object and unsettled, the decline walker.readAhead gives
+// where reading past next settles no one reading.
 //
 // It DECLINES where S classifies the run otherwise and no candidate takes
 // next as an attribute, or the object closes; and where the engine withholds
@@ -3313,9 +3320,6 @@ func (w *walker) take(r *attributeRun, la lookahead, rd reading) ([]validate.Att
 // the subset does not, so no alternative after the withheld one is tried and
 // classifying the members under any one candidate would select past it.
 func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (final *object, unsettled, err error) {
-	if r.owner.overriding != nil {
-		return w.overrode(r, next)
-	}
 	if r.owner.table == nil {
 		return w.unselected(r, next)
 	}
@@ -3351,29 +3355,46 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 	return so, nil, nil
 }
 
-// overrode ends r's run at next, or at the object's close where next is nil,
-// for an element whose "$type" r.typ names the type r.owner.overriding.instance
-// and whose ·governing element declaration· D carries a {type table} whose
-// selection the mapping reads (walker.selector), r.owner being the type
-// walker.instanceGoverned classifies its members under before any selection.
+// overrode settles r's run for an element whose "$type" r.typ names the type
+// r.owner.overriding.instance and whose ·governing element declaration· D
+// carries a {type table} whose selection the mapping reads (walker.selector),
+// r.owner being the type walker.instanceGoverned classifies its members under
+// before any selection. The run ended at next, the member r.owner classifies
+// as no attribute, read in sc, or at closed, the object's close, where next is
+// nil. It returns what walker.attributes does.
+//
 // It reads validate.Validator.Governing off r.owner.overriding, with the
 // selection the engine makes for the run's attributes and r.inherited
-// (walker.selected, key-cta-select). Where Governing decides the type that
-// governs the element (key-governing-type-elem clauses 3 and 4) — instance
-// where it ·overrides· the type S the table selects under D's {disallowed
-// substitutions}, and S, cvc-elt clause 4 charged, where it does not — it
-// returns that type's object, and walker.objectElement keeps the note for
-// that charge (walker.noteOverride). The members after the run are classified
-// under that type, which classifies the run and next as r.owner did
-// (walker.agrees), so that S is the type the twin's attributes select too.
-// Where the engine withholds S, or S does not resolve, the run ends under
-// r.owner (walker.unselected), and walker.governOverriding makes each type
-// that may govern the element. It DECLINES typ where ·override· is not decided
-// (walker.overrideUndecided), and where the governing type declines a member
-// of the run, or next (walker.agrees).
+// (walker.overridden, walker.selected, key-cta-select). Where the engine
+// withholds the type S the table selects, or Governing decides no type, the
+// run ends under r.owner (walker.unselected), and walker.governOverriding
+// makes each type that may govern the element. Where Governing decides the
+// type that governs the element (key-governing-type-elem clauses 3 and 4) —
+// instance where it ·overrides· S under D's {disallowed substitutions}, and S,
+// cvc-elt clause 4 charged, where it does not — the attributes the twin's
+// selection reads are its whole [attributes] (key-cta-ta-select), so each
+// reading of the members — the run and the members after it, the first k
+// taken as attributes and the rest as children, shorter than the run, the run
+// itself, or longer — is an XML twin of its own, governed by the type
+// Governing decides for that reading's attributes (walker.readingType). It
+// reads the object on from next as far as a reading can take members as
+// attributes (walker.lookAhead) and takes the one reading whose governing
+// type classifies it as it reads (walker.oneReading, walker.take): that
+// type's object classifies the members after the reading's attributes, and
+// walker.objectElement keeps the note for the cvc-elt clause 4 charge
+// (walker.noteOverride).
 //
-// It DECLINES typ too where the governing type classifies the run, or next,
-// otherwise than r.owner did.
+// It DECLINES typ where ·override· is not decided for the run's attributes
+// (walker.overrideUndecided); where the type that governs under them declines
+// a member of the run, or next (walker.agrees); and where no one reading
+// stands. Where two readings stand, the decline is walker.readAhead's
+// GAP(jsonsrc) marker's, RULED permanent by #2700; where a reading's
+// governing type declines a member it reads, #2703's; where the engine
+// withholds a reading's selection, #2702's; and where no reading stands,
+// #2701's, and the marker below's for its shape. A reading whose ·override·
+// is undecided, or for whose selection Governing decides no type, the slot
+// naming none (declaredType's GAP(jsonsrc) marker, RULED permanent by #2625),
+// is one the mapping cannot settle, and declines with the rest.
 //
 // GAP(jsonsrc): a "$type" declines where the type its element's {type table}
 // selects for the attributes its members are classified with under r.owner
@@ -3381,42 +3402,132 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 // classifies an attribute the selection reads otherwise: classified under
 // either type, the attributes select the other, so neither classification
 // is a fixed point, though the engine assesses each XML twin. Owned by #2831.
-//
-// GAP(jsonsrc): the same decline stands where the attribute that type
-// classifies otherwise is not one the selection reads, so that classifying
-// the members under it selects it again, and the mapping, reading no member
-// past next, does not reclassify the run under it. Owned by #2832.
-func (w *walker) overrode(r *attributeRun, next *runMember) (final *object, unsettled, err error) {
+func (w *walker) overrode(r *attributeRun, next *runMember, sc *scope, closed *peeked) ([]validate.Attribute, []peeked, *object, error) {
+	t, slot, withheld, err := w.overridden(r, r.attributes())
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if withheld {
+		r.owner.unassessed = true
+	}
+	if withheld || t == nil {
+		final, _, err := w.unselected(r, next)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return r.attributes(), ended(next, closed), final, nil
+	}
+	agrees, err := w.agrees(w.object(r.owner.owner, t), r.run, next)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	cands, err := w.readers(r)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	la := lookahead{closed: closed}
+	if next != nil {
+		if la, err = w.lookAhead(r, next, sc, cands); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	whole := &attributeRun{owner: r.owner, inherited: r.inherited, typ: r.typ}
+	all := lookahead{items: append(slices.Clone(r.run), la.items...), closed: la.closed}
+	rd, ok := w.oneReading(whole, all, cands)
+	if ok {
+		return w.take(whole, all, rd)
+	}
+	if agrees {
+		return nil, nil, nil, w.declinef(r.typ.loc, "the \"$type\" member of %s: the type that governs %s for the attributes its members are classified with, %s, classifies those members as they read, but another reading of its attribute members stands too, or one the mapping cannot settle",
+			r.owner.owner, r.owner.owner, typeName(t))
+	}
+	s, _ := w.schema.ResolvedType(slot)
+	return nil, nil, nil, w.declinef(r.typ.loc, "the \"$type\" member of %s: the type its {type table} selects for the attributes its members are classified with, %s, is one the type it names does not ·override·, so it governs %s, and it classifies those members otherwise; and no one reading of its attribute members is classified as it reads by the type that governs it",
+		r.owner.owner, typeName(s), r.owner.owner)
+}
+
+// ended is what walker.attributes hands the element's members cursor where
+// its run ends at next, or at closed, the object's close, where next is nil.
+func ended(next *runMember, closed *peeked) []peeked {
+	if next == nil {
+		return []peeked{*closed}
+	}
+	return children([]*runMember{next})
+}
+
+// overridden is the type validate.Validator.Governing decides governs r's
+// element, read off r.owner.overriding, where its attributes are attrs, its
+// xsi:type r.typ among them (walker.selected, key-cta-select), and the slot
+// its {type table} selects; nil where Governing decides none. withheld is
+// whether the engine withholds that selection. It DECLINES r.typ where
+// ·override· is not decided (walker.overrideUndecided).
+func (w *walker) overridden(r *attributeRun, attrs []validate.Attribute) (t xsd.TypeDefinition, slot xsd.TypeDefinitionOrRef, withheld bool, err error) {
 	ov := r.owner.overriding
-	var slot xsd.TypeDefinitionOrRef
-	withheld := false
-	_, _, t, _, err := w.governance(complexOf(ov.parent), ov.a, r.owner.owner, ov.instance, func(table xsd.TypeTable) (xsd.TypeDefinitionOrRef, bool) {
-		selected, decided := w.selected(table, r.attributes(), r.inherited)
+	_, _, t, _, err = w.governance(complexOf(ov.parent), ov.a, r.owner.owner, ov.instance, func(table xsd.TypeTable) (xsd.TypeDefinitionOrRef, bool) {
+		selected, decided := w.selected(table, attrs, r.inherited)
 		slot, withheld = selected, !decided
 		return selected, decided
 	})
 	if err != nil {
-		return nil, nil, w.overrideUndecided(r.owner.owner, r.typ, err)
+		return nil, nil, false, w.overrideUndecided(r.owner.owner, r.typ, err)
 	}
-	if withheld {
-		r.owner.unassessed = true
-		return w.unselected(r, next)
-	}
-	if t == nil {
-		return w.unselected(r, next)
-	}
-	so := w.object(r.owner.owner, t)
-	agrees, err := w.agrees(so, r.run, next)
+	return t, slot, withheld, nil
+}
+
+// readers is each type that can govern r's element under a reading of its
+// members, where its "$type" stands beside a {type table} whose selection the
+// mapping reads (object.overriding): the type the "$type" names, and each type
+// the table can select (walker.selectable), Governing deciding one of them for
+// every reading. It DECLINES as walker.selectable does.
+func (w *walker) readers(r *attributeRun) ([]*object, error) {
+	ov := r.owner.overriding
+	selectable, err := w.selectable(ov.decl, r.owner.owner, r.typ.loc)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	if !agrees {
-		s, _ := w.schema.ResolvedType(slot)
-		return nil, nil, w.declinef(r.typ.loc, "the \"$type\" member of %s: the type its {type table} selects for the attributes its members are classified with, %s, is one the type it names does not ·override·, so it governs %s, and it classifies those members otherwise",
-			r.owner.owner, typeName(s), r.owner.owner)
+	return append([]*object{w.object(r.owner.owner, ov.instance)}, selectable...), nil
+}
+
+// readingType is the type that governs r's element under a reading whose
+// attributes are attrs, and false where the mapping decides none. Under a
+// "$type" beside a {type table} whose selection it reads (object.overriding),
+// it is the one walker.overridden decides, and false where the engine
+// withholds the selection, Governing decides no type, or ·override· is not
+// decided, walker.overridden's decline then being the reading's. Otherwise it
+// is the type r.owner.table selects (walker.selected, key-cta-select,
+// key-selected-type clause 1), and false where the engine withholds it or it
+// does not resolve.
+func (w *walker) readingType(r *attributeRun, attrs []validate.Attribute) (xsd.TypeDefinition, bool) {
+	if r.owner.overriding != nil {
+		t, _, withheld, err := w.overridden(r, attrs)
+		return t, err == nil && !withheld && t != nil
 	}
-	w.govern(so, []xsd.TypeDefinition{t})
-	return so, nil, nil
+	slot, decided := w.selected(*r.owner.table, attrs, r.inherited)
+	if !decided {
+		return nil, false
+	}
+	return w.schema.ResolvedType(slot)
+}
+
+// table is the {type table} each reading of r's run selects through: the one
+// r.owner.overriding.decl carries, under a "$type" beside it, and r.owner.table
+// otherwise.
+func (r *attributeRun) table() xsd.TypeTable {
+	if ov := r.owner.overriding; ov != nil {
+		table, _ := ov.decl.TypeTable() // walker.instanceGoverning set decl for its table
+		return table
+	}
+	return *r.owner.table
+}
+
+// children is the peeked member for each of ms, members walker.attributes
+// read whose element's members cursor reads them as children.
+func children(ms []*runMember) []peeked {
+	ahead := make([]peeked, 0, len(ms)+1)
+	for _, m := range ms {
+		ahead = append(ahead, peeked{tok: m.key, loc: m.loc, val: m.val})
+	}
+	return ahead
 }
 
 // typeName names a type definition for a message: its ·expanded name·, or

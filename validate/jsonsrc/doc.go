@@ -221,9 +221,10 @@
 //     element carries no xsi:type. On an element with a declaration it
 //     declines where the mapping determines no type governing the parent, and
 //     where the types a {type table} whose selection it does not read can
-//     select for the parent settle it differently, or where the type the table
-//     selects for its attributes governs it and classifies them otherwise
-//     (Declines).
+//     select for the parent settle it differently, or, beside a {type table}
+//     whose selection it reads, where not exactly one reading of its members
+//     is classified as it reads by the type that governs the element under
+//     that reading's attributes (Declines).
 //   - An object value under a declaration carrying a {type table} is
 //     classified under each type it may be assessed under: the declaration's
 //     {type definition} and every type the table can select — each
@@ -458,14 +459,19 @@
 //     parent's ·governing type definition· the mapping does not determine,
 //     where [xsd.Schema.ContentMatcher] declines the content model the parent
 //     is attributed by. The engine walks the twin of either undecided;
-//   - a "$type" on an element whose {type table} selects, for the attributes
-//     its members are classified as under the type the "$type" names, a type
-//     the "$type" does not ·override·, which governs the element and
-//     classifies those members otherwise: where the selection reads an
-//     attribute the classification decides, neither classification is a
-//     fixed point (#2831); where it reads none, the mapping does not
-//     reclassify the members under the type that governs (#2832). The engine
-//     charges the twin cvc-elt clause 4;
+//   - a "$type" on an element whose {type table} selection the mapping reads,
+//     where not exactly one reading of its members — the first k taken as
+//     attributes and the rest as children, ending the run of members the type
+//     the "$type" names takes as attributes, or before or after it — is
+//     classified as it reads by the type that governs the element under that
+//     reading's attributes, the "$type"'s type where it ·overrides· the one
+//     they select and that one otherwise: where two readings stand, or a
+//     reading's type declines a member it reads; and where none stands, as
+//     where the type selected for the attributes the run reads, one the
+//     "$type" does not ·override·, classifies an attribute the selection reads
+//     otherwise, so that neither classification is a fixed point (#2831). The
+//     engine charges cvc-elt clause 4 on the twin of each such reading whose
+//     type the "$type"'s does not ·override·;
 //   - any other "$"-prefixed reserved member, "$" being no XML NameStartChar;
 //   - an array item that is itself an array;
 //   - a member of an object under a declaration carrying a {type table} that
