@@ -115,9 +115,9 @@ func WithURI(uri string) Option {
 // validity verdict about a document. A read fault wraps whatever r returned.
 //
 // Read the verdict off a returned result's [validate.Result.Standing], as for
-// an xmlsrc result but for the one difference stated above: every fault comes
-// back as err, with no result standing, and [validate.Result.Err] is nil, so a
-// result is [validate.Undecided] by its [validate.Result.Unevaluated] alone.
+// an xmlsrc result but for one difference: every fault comes back as err, with
+// no result standing, and [validate.Result.Err] is nil, so a result is
+// [validate.Undecided] by its [validate.Result.Unevaluated] alone.
 // [validate.NotProvenInvalid] means not proven invalid, not valid.
 //
 // A violation's rule ID and location are the engine's, and so is its message
@@ -143,19 +143,26 @@ func WithURI(uri string) Option {
 //     cvc-attribute clause 3 charge at a "$type" whose value has no xs:QName
 //     value, under builtin/strict, or a backend whose xs:QName mapping is its:
 //     "$type" spells xsi:type, and, where the fault is a prefix no "$xmlns" in
-//     scope binds, a "$xmlns" member binds it (walker.noteTypeLexical's
-//     GAP(jsonsrc) marker).
+//     scope binds, a "$xmlns" member binds it. Under a backend that does not
+//     map xs:QName, or maps it otherwise than builtin/strict, the engine's
+//     charge at a "$type" is that backend's: clause 3 where its mapping
+//     rejects the value, and otherwise clause 5's, which charges a "$type"
+//     naming no type and declines one that is empty, of a colon structure no
+//     QName has, or of a prefix no "$xmlns" binds. The clause then goes on the
+//     cvc-attribute charge the engine makes at a "$type" that builtin/strict's
+//     mapping finds no QName or whose prefix no "$xmlns" binds, under whichever
+//     clause, clause 5's included though the clause does not answer it, and on
+//     no charge at any other "$type".
 //   - the cvc-elt clause 3.1 charge at a null member whose element's
 //     declaration is not nillable: null spells xsi:nil="true".
 //
 // The clause goes on that one charge alone, never on another charge at the
 // same rule and location, such as the child's own at its member or array
 // item, or the element's cvc-elt clause 2 charge beside its clause 3.1 or 4
-// one; and, but on the cvc-attribute clause 3 charge, whose clause reads the
+// one; and, but on the cvc-attribute charge, whose clause reads the
 // "$type" alone, only where the mapping determines the type or the
 // declaration that governs the element the charge is against, or every one
-// that may govern it agrees on the charge and on what the clause names
-// (walker.noteCharacters' and walker.noteChild's GAP(jsonsrc) markers).
+// that may govern it agrees on the charge and on what the clause names.
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
 		return nil, fmt.Errorf("jsonsrc: Validate: nil *validate.Validator")

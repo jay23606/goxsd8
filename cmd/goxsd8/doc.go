@@ -356,7 +356,7 @@
 // parser, xsd, validate and validate/xmlsrc, which reads a DOCTYPE the way
 // validate does, and the README shows both routes for them; JSON instance
 // assessment is validate/jsonsrc's Validate, which -format json calls. That
-// mapping is not whole: the inputs it still declines (its doc's Declines)
+// mapping is not whole: the inputs it still declines (its doc's Every decline)
 // reach the exit-4 error channel above rather than a verdict. The capabilities
 // this page reserves have no library route either: codegen (M9) with codec
 // (M10) and validate/bersrc (M11) each export nothing yet, so for code

@@ -223,7 +223,7 @@ const declinesSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // map: each is (nil, err), err opening with "jsonsrc: <uri>:<line>:<col>: "
 // at the construct it names and naming the arm it is not. Each decline's
 // GAP(jsonsrc) marker, or its having no XML twin, is at the function that
-// declines it (package doc, "Declines").
+// declines it (package doc, "Every decline").
 func TestOutOfSliceInputDeclines(t *testing.T) {
 	v := validatorOver(t, declinesSchema)
 	for _, tc := range []struct {
@@ -779,7 +779,8 @@ const attributeDeclinesSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XML
 // TestAttributeMemberDeclines pins every attribute-shaped member the arm does
 // not map: each is (nil, err), err opening with "jsonsrc: <uri>:<line>:<col>: "
 // at the construct it names. Each decline's GAP(jsonsrc) marker, or its having
-// no XML twin, is at the function that declines it (package doc, "Declines").
+// no XML twin, is at the function that declines it (package doc, "Every
+// decline").
 func TestAttributeMemberDeclines(t *testing.T) {
 	v := validatorOver(t, attributeDeclinesSchema)
 	for _, tc := range []struct {

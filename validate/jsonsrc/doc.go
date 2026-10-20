@@ -12,6 +12,10 @@
 //
 // # The JSON shape in brief
 //
+// The dialect is for JSON written to a known schema: no key marks itself an
+// attribute or a child, the schema deciding which each key is, and member
+// order is significant.
+//
 // The top-level value is an object with exactly one member, whose key names
 // the root element. Below it, each object is one element's attributes and
 // children:
@@ -38,8 +42,8 @@
 //     top-level object.
 //   - A scalar is the element's simple content, null is xsi:nil="true", and an
 //     array is one child per item, for repeated children.
-//   - An input the mapping declines is an [*Error] of class [Decline] from
-//     [Validate], which returns no [validate.Result] for it.
+//   - An input the mapping does not map declines, as "What declines" below
+//     says.
 //
 // Against a schema declaring {urn:o}order with an attribute kind and a
 // repeated child item, this instance maps to <o:order xmlns:o="urn:o"
@@ -50,9 +54,66 @@
 // ExampleValidate, in example_test.go, assesses it beside an instance the
 // engine charges and one the mapping declines.
 //
-// "The validation root" and "The mapping" below state each arm exactly —
-// keys no declaration or use carries, wildcards and namespaces included — and
-// "Declines" lists every input the mapping refuses.
+// "What declines" below gives each decline its remedy. "The validation root"
+// and "The mapping" state each arm exactly — keys no declaration or use
+// carries, wildcards and namespaces included — and "Every decline" lists every
+// input the mapping refuses.
+//
+// # What declines
+//
+// A decline is the [*Error] of class [Decline] that [Validate]'s doc states.
+// Each decline is a row below, beside its remedy: the change to the input or
+// the schema that avoids it, "none: a permanent limitation", "none in the
+// input; an open gap", or one of those for some of the row's inputs and
+// another for the rest. "Every decline", after "The mapping", states each row
+// in full.
+//
+//	top level not {"<root>":value}        one member, keyed by the root's name
+//	root value an array                   an object, a scalar or null
+//	key with no colon that is no NCName   an NCName; an attribute's own name,
+//	                                        with no "@" or "-"
+//	key whose colon makes no QName        local or p:local
+//	prefix no "$xmlns" in scope binds     bind it in a "$xmlns" in scope
+//	unprefixed key two names carry        prefix it; for a name in no namespace
+//	                                        beside one in a namespace, none: a
+//	                                        permanent limitation
+//	wildcard-only key, namespace unfixed  prefix it
+//	wildcard-only key, kind unfixed       none: a permanent limitation
+//	key in the xsi or xml namespace       null for xsi:nil, "$type" for
+//	                                        xsi:type; prefix it xml: for an
+//	                                        attribute under an {attribute
+//	                                        wildcard} alone; else none: a
+//	                                        permanent limitation
+//	member under an undeclared child      declare the child
+//	key a declaration and a use carry     none: a permanent limitation
+//	attribute member after a child        move attribute members first
+//	attribute member repeated             give it once
+//	attribute member null, object, array  give it a scalar
+//	attribute use in the xsi namespace    null for xsi:nil, "$type" for
+//	                                        xsi:type; else none: a permanent
+//	                                        limitation
+//	attribute on simple content           none: a permanent limitation
+//	"$xmlns" or "$type" misplaced,        "$xmlns" then "$type", once each,
+//	  repeated or in the top level          leading the element's own object
+//	"$type" or "$xmlns" value malformed   a string "$type"; a "$xmlns" binding
+//	                                        each NCName prefix once, not xml or
+//	                                        xmlns, to a non-empty name
+//	"$type" a {type table} settles        none: a permanent limitation
+//	  differently below a withheld
+//	  selection
+//	"$type" under a parent whose type     none in the input; an open gap
+//	  is undetermined
+//	"$type" a {type table} selection      none in the input; an open gap
+//	  governs and classifies otherwise
+//	other "$" member                      key it by its own name, with no "$"
+//	array item that is an array           an object, a scalar or null item
+//	member a {type table}'s types         none: a permanent limitation
+//	  classify differently, at or below
+//	  a withheld selection
+//	member a {type table}'s types         none in the input; an open gap
+//	  classify differently, below an
+//	  unattributed element
+//	unresolved {type definition}          none: a permanent limitation
 //
 // # The validation root
 //
@@ -69,8 +130,8 @@
 // element with no declaration does. Its value is the root's, as any member's
 // value is its element's. A top level of any other shape, an unprefixed key
 // top-level declarations of two expanded names carry, and an array root value
-// decline, as "Declines" below says. A null root value maps as any member's
-// null does, below.
+// decline, as "Every decline" below says. A null root value maps as any
+// member's null does, below.
 //
 // # The mapping
 //
@@ -224,7 +285,7 @@
 //     select for the parent settle it differently, or, beside a {type table}
 //     whose selection it reads, where not exactly one reading of its members
 //     is classified as it reads by the type that governs the element under
-//     that reading's attributes (Declines).
+//     that reading's attributes ("Every decline").
 //   - An object value under a declaration carrying a {type table} is
 //     classified under each type it may be assessed under: the declaration's
 //     {type definition} and every type the table can select — each
@@ -255,7 +316,7 @@
 //     classifies as it reads. Where no run is so settled, where two readings
 //     are, and where the engine withholds the selection while the candidate
 //     types classify the members differently, the element's members decline
-//     (Declines); where it withholds the selection and every candidate
+//     ("Every decline"); where it withholds the selection and every candidate
 //     classifies them alike, they map as where it reads none. The mapping
 //     reads none where it determines no [inherited attributes], which is only
 //     below an element whose ·governing type definition· the engine does not
@@ -324,75 +385,19 @@
 // "$type" is classified under the type that governs it, as "The mapping"
 // says.
 //
-// # Declines
+// # Every decline
 //
-// Each decline, listed in full below, and the change to the input or the
-// schema that avoids it:
-//
-//	top level not {"<root>":value}        one member, keyed by the root's name
-//	root value an array                   an object, a scalar or null
-//	key with no colon that is no NCName   an NCName; an attribute's own name,
-//	                                        with no "@" or "-"
-//	key whose colon makes no QName        local or p:local
-//	prefix no "$xmlns" in scope binds     bind it in a "$xmlns" in scope
-//	unprefixed key two names carry        prefix it; for a name in no namespace
-//	                                        beside one in a namespace, none: a
-//	                                        permanent limitation
-//	wildcard-only key, namespace unfixed  prefix it
-//	wildcard-only key, kind unfixed       none: a permanent limitation
-//	key in the xsi or xml namespace       null for xsi:nil, "$type" for
-//	                                        xsi:type; prefix it xml: for an
-//	                                        attribute under an {attribute
-//	                                        wildcard} alone; else none: a
-//	                                        permanent limitation
-//	member under an undeclared child      declare the child
-//	key a declaration and a use carry     none: a permanent limitation
-//	attribute member after a child        move attribute members first
-//	attribute member repeated             give it once
-//	attribute member null, object, array  give it a scalar
-//	attribute use in the xsi namespace    null for xsi:nil, "$type" for
-//	                                        xsi:type; else none: a permanent
-//	                                        limitation
-//	attribute on simple content           none: a permanent limitation
-//	"$xmlns" or "$type" misplaced,        "$xmlns" then "$type", once each,
-//	  repeated or in the top level          leading the element's own object
-//	"$type" or "$xmlns" value malformed   a string "$type"; a "$xmlns" binding
-//	                                        each NCName prefix once, not xml or
-//	                                        xmlns, to a non-empty name
-//	"$type" a {type table} settles        none: a permanent limitation
-//	  differently below a withheld
-//	  selection
-//	"$type" under a parent whose type     none in the input; an open gap
-//	  is undetermined
-//	"$type" a {type table} selection      none in the input; an open gap
-//	  governs and classifies otherwise
-//	other "$" member                      key it by its own name, with no "$"
-//	array item that is an array           an object, a scalar or null item
-//	member a {type table}'s types         none: a permanent limitation
-//	  classify differently, at or below
-//	  a withheld selection
-//	member a {type table}'s types         none in the input; an open gap
-//	  classify differently, below an
-//	  unattributed element
-//	unresolved {type definition}          none: a permanent limitation
-//
-// An input the implemented arms do not map is an [*Error] of class [Decline]
-// from [Validate], naming the arm it is not — never a silent drop and never a
-// guessed mapping. [Validate]'s doc states every error class it returns. Each
-// entry below whose XML twin the engine assesses is tracked by a GAP(jsonsrc)
-// marker at the function that declines it — rootMember, childNamed, useNamed,
-// wildcardMember, classify, attributes, candidates, readAhead,
-// settled, overrode, members.key, reserved, instanceGoverned and declaredType;
-// one more at classify tracks the mapping's own choice of a declaration or use
-// over a wildcard, under "The mapping". A repeated attribute member, an
-// attribute member whose value is null, an object or an array, an array item
-// that is itself an array, a key with no colon that is no NCName, a key whose
-// colon makes no QName, a prefix no "$xmlns" in scope binds, a repeated "$xmlns"
-// or "$type", a reserved member other than those two or at the top level, the
-// malformed "$xmlns" and "$type" values below, and the top-level shapes and
-// array root value that "The validation root" declines have no XML twin, and no
-// marker; the error for each names the spelling the mapping takes instead, where
-// one exists:
+// Each entry below whose XML twin the engine assesses is tracked by a
+// GAP(jsonsrc) marker at the function that declines it; one more tracks the
+// mapping's own choice of a declaration or use over a wildcard, under "The
+// mapping". A repeated attribute member, an attribute member whose value is
+// null, an object or an array, an array item that is itself an array, a key
+// with no colon that is no NCName, a key whose colon makes no QName, a prefix
+// no "$xmlns" in scope binds, a repeated "$xmlns" or "$type", a reserved member
+// other than those two or at the top level, the malformed "$xmlns" and "$type"
+// values below, and the top-level shapes and array root value that "The
+// validation root" declines have no XML twin, and no marker; the error for
+// each names the spelling the mapping takes instead, where one exists:
 //
 //   - an unprefixed key two expanded names carry: among the top-level
 //     declarations at the root, among the declarations a type contains, or
