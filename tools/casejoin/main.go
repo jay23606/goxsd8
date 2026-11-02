@@ -71,11 +71,12 @@
 //
 // An absent suite submodule is a supported mode, not a failure (#659): the
 // tool says the corpus is not there, names the command that initializes it,
-// and exits 0. It exits 0 for a completed report whatever it finds, and 2 for
-// an operational error: an unusable mode, an unreadable catalog, a lane name
-// no expectation file carries, or a -log that cannot be read, is given to
-// `ids`, lists the lane's census other than exactly once, or lists a case the
-// catalog declares valid as indeterminate.
+// and exits 0, or 2 when that notice cannot be written. It exits 0 for a
+// completed report whatever it finds, even when the report cannot be written,
+// and 2 for an operational error: an unusable mode, an unreadable catalog, a
+// lane name no expectation file carries, or a -log that cannot be read, is
+// given to `ids`, lists the lane's census other than exactly once, or lists a
+// case the catalog declares valid as indeterminate.
 package main
 
 import (
@@ -93,12 +94,8 @@ import (
 
 	"github.com/kud360/goxsd8/conformance"
 	"github.com/kud360/goxsd8/tools/internal/declinecensus"
+	"github.com/kud360/goxsd8/tools/internal/suiteroot"
 )
-
-// defaultSuite is the W3C suite submodule at its fixed path in the tree, as
-// written from the module root — the same corpus `go tool suiteindex`
-// censuses, so the paths one prints are the paths the other takes.
-const defaultSuite = "testdata/xsdtests"
 
 // defaultExpectations is the committed expectations directory, as written
 // from the module root — the same path `go tool lanestatus` reads.
@@ -134,7 +131,7 @@ func main() {
 func run(stdout io.Writer, stdin io.Reader, args []string) error {
 	flags := flag.NewFlagSet("casejoin", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	suite := flags.String("suite", defaultSuite, "the suite checkout to read the catalog from")
+	suite := flags.String("suite", suiteroot.Default, "the suite checkout to read the catalog from")
 	expectations := flags.String("expectations", defaultExpectations, "the directory holding the per-lane expectation files")
 	logPath := flags.String("log", "", "a GOXSD_DECLINES=1 conformance run's -v output")
 	if err := flags.Parse(args); err != nil {
@@ -149,8 +146,7 @@ func run(stdout io.Writer, stdin io.Reader, args []string) error {
 	}
 	index := filepath.Join(*suite, suiteIndexName)
 	if _, serr := os.Stat(index); errors.Is(serr, fs.ErrNotExist) {
-		printAbsent(stdout, *suite)
-		return nil
+		return suiteroot.PrintAbsent(stdout, "casejoin", "no suite index at "+index, "join")
 	}
 	paths, err := readPaths(*suite, rest, stdin)
 	if err != nil {
@@ -514,15 +510,6 @@ func (j *joined) classify(e conformance.CatalogEntry, banked map[string]conforma
 func (j joined) entries() int {
 	return len(j.WithheldIDs) + len(j.UnscoredIDs) + len(j.BankedPassIDs) +
 		len(j.IndeterminateIDs) + len(j.DeclaredValidIDs) + len(j.CandidateIDs)
-}
-
-// printAbsent renders the corpus-absent mode: why there was nothing to read,
-// and the command that fixes it. The mode exits 0 — a fresh container has no
-// suite submodule (#659), which is a state to report, not a failure.
-func printAbsent(w io.Writer, suiteDir string) {
-	_, _ = fmt.Fprintf(w, "casejoin: no suite index at %s — corpus-absent mode, nothing to join.\n",
-		filepath.Join(suiteDir, suiteIndexName))
-	_, _ = fmt.Fprintf(w, "Initialize the suite with `git submodule update --init %s` (#659).\n", defaultSuite)
 }
 
 // printIDs renders the enumeration: every catalog entry naming each path.

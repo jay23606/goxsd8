@@ -24,7 +24,7 @@
 //
 //	go tool gencensus [-paths] [dir]
 //
-// dir defaults to the suite at [defaultRoot]. -paths adds each construct's
+// dir defaults to the suite at [suiteroot.Default]. -paths adds each construct's
 // documents, and each document whose Generate error is not a decline with
 // that error. An absent or document-free tree is a supported mode, not a
 // failure: the submodule is absent in a fresh container (#659), so the tool
@@ -49,11 +49,8 @@ import (
 	"github.com/kud360/goxsd8/codegen"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/tools/internal/suiteroot"
 )
-
-// defaultRoot is the corpus this tool exists to census: the W3C suite
-// submodule, at its fixed path in the tree.
-const defaultRoot = "testdata/xsdtests"
 
 // usage is printed for any argument the tool cannot act on.
 const usage = "usage: gencensus [-paths] [dir]; -paths lists each construct's documents"
@@ -78,7 +75,7 @@ func run(stdout io.Writer, args []string) (err error) {
 	if flags.NArg() > 1 {
 		return errors.New(usage)
 	}
-	root := defaultRoot
+	root := suiteroot.Default
 	if flags.NArg() == 1 {
 		root = flags.Arg(0)
 	}
@@ -87,10 +84,10 @@ func run(stdout io.Writer, args []string) (err error) {
 		return err
 	}
 	if !present {
-		return printAbsent(stdout, root, "does not exist")
+		return suiteroot.PrintAbsent(stdout, "gencensus", root+" does not exist", "census")
 	}
 	if len(docs) == 0 {
-		return printAbsent(stdout, root, "holds no .xsd document")
+		return suiteroot.PrintAbsent(stdout, "gencensus", root+" holds no .xsd document", "census")
 	}
 	out, err := os.MkdirTemp("", "gencensus-")
 	if err != nil {
@@ -233,14 +230,6 @@ func walkSchemas(root string) (docs []string, present bool, err error) {
 	}
 	sort.Strings(docs)
 	return docs, true, nil
-}
-
-// printAbsent renders the corpus-absent mode: why there was nothing to
-// census, and the command that fixes it.
-func printAbsent(w io.Writer, root, reason string) error {
-	_, err := fmt.Fprintf(w, "gencensus: %s %s — corpus-absent mode, nothing to census.\n"+
-		"Initialize the suite with `git submodule update --init %s` (#659).\n", root, reason, defaultRoot)
-	return err
 }
 
 // caveats are the limits on reading any figure the census prints.

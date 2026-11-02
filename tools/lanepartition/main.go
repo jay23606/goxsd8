@@ -67,15 +67,12 @@ import (
 
 	"github.com/kud360/goxsd8/conformance"
 	"github.com/kud360/goxsd8/tools/internal/declinecensus"
+	"github.com/kud360/goxsd8/tools/internal/suiteroot"
 )
 
-// defaultSuite and defaultExpectations are the suite submodule and the
-// committed expectations directory as written from the module root — the
-// paths `go tool casejoin` and `go tool lanestatus` read.
-const (
-	defaultSuite        = "testdata/xsdtests"
-	defaultExpectations = "conformance/testdata/expectations"
-)
+// defaultExpectations is the committed expectations directory as written from
+// the module root — the path `go tool casejoin` and `go tool lanestatus` read.
+const defaultExpectations = "conformance/testdata/expectations"
 
 // instanceLane is the lane whose executor observes "valid" for one shape only:
 // its banked fail on a case the suite declares VALID flips only where that
@@ -101,7 +98,7 @@ func main() {
 func run(stdout io.Writer, stdin io.Reader, args []string) error {
 	flags := flag.NewFlagSet("lanepartition", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	suite := flags.String("suite", defaultSuite, "the suite checkout to read the catalog from")
+	suite := flags.String("suite", suiteroot.Default, "the suite checkout to read the catalog from")
 	expectations := flags.String("expectations", defaultExpectations, "the directory holding the per-lane expectation files")
 	logPath := flags.String("log", "", "a GOXSD_DECLINES=1 conformance run's -v output")
 	if err := flags.Parse(args); err != nil {
@@ -125,7 +122,7 @@ func run(stdout io.Writer, stdin io.Reader, args []string) error {
 	}
 	entries, err := conformance.Catalog(*suite)
 	if err != nil {
-		return fmt.Errorf("reading the suite catalog (initialize it with `git submodule update --init %s`): %w", defaultSuite, err)
+		return fmt.Errorf("reading the suite catalog (initialize it with `git submodule update --init %s`): %w", suiteroot.Default, err)
 	}
 	var census *declinecensus.Census
 	if *logPath != "" {

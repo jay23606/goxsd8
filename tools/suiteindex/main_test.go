@@ -11,6 +11,7 @@ import (
 	"testing"
 	"unicode/utf16"
 
+	"github.com/kud360/goxsd8/tools/internal/suiteroot"
 	"github.com/kud360/goxsd8/xsd"
 )
 
@@ -1699,8 +1700,8 @@ func TestParseArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseArgs: %v", err)
 	}
-	if root != defaultRoot {
-		t.Errorf("root = %q, want %q", root, defaultRoot)
+	if root != suiteroot.Default {
+		t.Errorf("root = %q, want %q", root, suiteroot.Default)
 	}
 	if len(q.Element) != 1 || q.Element[0].Local != "element" {
 		t.Errorf("Element = %+v, want the one name element", q.Element)
@@ -1720,10 +1721,10 @@ func TestParseArgs(t *testing.T) {
 // own tests must not be the thing that demands it.
 func suiteRoot(t *testing.T) string {
 	t.Helper()
-	root := filepath.Join("..", "..", defaultRoot)
+	root := filepath.Join("..", "..", suiteroot.Default)
 	entries, err := os.ReadDir(root)
 	if errors.Is(err, os.ErrNotExist) || (err == nil && len(entries) == 0) {
-		t.Skipf("suite absent: run `git submodule update --init %s`", defaultRoot)
+		t.Skipf("suite absent: run `git submodule update --init %s`", suiteroot.Default)
 	}
 	if err != nil {
 		t.Fatalf("reading %s: %v", root, err)

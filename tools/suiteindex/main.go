@@ -219,7 +219,7 @@
 // (`{uri}local`) to name its namespace outright, or `{*}local` to census
 // every namespace at once; a braceless element name is in the XML Schema
 // namespace and a braceless attribute name is in no namespace. The second
-// argument is the tree to walk, defaulting to the suite at [defaultRoot];
+// argument is the tree to walk, defaulting to the suite at [suiteroot.Default];
 // narrowing it is for reading one directory's output, never for taking the
 // census the whole corpus answers.
 //
@@ -245,12 +245,9 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/parser/xmltree"
+	"github.com/kud360/goxsd8/tools/internal/suiteroot"
 	"github.com/kud360/goxsd8/xsd"
 )
-
-// defaultRoot is the corpus this tool exists to census — the W3C suite
-// submodule, at its fixed path in the tree.
-const defaultRoot = "testdata/xsdtests"
 
 // usage is printed for any argument the tool cannot act on.
 const usage = `usage: suiteindex [-paths] <[pattern//]local[|local...][@attr[,attr...][=operand[|operand...]]]> [dir]; "," joins attribute names as all, "|" joins either position's names as any, "//" admits a match only inside an element the pattern before it matches, at any depth, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none; "=" after an attribute list admits only an attribute with a token resolving to one of its "|"-joined operands, each "{uri}local" or UNBOUND; -paths prints the matched fixture paths alone, for a tool downstream`
@@ -299,7 +296,7 @@ func parseArgs(args []string) (query, string, error) {
 	if len(args) == 2 {
 		return q, args[1], nil
 	}
-	return q, defaultRoot, nil
+	return q, suiteroot.Default, nil
 }
 
 // wildcard is what stands for every name on the axis it is written on: as a
@@ -1367,14 +1364,15 @@ func printReport(dst io.Writer, rep report) error {
 }
 
 // printReportTo does the rendering itself. Its writes go to a [latchWriter],
-// which is why they are not individually checked.
+// which is why they are not individually checked — [suiteroot.PrintAbsent]'s
+// returned error included, which is the error w latches.
 func printReportTo(w io.Writer, rep report) {
 	if !rep.RootPresent {
-		printAbsent(w, rep.Root, "does not exist")
+		_ = suiteroot.PrintAbsent(w, "suiteindex", rep.Root+" does not exist", "census")
 		return
 	}
 	if rep.Walked == 0 {
-		printAbsent(w, rep.Root, "holds no files")
+		_ = suiteroot.PrintAbsent(w, "suiteindex", rep.Root+" holds no files", "census")
 		return
 	}
 
@@ -1535,14 +1533,6 @@ func printAxis(w io.Writer, groups []pairGroup) {
 			_, _ = fmt.Fprintf(w, "      %s\n", f)
 		}
 	}
-}
-
-// printAbsent renders the corpus-absent mode: why there was nothing to
-// census, and the command that fixes it. The mode exits 0 — a fresh container
-// has no suite submodule (#659), which is a state to report, not a failure.
-func printAbsent(w io.Writer, root, reason string) {
-	_, _ = fmt.Fprintf(w, "suiteindex: %s %s — corpus-absent mode, nothing to census.\n", root, reason)
-	_, _ = fmt.Fprintf(w, "Initialize the suite with `git submodule update --init %s` (#659).\n", defaultRoot)
 }
 
 // printNotes renders one group of unread files under its heading. Both groups
