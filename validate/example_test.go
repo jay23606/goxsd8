@@ -2,11 +2,13 @@ package validate_test
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/validate"
+	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -98,4 +100,71 @@ func ExampleValidator_ConditionallySelected() {
 	// shape selects Circle
 	// shape selects Shape
 	// probe undecided: withheld, no fallback to the declared type
+}
+
+// ExampleResult assesses one XML document end to end and folds both of its
+// lists into one report: the qty child is not an xs:int, which the assessment
+// charges, and the order's assertion is one this engine's XPath evaluator declines.
+func ExampleResult() {
+	const orderXSD = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="order">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="qty" type="xs:int"/>
+      </xs:sequence>
+      <xs:assert test="@* = 5"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	const orderXML = `<?xml version="1.0"?>
+  <order>
+      <qty>many</qty>
+  </order>`
+
+	backend := strict.New()
+	schema, err := parser.Parse("order.xsd",
+		parser.WithBackend(backend),
+		parser.WithResolver(loader.Map(map[string]string{"order.xsd": orderXSD})))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	v, err := validate.New(schema, backend)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	res, err := xmlsrc.Validate(v, strings.NewReader(orderXML), xmlsrc.WithURI("order.xml"))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	// detail is one entry of the folded report; kind keeps a charge apart
+	// from a check the assessment did not perform.
+	type detail struct {
+		kind      string
+		rule      xsderr.Rule
+		uri       string
+		line, col int
+		msg       string
+	}
+	var report []detail
+	for _, e := range res.Violations() {
+		report = append(report, detail{"violation", e.Rule, e.Loc.URI, e.Loc.Line, e.Loc.Col, e.Msg})
+	}
+	for _, u := range res.Unevaluated() {
+		loc := u.Loc()
+		report = append(report, detail{"undecided", u.Rule(), loc.URI, loc.Line, loc.Col, u.Msg()})
+	}
+
+	for _, d := range report {
+		fmt.Printf("%s %s %s:%d:%d\n  %s\n", d.kind, d.rule, d.uri, d.line, d.col, d.msg)
+	}
+
+	// Output:
+	// violation cvc-type order.xml:3:7
+	//   the ·initial value· of the element qty is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}int, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): [cvc-pattern-valid] "many" matches no member of the pattern facet of the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match
+	// undecided cvc-assertion order.xml:2:3
+	//   assertion 1 of 1 in the {assertions} of the ·governing type definition· an anonymous type definition, whose {test} is "@* = 5", was not evaluated: this engine's XPath evaluator declined it because the attribute step @* is not supported in this position or over its declared type, so whether the element order is ·valid· with respect to it, as cvc-complex-type clause 6 requires, is undecided
 }

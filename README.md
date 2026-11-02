@@ -454,7 +454,8 @@ the runnable `Example*` funcs; pkg.go.dev
 package's documentation. For working, tested end-to-end code (seed builtins →
 parse a lexical → assert capabilities) in a checkout, read the example tests
 directly: `validate/jsonsrc/example_test.go` (`ExampleValidate`),
-`validate/example_test.go` (`ExampleValidator_ConditionallySelected`),
+`validate/example_test.go` (`ExampleValidator_ConditionallySelected`,
+`ExampleResult`),
 `value/example_test.go` (`ExampleOverride`, `ExampleValidateLexical`),
 `builtin/example_test.go` (`ExampleSeed`, `ExampleSeed_missingPrimitive`),
 `builtin/strict/example_test.go` (`ExampleNew`),

@@ -135,6 +135,17 @@ func (v *Validator) Schema() SchemaView { return v.schema }
 // Result is the outcome of one [Validator.Assess] call. Read it through
 // [Result.Standing], the acceptance test, and not through an empty
 // [Result.Violations].
+//
+// A report of both lists — an HTTP 422 body, a CI report, a log — is two
+// loops, one per list, whose entries stay distinguishable as a charge or a
+// check not performed. Each entry gives a rule, an instance location and a
+// message, reached two ways: a violation's [xsderr.Error] carries them as the
+// FIELDS Rule, Loc and Msg, and an [Unevaluated] answers them through the
+// METHODS [Unevaluated.Rule], [Unevaluated.Loc] and [Unevaluated.Msg]. No
+// exported type covers both, and an Unevaluated is not an error: its doc says
+// why. The correspondence is of types, not of meaning: xsderr.Error's Err has no
+// counterpart, and [Unevaluated.Rule] says when it is not a chargeable rule.
+// ExampleResult runs the two loops.
 type Result struct {
 	violations  []*xsderr.Error
 	unevaluated []Unevaluated
@@ -146,6 +157,7 @@ type Result struct {
 // through one writes r's. No violation yields nil.
 //
 // An empty slice is not acceptance: [Result.Standing] is the acceptance test.
+// [Result] says how a report reads these beside [Result.Unevaluated].
 func (r *Result) Violations() []*xsderr.Error {
 	if len(r.violations) == 0 {
 		return nil
@@ -243,7 +255,8 @@ func (u Unevaluated) Msg() string { return u.msg }
 
 // Unevaluated returns r's [Unevaluated] checks, in document order. The slice
 // is copied: mutating the result does not affect r. No such check yields nil.
-// [Result.Standing] says where they leave the document.
+// [Result.Standing] says where they leave the document, and [Result] how a
+// report reads them beside [Result.Violations].
 func (r *Result) Unevaluated() []Unevaluated {
 	if len(r.unevaluated) == 0 {
 		return nil
