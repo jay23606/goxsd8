@@ -44,7 +44,7 @@ func wantClauseThree(t *testing.T, got []*xsderr.Error, rule xsderr.Rule, value 
 	if cause.Rule != ruleCvcSimpleType {
 		t.Fatalf("wrapped Rule = %q, want %q", cause.Rule, ruleCvcSimpleType)
 	}
-	prefix := "the ·ENTITY value· " + `"` + value + `"`
+	prefix := "value " + `"` + value + `"`
 	if !strings.HasPrefix(cause.Msg, prefix) || !strings.Contains(cause.Msg, "cvc-simple-type clause 3") {
 		t.Fatalf("wrapped Msg = %q, want it to open %q and cite cvc-simple-type clause 3", cause.Msg, prefix)
 	}
@@ -62,8 +62,8 @@ func TestAnEntityAttributeMustNameADeclaredUnparsedEntity(t *testing.T) {
 
 	got := assessTyped(t, withEntities(valuedRoot("ent", "ghost"), "pic"), uses)
 	msg := wantClauseThree(t, got, ruleCvcAttribute, "ghost")
-	if !strings.Contains(msg, "key-vde") {
-		t.Errorf("wrapped Msg = %q, want the undeclared arm's key-vde citation", msg)
+	if !strings.Contains(msg, "names no unparsed entity in the document's [unparsedEntities], so it is not a ·declared entity name·") {
+		t.Errorf("wrapped Msg = %q, want the undeclared arm's ·declared entity name· (key-vde) reason", msg)
 	}
 	if got[0].Loc != loc(1, 10) {
 		t.Errorf("Loc = %s, want the attribute's %s", got[0].Loc, loc(1, 10))

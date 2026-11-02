@@ -131,8 +131,8 @@ func TestAttributeLexicalIsCheckedAgainstItsType(t *testing.T) {
 	if got.Loc != loc(1, 10) {
 		t.Errorf("Loc = %s, want the attribute's %s", got.Loc, loc(1, 10))
 	}
-	if !strings.Contains(got.Msg, "clause 3") || !strings.Contains(got.Msg, "String Valid") {
-		t.Errorf("Msg = %q, want clause 3 and its String Valid delegation named", got.Msg)
+	if want := `attribute n's value "abc" is not a valid {` + xsd.XMLSchemaNS + `}integer, which cvc-attribute clause 3 requires: [cvc-pattern-valid] `; !strings.HasPrefix(got.Msg, want) {
+		t.Errorf("Msg = %q, want the prefix %q: the attribute, its value and its type, then the delegated verdict", got.Msg, want)
 	}
 
 	wantSilence(t, assessTyped(t, valuedRoot("n", "42"), uses), "42 is an xs:integer")
@@ -225,12 +225,12 @@ func TestSpecialFixedAttributeIsDecidedOverTheMappingUnion(t *testing.T) {
 	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "37", nil, nil)
 	decl := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("anySimpleType"), false, &fixed, nil)}
 	got := onlyCharge(t, assessTyped(t, valuedRoot("n", "36"), decl), ruleCvcAttribute)
-	if !strings.HasPrefix(got.Msg, `the ·actual value· of the attribute n is neither equal nor identical to the {value} of the fixed {value constraint} "37"`) || !strings.Contains(got.Msg, "clause 4") {
+	if !strings.HasPrefix(got.Msg, `attribute n's value "36" is neither equal nor identical to "37", the {value} of the fixed {value constraint}`) || !strings.Contains(got.Msg, "clause 4") {
 		t.Errorf("Msg = %q, want clause 4 charged against the attribute n and the fixed \"37\"", got.Msg)
 	}
 	use := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("anySimpleType"), false, nil, &fixed)}
 	got = onlyCharge(t, assessTyped(t, valuedRoot("n", "36"), use), ruleCvcAu)
-	if !strings.HasPrefix(got.Msg, `the ·actual value· of the attribute n is neither equal nor identical to the {value} of the fixed {value constraint} "37" on its attribute use`) {
+	if !strings.HasPrefix(got.Msg, `attribute n's value "36" is neither equal nor identical to "37", the {value} of the fixed {value constraint} on its attribute use`) {
 		t.Errorf("Msg = %q, want cvc-au charged against the attribute n and the use's fixed \"37\"", got.Msg)
 	}
 }
@@ -346,7 +346,7 @@ func TestDefaultedQNameAttributeIsDecidedUnderItsOwnBindings(t *testing.T) {
 	got, undecided = assessRecorded(t, typedSchema(t, []xsd.AttributeUse{typedUse(t, "q", icBuiltin("QName"), false, &unbound, nil)}), bindsP)
 	wantDeclines(t, undecided)
 	charge := onlyCharge(t, got, "cvc-complex-type")
-	if !strings.HasPrefix(charge.Msg, "the element root carries no attribute information item named q, and the {lexical form} \"p:a\"") || !strings.Contains(charge.Msg, "clause 4") {
+	if !strings.HasPrefix(charge.Msg, "element root lacks attribute q, whose default \"p:a\"") || !strings.Contains(charge.Msg, "clause 4") {
 		t.Errorf("Msg = %q, want clause 4 charged against the defaulted q", charge.Msg)
 	}
 	if cause, _ := xsderr.RuleOf(errors.Unwrap(charge)); cause != "cvc-datatype-valid" {
@@ -512,8 +512,8 @@ func TestNonQNameXSITypeChargesClauseThree(t *testing.T) {
 		if got[0].Rule != "cvc-attribute" || got[0].Loc != loc(1, 10) {
 			t.Errorf("xsi:type=%q: charge = %v, want cvc-attribute at the attribute's own %s", lexical, got[0], loc(1, 10))
 		}
-		opening := `the xsi:type attribute of the element root has the ·initial value· "` + lexical +
-			`", which is not ·valid· with respect to {http://www.w3.org/2001/XMLSchema}QName`
+		opening := `the xsi:type attribute of the element root has the value "` + lexical +
+			`", which is not a valid {http://www.w3.org/2001/XMLSchema}QName`
 		if !strings.HasPrefix(got[0].Msg, opening) {
 			t.Errorf("xsi:type=%q: Msg = %q, want it to open %q", lexical, got[0].Msg, opening)
 		}
@@ -677,8 +677,8 @@ func wantAttributeCharge(t *testing.T, got []*xsderr.Error, at xsderr.Loc, prefi
 // The openings of the two cvc-attribute charges a wildcard-attributed
 // attribute can draw: clause 3 against n, clause 4 against f.
 const (
-	clause3OnN = "the ·initial value· of the attribute n is not ·valid· with respect to its declaration's {type definition}"
-	clause4OnF = `the ·actual value· of the attribute f is neither equal nor identical to the {value} of the fixed {value constraint} "x" on its attribute declaration`
+	clause3OnN = `attribute n's value "abc" is not a valid {http://www.w3.org/2001/XMLSchema}integer`
+	clause4OnF = `attribute f's value "y" is neither equal nor identical to "x", the {value} of the fixed {value constraint} on its attribute declaration`
 )
 
 // An attribute ·attributed to· a strict or lax {attribute wildcard}
@@ -798,7 +798,7 @@ func TestDeclarationlessXSINilChargesClauseThree(t *testing.T) {
 		t.Run(tc.why, func(t *testing.T) {
 			got, unevaluated := assessRecorded(t, tc.schema, tc.doc("maybe"))
 			wantAttributeCharge(t, got, loc(4, 20), `the xsi:nil attribute of the element `+tc.name+
-				` has the ·initial value· "maybe", which is not ·valid· with respect to xs:boolean`)
+				` has the value "maybe", which after the whiteSpace collapse is none of the literals true, false, 1 and 0 and so is not a valid xs:boolean`)
 			if !strings.Contains(got[0].Msg, "cvc-attribute clause 3") {
 				t.Errorf("Msg = %q, want it to name cvc-attribute clause 3 inline (STYLE E4)", got[0].Msg)
 			}

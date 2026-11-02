@@ -202,7 +202,7 @@ func TestValidateRendersDelegatedVerdictWithoutPlaceholder(t *testing.T) {
 	if code := run([]string{"validate", "-schema", orderSchema, invalidInstance}, &stdout, &stderr); code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
 	}
-	const want = invalidInstance + `:5:3: [cvc-attribute] the ·initial value· of the attribute sku is not ·valid· with respect to its declaration's {type definition} {http://example.com/order}Sku, which cvc-attribute clause 3 requires as per String Valid (§3.16.4): [cvc-pattern-valid] "nope" matches no member of the pattern facet of the simple type {http://example.com/order}Sku, whose {value} holds "[A-Z]{3}-[0-9]{4}", but cvc-pattern-valid requires one to match`
+	const want = invalidInstance + `:5:3: [cvc-attribute] attribute sku's value "nope" is not a valid {http://example.com/order}Sku, which cvc-attribute clause 3 requires: [cvc-pattern-valid] "nope" matches no member of the pattern facet of the simple type {http://example.com/order}Sku, whose {value} holds "[A-Z]{3}-[0-9]{4}", but cvc-pattern-valid requires one to match`
 	if line, _, _ := strings.Cut(stdout.String(), "\n"); line != want {
 		t.Errorf("first line =\n%s\nwant\n%s", line, want)
 	}
@@ -212,8 +212,8 @@ func TestValidateRendersDelegatedVerdictWithoutPlaceholder(t *testing.T) {
 // prints for <amount>12,50</amount> against an element of type xs:decimal:
 // the cvc-datatype-valid cause the strict backend builds opens with the
 // lexical and the type and closes with its rule inline (STYLE E5), with no
-// trailing production-and-section parenthetical (#2371). The outer cvc-type
-// sentence is pinned as validate renders it today; #2370 owns its wording.
+// trailing production-and-section parenthetical (#2371), and the outer cvc-type
+// sentence it wraps opens with the element and its value (#2370).
 func TestValidateRendersALexicalSpaceFaultWhole(t *testing.T) {
 	dir := t.TempDir()
 	schema := filepath.Join(dir, "s.xsd")
@@ -228,7 +228,7 @@ func TestValidateRendersALexicalSpaceFaultWhole(t *testing.T) {
 	if code := run([]string{"validate", "-schema", schema, instance}, &stdout, &stderr); code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
 	}
-	want := instance + `:1:1: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): [cvc-datatype-valid] "12,50" is not in the lexical space of decimal, which cvc-datatype-valid clause 2.1 requires it to be in` + "\n"
+	want := instance + `:1:1: [cvc-type] element amount's value "12,50" is not a valid {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires: [cvc-datatype-valid] "12,50" is not in the lexical space of decimal, which cvc-datatype-valid clause 2.1 requires it to be in` + "\n"
 	if got := stdout.String(); got != want {
 		t.Errorf("stdout =\n%s\nwant\n%s", got, want)
 	}
@@ -271,10 +271,13 @@ func TestValidateNamesTheBuiltinPatternAndItsDeclaringType(t *testing.T) {
 
 // TestValidateIntPatternRuleAndExitCode characterizes the rule a lexical
 // outside xs:int's inherited pattern is charged under: exit 1, cvc-type
-// clause 3.1.3 wrapping cvc-pattern-valid. The lexical also fails xs:int's
-// lexical mapping (cvc-datatype-valid clause 2.1) and the spec orders neither
-// clause first, so this pins the repository's choice — the pattern stage
-// runs before the mapping — against a re-charge under another rule (#2310).
+// clause 3.1.3 wrapping cvc-pattern-valid, the outer sentence pinned whole up
+// to the ": " before its cause, in STYLE E5's order: the element and its value,
+// the type it is not a valid one of, then the citation (#2370). The lexical
+// also fails xs:int's lexical mapping (cvc-datatype-valid clause 2.1) and the
+// spec orders neither clause first, so this pins the repository's choice — the
+// pattern stage runs before the mapping — against a re-charge under another
+// rule (#2310).
 func TestValidateIntPatternRuleAndExitCode(t *testing.T) {
 	instance, code, stdout, stderr := runIntPattern(t)
 	if code != exitInvalid {
@@ -284,7 +287,7 @@ func TestValidateIntPatternRuleAndExitCode(t *testing.T) {
 		t.Errorf("stderr = %q, want empty", stderr)
 	}
 	line, _, _ := strings.Cut(stdout, "\n")
-	if prefix := instance + ":1:1: [cvc-type] "; !strings.HasPrefix(line, prefix) {
+	if prefix := instance + `:1:1: [cvc-type] element n's value "x3" is not a valid {http://www.w3.org/2001/XMLSchema}int, which cvc-type clause 3.1.3 requires: [cvc-pattern-valid] `; !strings.HasPrefix(line, prefix) {
 		t.Errorf("first line = %q, want it to open %q", line, prefix)
 	}
 	if !strings.Contains(line, `: [cvc-pattern-valid] "x3" `) {

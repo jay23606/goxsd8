@@ -232,8 +232,8 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 		st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
 		if !simple {
 			w.declineID(c.e, c.e.Loc(),
-				"the ·defaulted attribute· %s of the element %s was not read into the ID/IDREF table: its declaration's {type definition} is absent or not a simple type definition, so cvc-id clause 1 is undecided",
-				u.DeclarationName(), c.e.Name())
+				"element %s lacks attribute %s, whose default %q was not read into the ID/IDREF table: its declaration's {type definition} is absent, so cvc-id clause 1 is undecided",
+				c.e.Name(), u.DeclarationName(), vc.LexicalForm())
 			continue
 		}
 		w.idRecord(st, vc.LexicalForm(), c.e, value.ConstraintContext(vc), c.node, c.e.Loc())
@@ -327,8 +327,8 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, ctx v
 	candidate, decided := w.idCandidate(st)
 	if !decided {
 		w.declineID(owner, loc,
-			"an item of the element %s was not read into the ID/IDREF table: whether its type %s is ·derived· or ·constructed· from ID, IDREF or IDREFS could not be decided, so cvc-id clause 1 is undecided",
-			owner.Name(), typeName(st))
+			"an item of element %s with the value %q was not read into the ID/IDREF table: whether its type %s is ·derived· or ·constructed· from ID, IDREF or IDREFS could not be decided, so cvc-id clause 1 is undecided",
+			owner.Name(), lexical, typeName(st))
 		return
 	}
 	if !candidate {
@@ -337,16 +337,16 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, ctx v
 	if _, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now)); err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			w.declineID(owner, loc,
-				"an item of the element %s was not read into the ID/IDREF table: the value backend reported a fault of its type %s rather than a verdict about the lexical, so cvc-id clause 1 is undecided",
-				owner.Name(), typeName(st))
+				"an item of element %s with the value %q was not read into the ID/IDREF table: the value backend reported a fault of its type %s rather than a verdict about the lexical, so cvc-id clause 1 is undecided",
+				owner.Name(), lexical, typeName(st))
 		}
 		return
 	}
 	values, decided := w.roleValues(st, lexical, ctx)
 	if !decided {
 		w.declineID(owner, loc,
-			"an item of the element %s was not read into the ID/IDREF table: the ·validating type· of its value under %s could not be decided, so cvc-id clause 1 is undecided",
-			owner.Name(), typeName(st))
+			"an item of element %s with the value %q was not read into the ID/IDREF table: the ·validating type· of its value under %s could not be decided, so cvc-id clause 1 is undecided",
+			owner.Name(), lexical, typeName(st))
 		return
 	}
 	for _, v := range values {

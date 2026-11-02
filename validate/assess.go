@@ -154,7 +154,7 @@ func (v *Validator) Assess(root Element) *Result {
 	decided, slot := w.decide(root, nil, nil, nil)
 	if _, unresolved := decided.(unresolvedGovernance); unresolved {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, root.Loc(),
-			"the validation root %s has no top-level element declaration, and no xsi:type ·resolving· to a type definition either, so it determines neither a ·governing element declaration· nor a ·governing type definition· and cannot be ·strictly assessed· (§5.2 strict wildcard validation)",
+			"element %s, the ·validation root·, has no top-level element declaration and no xsi:type ·resolving· to a type definition, so it determines neither a ·governing element declaration· nor a ·governing type definition· and cannot be ·strictly assessed·, which strict wildcard validation, entering at cvc-assess-elt, expects of the validation root",
 			root.Name()))
 		return &w.res
 	}
@@ -390,7 +390,7 @@ func (w *walk) charged(e Element, decided governed, slot string) (governance, bo
 // whatever the declaration's {type definition} is.
 func (w *walk) absentAffiliation(e Element, head xsd.QName) {
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
-		"the ·governing element declaration· of the element %s has an ·absent· member in its {substitution group affiliations}: the substitution group head %s names no element declaration in the schema, a missing sub-component that Structures §5.3 (Missing Sub-components) treats as if cvc-elt clause 1 had failed, so the element is ·laxly assessed·",
+		"element %s is governed by a declaration with an ·absent· member in its {substitution group affiliations}: the substitution group head %s names no element declaration in the schema, a missing sub-component, so the element is ·laxly assessed· as if cvc-elt clause 1 had failed",
 		e.Name(), head))
 	w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1", "charged")
 }
@@ -426,12 +426,12 @@ func (w *walk) absentAffiliation(e Element, head xsd.QName) {
 func (w *walk) instanceOverride(e Element, d xsd.ElementDeclaration, instance, selected xsd.TypeDefinition, err error) governance {
 	if err != nil {
 		w.decline("assessing element", e.Name(), e.Loc(), ruleCvcElt, "4",
-			"the ·governing type definition· of the element %s was not determined: whether its xsi:type %s ·overrides· its ·selected type definition· %s (cvc-elt clause 4, §3.3.4.2 key-overrides) could not be settled: %v",
+			"element %s was not given a ·governing type definition·: whether its xsi:type %s ·overrides· its ·selected type definition· %s could not be settled, so cvc-elt clause 4 is undecided: %v",
 			e.Name(), typeName(instance), typeName(selected), err)
 		return governance{decl: d, hasDecl: true}
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
-		"the xsi:type attribute of the element %s names the type definition %s, which is not ·validly substitutable· for the ·selected type definition· %s of its ·governing element declaration· subject to that declaration's {disallowed substitutions}, so it does not ·override· it as cvc-elt clause 4 requires (§3.3.4.2, key-overrides)",
+		"the xsi:type attribute of the element %s names the type definition %s, which is not ·validly substitutable· for the ·selected type definition· %s of its ·governing element declaration· subject to that declaration's {disallowed substitutions}, so it does not ·override· it, which cvc-elt clause 4 requires",
 		e.Name(), typeName(instance), typeName(selected)))
 	return governance{decl: d, hasDecl: true, typ: selected}
 }
@@ -577,10 +577,10 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 	}
 	cause := "·resolves· to no top-level element declaration"
 	if _, declared := w.schema.Element(child.Name()); declared {
-		cause = "·resolves· to a top-level element declaration that has or contains an ·absent· component — an ·absent· ·selected type definition· or {substitution group affiliations} member (§5.3 Missing Sub-components, charged under cvc-elt clause 1)"
+		cause = "·resolves· to a top-level element declaration that has or contains an ·absent· component — an ·absent· ·selected type definition· or {substitution group affiliations} member, a missing sub-component charged under cvc-elt clause 1"
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, child.Loc(),
-		"the element information item %s is ·attributed to· a ***strict*** ·wildcard particle· but %s, so it is ·laxly assessed· and its [validity] is ***notKnown***, which e-validity clause 1.1.3 (§3.3.5.1) makes the enclosing element %s invalid for",
+		"element %s is ·attributed to· a ***strict*** ·wildcard particle· but %s, so it is ·laxly assessed· and its [validity] is ***notKnown***, which e-validity clause 1.1.3 makes the enclosing element %s invalid for",
 		child.Name(), cause, content.e.Name()))
 	content.log(w, child.Name(), child.Loc(), ruleCvcAssessElt, "", "charged")
 }
@@ -645,8 +645,8 @@ func (w *walk) locallyDeclaredType(content *contentCheck, child Element, g gover
 	substitutable, err := w.schema.ValidlySubstitutable(g.typ, ldt, nil)
 	if err != nil {
 		w.decline("assessing element", child.Name(), child.Loc(), ruleCvcComplexType, "5",
-			"cvc-complex-type clause 5 was not decided for the element %s: whether its ·governing type definition· %s is ·validly substitutable· for its ·locally declared type· %s within %s could not be settled: %v",
-			child.Name(), typeName(g.typ), typeName(ldt), content.e.Name(), err)
+			"element %s, a child of %s, was not checked against its ·locally declared type· %s: whether its ·governing type definition· %s is ·validly substitutable· for it could not be settled, so cvc-complex-type clause 5 is undecided: %v",
+			child.Name(), content.e.Name(), typeName(ldt), typeName(g.typ), err)
 		return
 	}
 	if substitutable {
@@ -654,7 +654,7 @@ func (w *walk) locallyDeclaredType(content *contentCheck, child Element, g gover
 		return
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, child.Loc(),
-		"the element %s is a child of %s, and its ·governing type definition· %s is neither the same as nor ·validly substitutable· ·without limitation· for its ·locally declared type· %s within the parent's ·governing type definition·, as cvc-complex-type clause 5 requires (§3.4.4.2, key-ldt-elem)",
+		"element %s, a child of %s, has the ·governing type definition· %s, which is neither the same as nor ·validly substitutable· ·without limitation· for its ·locally declared type· %s within the parent's ·governing type definition·, but cvc-complex-type clause 5 requires one or the other",
 		child.Name(), content.e.Name(), typeName(g.typ), typeName(ldt)))
 	content.log(w, child.Name(), child.Loc(), ruleCvcComplexType, "5", "charged")
 }
@@ -739,7 +739,7 @@ func sameType(a, b xsd.TypeDefinition) bool {
 // element rather than reading it by ·expanded name·.
 func (w *walk) localGovernance(e Element, instance, ldt xsd.TypeDefinition, err error) governance {
 	w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssessElt, "",
-		"the ·governing type definition· of the element %s was not determined: whether its xsi:type %s ·overrides· its ·locally declared type· %s (key-governing-type-elem clause 6) could not be settled: %v",
+		"element %s was not given a ·governing type definition·: whether its xsi:type %s ·overrides· its ·locally declared type· %s could not be settled, so key-governing-type-elem clause 6 is undecided: %v",
 		e.Name(), typeName(instance), typeName(ldt), err)
 	w.ids.declined = true
 	return governance{undecided: true}
@@ -1171,14 +1171,14 @@ func (w *walk) unmatchedAttribute(a Attribute, e Element, governing xsd.ComplexT
 	wild, has := governing.AttributeWildcard()
 	if !has {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
-			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition· (cvc-complex-type clause 2.1), which has no {attribute wildcard} for it to be ·valid· with respect to either (clause 2.2.1), and clause 2 has no third arm",
+			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition·, so case 2.2 of clause 2 applies and not case 2.1, and that type has no {attribute wildcard}, which cvc-complex-type clause 2.2.1 requires",
 			a.Name()))
 		w.logAttribute(a, ruleCvcComplexType, "2", "charged")
 		return
 	}
 	if !w.schema.AllowsAttributeWildcardName(wild, a.Name()) {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
-			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition· (cvc-complex-type clause 2.1), and the {attribute wildcard} of that type does not admit its ·expanded name· either, so it is not ·valid· with respect to that wildcard as cvc-complex-type clause 2.2.2 requires (Item Valid (Wildcard), §3.10.4.1)",
+			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition·, and the {attribute wildcard} of that type does not admit its ·expanded name· either, so it is not ·valid· with respect to that wildcard, which cvc-complex-type clause 2.2.2 requires",
 			a.Name()))
 		w.logAttribute(a, ruleCvcComplexType, "2.2.2", "charged")
 		return

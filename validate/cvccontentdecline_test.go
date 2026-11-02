@@ -166,7 +166,7 @@ func TestSpecialFixedValueIsDecidedOverTheMappingUnion(t *testing.T) {
 	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "37", nil, nil)
 	got, _ := assessRecorded(t, simpleTypedSchema(t, icBuiltin("anySimpleType"), &fixed, false), cRoot("#36"))
 	if len(got) != 1 || got[0].Rule != ruleCvcElt ||
-		!strings.HasPrefix(got[0].Msg, `the ·actual value· of the element root is neither equal nor identical to the {value} of the fixed {value constraint} "37"`) {
+		!strings.HasPrefix(got[0].Msg, `element root's value "36" is neither equal nor identical to "37", the {value} of its declaration's fixed {value constraint}`) {
 		t.Fatalf("Violations() = %v, want one cvc-elt clause 5.2.2.2.2 charge against root and the fixed \"37\"", got)
 	}
 }
@@ -235,7 +235,7 @@ func TestUndecidedContentModelIsRecordedForAnEmptySequence(t *testing.T) {
 			got, undecided := assessRecorded(t, schema, tc.root)
 			wantSilence(t, got, "an unmatched empty sequence charges nothing")
 			wantDeclines(t, undecided,
-				Unevaluated{rule: ruleCvcComplexContent, loc: loc(1, 1), msg: "the element root has no element information item"})
+				Unevaluated{rule: ruleCvcComplexContent, loc: loc(1, 1), msg: "element root has no child element"})
 		})
 	}
 }

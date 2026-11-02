@@ -786,7 +786,7 @@ func TestUnionKeyMemberComparesByItsValidatingType(t *testing.T) {
 func icWantClause41(t *testing.T, got []*xsderr.Error, later, earlier int) {
 	t.Helper()
 	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, later))
-	prefix := loc(later, 1).String() + ": [cvc-identity-constraint] the ·target node· item has a ·key-sequence· equal or identical to the one at " + loc(earlier, 1).String() + ","
+	prefix := loc(later, 1).String() + ": [cvc-identity-constraint] element item, a ·target node· of the unique U declared on root, has a ·key-sequence· equal or identical to the one at " + loc(earlier, 1).String() + ","
 	if !strings.HasPrefix(got[0].Error(), prefix) || !strings.Contains(got[0].Error(), "clause 4.1 ") {
 		t.Errorf("Violations() = %v, want a clause 4.1 charge opening %q", got, prefix)
 	}
@@ -903,7 +903,7 @@ func TestFieldNodeOfNonSimpleTypeIsChargedUnderClause3(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			got, undecided := assessRecorded(t, icTypedFieldSchema(t, c.category, c.field), c.doc)
 			icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 3))
-			want := `instance.xml:3:1: [cvc-identity-constraint] the field "` + c.field + `" of the identity constraint C declared on root selects, for the ·target node· item, a node whose ·governing type definition· is neither`
+			want := `instance.xml:3:1: [cvc-identity-constraint] element item, a ·target node· of the identity constraint C declared on root, has its field "` + c.field + `" select a node whose ·governing type definition· is neither`
 			if len(got) == 1 && !strings.HasPrefix(got[0].Error(), want) {
 				t.Errorf("Violations()[0] = %q, want it to open %q", got[0].Error(), want)
 			}
@@ -1102,7 +1102,7 @@ func icWantClause3Count(t *testing.T, got []*xsderr.Error, field string, at xsde
 ) {
 	t.Helper()
 	icWantCharges(t, got, append(before, icChargeAt(ruleCvcIdentityConstraint, at))...)
-	prefix := at.String() + `: [cvc-identity-constraint] the field "` + field + `" of the identity constraint C declared on root selects, for the ·target node· item, more than one node whose ·governing type definition· is a simple type definition`
+	prefix := at.String() + `: [cvc-identity-constraint] element item, a ·target node· of the identity constraint C declared on root, has its field "` + field + `" select more than one node whose ·governing type definition· is a simple type definition`
 	if last := got[len(got)-1].Error(); !strings.HasPrefix(last, prefix) {
 		t.Errorf("Violations()[%d] = %q, want it to open %q", len(got)-1, last, prefix)
 	}

@@ -1,6 +1,8 @@
 package validate
 
 import (
+	"fmt"
+
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
@@ -156,19 +158,19 @@ func (w *walk) wildcardAttribute(a Attribute, e Element, pc xsd.ProcessContents)
 // The three declines below withhold a verdict rather than guess one, and each is
 // recorded as an [Unevaluated] at the attribute ([walk.declineAttribute]):
 //
-//   - a {type definition} that is absent or COMPLEX. GAP(validate): §3.2.1
-//     types the slot as a Required Simple Type Definition, and both shapes still
-//     reach an assembled schema. [xsd.NewAttributeDeclaration] accepts a nil
-//     {type definition} from a caller building components directly — never from
-//     a schema document, where §3.2.2.2's third tier assigns xs:anySimpleType —
-//     and it refuses only an INLINE complex type, so a by-name @type naming a
-//     complex type passes it and Finalize alike. (An unresolvable one never gets
-//     here: Finalize charges src-resolve for a by-name reference naming
-//     nothing.) Both are schema faults Finalize leaves unchecked with the rest of
-//     sch-props-correct clause 1, a deferral [xsd.Schema]'s own doc records, so
-//     this package declines rather than charge cvc-attribute clause 2 for an
-//     absence xsd admitted. RULED permanent by #774 (STYLE P3b): the charge
-//     belongs to xsd's deferred schema check, not to the instance walk.
+//   - a {type definition} that is absent. GAP(validate): §3.2.1 types the slot
+//     as a Required Simple Type Definition, and an assembled schema can still
+//     leave it empty: [xsd.NewAttributeDeclaration] accepts a nil {type
+//     definition} from a caller building components directly — never from a
+//     schema document, where §3.2.2.2's third tier assigns xs:anySimpleType.
+//     (A complex one never gets here: NewAttributeDeclaration refuses an inline
+//     one under a-props-correct clause 1, and Finalize charges src-resolve for a
+//     by-name one that names a complex type or nothing.) The absence is a schema
+//     fault Finalize leaves unchecked with the rest of sch-props-correct clause
+//     1, a deferral [xsd.Schema]'s own doc records, so this package declines
+//     rather than charge cvc-attribute clause 2 for an absence xsd admitted.
+//     RULED permanent by #774 (STYLE P3b): the charge belongs to xsd's deferred
+//     schema check, not to the instance walk.
 //   - a lexical whose ValidateLexical error is not a VERDICT
 //     ([value.IsDatatypeVerdict]). GAP(validate): a type no backend maps is the
 //     live case, and the resulting error carries cvc-datatype-valid exactly as
@@ -185,24 +187,24 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 	st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
 	if !simple {
 		w.declineAttribute(a, ruleCvcAttribute, "3",
-			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition}, which is absent or not a simple type definition, so cvc-attribute clause 3 is undecided",
-			a.Name())
+			"attribute %s's value %q was not decided against its declaration's {type definition}, which is absent, so cvc-attribute clause 3 is undecided",
+			a.Name(), a.Value())
 		return nil, attributeNotKnown
 	}
 	decided, verdict := w.stringValid(st, a.Value(), elementContext{owner: e}, a.Loc())
 	if !decided {
-		if w.declineAssertions(verdict, "assessing attribute", a.Name(), a.Loc(), "cvc-attribute clause 3") {
+		if w.declineAssertions(verdict, "assessing attribute", a.Name(), a.Loc(), fmt.Sprintf("attribute %s's value %q", a.Name(), a.Value()), "cvc-attribute clause 3") {
 			return nil, attributeNotKnown
 		}
 		w.declineAttribute(a, ruleCvcAttribute, "3",
-			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition} %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-attribute clause 3 is undecided",
-			a.Name(), st.Name())
+			"attribute %s's value %q was not decided against %s, its declaration's {type definition}: String Valid was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-attribute clause 3 is undecided",
+			a.Name(), a.Value(), st.Name())
 		return nil, attributeNotKnown
 	}
 	if verdict != nil {
 		w.res.violations = append(w.res.violations, causedBy(ruleCvcAttribute, a.Loc(), verdict,
-			"the ·initial value· of the attribute %s is not ·valid· with respect to its declaration's {type definition} %s, which cvc-attribute clause 3 requires as per String Valid (§3.16.4)",
-			a.Name(), st.Name()))
+			"attribute %s's value %q is not a valid %s, which cvc-attribute clause 3 requires",
+			a.Name(), a.Value(), st.Name()))
 		w.logAttribute(a, ruleCvcAttribute, "3", "charged")
 		return nil, attributeInvalid
 	}
@@ -280,7 +282,7 @@ func (w *walk) instanceTypeResolves(e Element, g governance) {
 			e.Name(), a.Value())
 	case instanceTypeUnresolved:
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAttribute, a.Loc(),
-			"the xsi:type attribute of the element %s has the lexical %q, and the schema declares no type definition named %q for it to ·resolve· to (§3.17.6.3, cvc-resolve-instance), which cvc-attribute clause 5 requires of an attribute governed by the built-in declaration for the type attribute (§3.2.7.1)",
+			"the xsi:type attribute of the element %s has the lexical %q, and the schema declares no type definition named %q for it to ·resolve· to as cvc-resolve-instance defines it, which cvc-attribute clause 5 requires of an attribute the built-in declaration for the type attribute governs",
 			e.Name(), a.Value(), name))
 		w.logAttribute(a, ruleCvcAttribute, "5", "charged")
 	}
@@ -317,7 +319,7 @@ func (w *walk) instanceNilLexical(e Element, g governance) {
 		return
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAttribute, a.Loc(),
-		"the xsi:nil attribute of the element %s has the ·initial value· %q, which is not ·valid· with respect to xs:boolean, the {type definition} of the built-in declaration for the nil attribute (§3.2.7.2), as cvc-attribute clause 3 requires per String Valid (§3.16.4): after the whiteSpace collapse it is none of the literals true, false, 1 and 0",
+		"the xsi:nil attribute of the element %s has the value %q, which after the whiteSpace collapse is none of the literals true, false, 1 and 0 and so is not a valid xs:boolean, the {type definition} of the built-in declaration for the nil attribute, which cvc-attribute clause 3 requires",
 		e.Name(), a.Value()))
 	w.logAttribute(a, ruleCvcAttribute, "3", "charged")
 }
@@ -354,7 +356,7 @@ func (w *walk) instanceTypeLexical(a Attribute, e Element) bool {
 	st, simple := w.schema.ResolvedSimpleType(xsd.TypeDefinitionRef{Name: qnameTypeName})
 	if !simple {
 		w.declineAttribute(a, ruleCvcAttribute, "3",
-			"the xsi:type attribute of the element %s was not decided against xs:QName, the {type definition} of the built-in declaration for the type attribute (§3.2.7.1): the schema carries no simple type of that name, so cvc-attribute clause 3 is undecided",
+			"the xsi:type attribute of the element %s was not decided against xs:QName, the {type definition} of the built-in declaration for the type attribute: the schema carries no simple type of that name, so cvc-attribute clause 3 is undecided",
 			e.Name())
 		return true
 	}
@@ -365,12 +367,12 @@ func (w *walk) instanceTypeLexical(a Attribute, e Element) bool {
 	}
 	if !value.IsDatatypeVerdict(err) {
 		w.declineAttribute(a, ruleCvcAttribute, "3",
-			"the xsi:type attribute of the element %s was not decided against %s, the {type definition} of the built-in declaration for the type attribute (§3.2.7.1): the value backend reported a fault of the type rather than a verdict about the lexical, so cvc-attribute clause 3 is undecided",
+			"the xsi:type attribute of the element %s was not decided against %s, the {type definition} of the built-in declaration for the type attribute: the value backend reported a fault of the type rather than a verdict about the lexical, so cvc-attribute clause 3 is undecided",
 			e.Name(), st.Name())
 		return true
 	}
 	w.res.violations = append(w.res.violations, causedBy(ruleCvcAttribute, a.Loc(), err,
-		"the xsi:type attribute of the element %s has the ·initial value· %q, which is not ·valid· with respect to %s, the {type definition} of the built-in declaration for the type attribute (§3.2.7.1), as cvc-attribute clause 3 requires per String Valid (§3.16.4)",
+		"the xsi:type attribute of the element %s has the value %q, which is not a valid %s, the {type definition} of the built-in declaration for the type attribute, which cvc-attribute clause 3 requires",
 		e.Name(), a.Value(), st.Name()))
 	w.logAttribute(a, ruleCvcAttribute, "3", "charged")
 	return false
@@ -449,8 +451,8 @@ func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixe
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc, xpath.FacetAssertions(w.now))
 	if !decided {
 		w.declineAttribute(a, f.rule, f.clause,
-			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",
-			a.Name(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause))
+			"attribute %s's value %q was not compared with %q, the {value} of the fixed {value constraint} on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",
+			a.Name(), a.Value(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause))
 		return attributeNotKnown
 	}
 	if same {
@@ -458,8 +460,8 @@ func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixe
 		return attributeValid
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(f.rule, a.Loc(),
-		"the ·actual value· of the attribute %s is neither equal nor identical to the {value} of the fixed {value constraint} %q on its %s, which %s requires",
-		a.Name(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause)))
+		"attribute %s's value %q is neither equal nor identical to %q, the {value} of the fixed {value constraint} on its %s, which %s requires",
+		a.Name(), a.Value(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause)))
 	w.logAttribute(a, f.rule, f.clause, "charged")
 	return attributeInvalid
 }
@@ -583,7 +585,7 @@ func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.V
 // construction-stage facet failure, a facet-pipeline precondition fault, an
 // undecidable ·validating type· for clause 3 — under clause 4
 // ([walk.declineDefaulted]), on [walk.declaredAttribute]'s terms; so is a
-// {type definition} that is absent or complex.
+// {type definition} that is absent.
 func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueConstraint) {
 	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 	if !resolved {
@@ -594,25 +596,25 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 	st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
 	if !simple {
 		w.declineDefaulted(e, u,
-			"the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· %s of the element %s was not decided against that declaration's {type definition}, which is absent or not a simple type definition, so cvc-complex-type clause 4 is undecided",
-			vc.LexicalForm(), u.DeclarationName(), e.Name())
+			"element %s lacks attribute %s, whose default %q was not decided against its declaration's {type definition}, which is absent, so cvc-complex-type clause 4 is undecided",
+			e.Name(), u.DeclarationName(), vc.LexicalForm())
 		return
 	}
 	decided, verdict := w.stringValid(st, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
 	if !decided {
-		if w.declineAssertions(verdict, "assessing attribute use", u.DeclarationName(), e.Loc(), "cvc-complex-type clause 4") {
+		if w.declineAssertions(verdict, "assessing attribute use", u.DeclarationName(), e.Loc(), fmt.Sprintf("element %s lacks attribute %s, whose default %q", e.Name(), u.DeclarationName(), vc.LexicalForm()), "cvc-complex-type clause 4") {
 			return
 		}
 		w.declineDefaulted(e, u,
-			"the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· %s of the element %s was not decided against that declaration's {type definition} %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-complex-type clause 4 is undecided",
-			vc.LexicalForm(), u.DeclarationName(), e.Name(), st.Name())
+			"element %s lacks attribute %s, whose default %q was not decided against %s, its declaration's {type definition}: String Valid was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-complex-type clause 4 is undecided",
+			e.Name(), u.DeclarationName(), vc.LexicalForm(), st.Name())
 		return
 	}
 	if verdict == nil {
 		return
 	}
 	w.res.violations = append(w.res.violations, causedBy(ruleCvcComplexType, e.Loc(), verdict,
-		"the element %s carries no attribute information item named %s, and the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· it would supply is not ·valid· with respect to that declaration's {type definition} %s, which cvc-complex-type clause 4 requires as per String Valid (§3.16.4)",
+		"element %s lacks attribute %s, whose default %q is not a valid %s, its declaration's {type definition}, which cvc-complex-type clause 4 requires",
 		e.Name(), u.DeclarationName(), vc.LexicalForm(), st.Name()))
 }
 

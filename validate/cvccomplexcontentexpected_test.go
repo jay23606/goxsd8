@@ -45,13 +45,13 @@ func cWantMsg(t *testing.T, got []*xsderr.Error, want string) {
 // cUnadmitted is the clause 1 message for an item no particle admits, naming
 // what the content model expected there.
 func cUnadmitted(item, expects string) string {
-	return "the element information item " + item + " is ·attributed to· no particle of the {content type} of root at its position in the [[children]], where the content model expects " + expects + ", so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 1 requires"
+	return "element " + item + ", a child of root, is not allowed at its position: no particle of the parent's {content type} admits it there, where the content model expects " + expects + ", but cvc-complex-content clause 1 requires the [[children]] to be ·valid· with respect to that {content type}"
 }
 
 // cEndsShort is the message for [[children]] that end with a {min occurs}
 // owed, naming what the {particle} expected next.
 func cEndsShort(expects, clause string) string {
-	return "the [[children]] of root end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, where that {content type}'s {particle} expects " + expects + ", so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause " + clause + " requires"
+	return "element root's children end before every particle of its ·governing type definition·'s {content type} has taken the occurrences its {min occurs} requires, where that {content type}'s {particle} expects " + expects + ", but cvc-complex-content clause " + clause + " requires the [[children]] to be ·valid· with respect to that {content type}"
 }
 
 // A sequence that skips a required member is charged at the member after it,
@@ -155,7 +155,7 @@ func TestOpenContentChargeNamesBothHalves(t *testing.T) {
 
 	got := cAssess(t, schema, cRoot("a", "zzz"))
 
-	cWantMsg(t, got, `the element information item zzz is ·attributed to· no particle of the {content type} of root at its position in the [[children]], and its ·expanded name· is not ·valid· with respect to that {content type}'s {open content} wildcard either, where the content model expects one of element declaration b, open content wildcard enumeration "urn:open", so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 3 requires`)
+	cWantMsg(t, got, `element zzz, a child of root, is not allowed at its position: no particle of the parent's {content type} admits it there, and neither does that {content type}'s {open content} wildcard, where the content model expects one of element declaration b, open content wildcard enumeration "urn:open", but cvc-complex-content clause 3 requires the [[children]] to be ·valid· with respect to that {content type}`)
 }
 
 // An expected element is named by its ·expanded name· in the notation the
@@ -259,7 +259,7 @@ func TestOpenContentChargeNamesTheOpenWildcardPastTheBound(t *testing.T) {
 	got := cAssess(t, schema, cRoot("z"))
 
 	wantContentCharge(t, got, "cvc-complex-content", "3", loc(2, 1))
-	cWantMsg(t, got, `the element information item z is ·attributed to· no particle of the {content type} of root at its position in the [[children]], and its ·expanded name· is not ·valid· with respect to that {content type}'s {open content} wildcard either, where the content model expects one of element declaration a, element declaration b, element declaration c, element declaration d, element declaration e and 1 more, or open content wildcard enumeration "urn:open", so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 3 requires`)
+	cWantMsg(t, got, `element z, a child of root, is not allowed at its position: no particle of the parent's {content type} admits it there, and neither does that {content type}'s {open content} wildcard, where the content model expects one of element declaration a, element declaration b, element declaration c, element declaration d, element declaration e and 1 more, or open content wildcard enumeration "urn:open", but cvc-complex-content clause 3 requires the [[children]] to be ·valid· with respect to that {content type}`)
 }
 
 // cDisallowingQ is the {namespace constraint} any whose {disallowed names}
@@ -294,7 +294,7 @@ func TestContentChargeNamesAWildcardThatDisallowsTheItem(t *testing.T) {
 	got := cAssess(t, schema, cRoot("q"))
 
 	wantContentCharge(t, got, "cvc-complex-content", "1", loc(2, 1))
-	cWantMsg(t, got, cUnadmitted("q", "wildcard any, which disallows q"))
+	cWantMsg(t, got, cUnadmitted("q", "wildcard any that disallows q"))
 }
 
 // The {open content} arm is named as disallowing the item on the same terms.
@@ -305,5 +305,5 @@ func TestOpenContentChargeNamesAnOpenWildcardThatDisallowsTheItem(t *testing.T) 
 	got := cAssess(t, schema, cRoot("a", "q"))
 
 	wantContentCharge(t, got, "cvc-complex-content", "3", loc(3, 1))
-	cWantMsg(t, got, `the element information item q is ·attributed to· no particle of the {content type} of root at its position in the [[children]], and its ·expanded name· is not ·valid· with respect to that {content type}'s {open content} wildcard either, where the content model expects one of element declaration b, open content wildcard any, which disallows q, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 3 requires`)
+	cWantMsg(t, got, `element q, a child of root, is not allowed at its position: no particle of the parent's {content type} admits it there, and neither does that {content type}'s {open content} wildcard, where the content model expects one of element declaration b, open content wildcard any that disallows q, but cvc-complex-content clause 3 requires the [[children]] to be ·valid· with respect to that {content type}`)
 }

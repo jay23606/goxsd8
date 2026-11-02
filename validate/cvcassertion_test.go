@@ -520,7 +520,7 @@ func TestValueAssertionIgnoresAChargeAgainstTheParent(t *testing.T) {
 		t.Errorf("Unevaluated() = %v, want none", messages(got))
 	}
 	if vs := res.Violations(); len(vs) != 1 || vs[0].Rule != ruleCvcComplexType || vs[0].Loc != loc(3, 3) ||
-		!strings.HasPrefix(vs[0].Msg, "the element s is a child of odd, and its ·governing type definition· S is neither the same as nor ·validly substitutable·") {
+		!strings.HasPrefix(vs[0].Msg, "element s, a child of odd, has the ·governing type definition· S, which is neither the same as nor ·validly substitutable·") {
 		t.Errorf("Violations() = %v, want the one cvc-complex-type clause 5 charge at %s", vs, loc(3, 3))
 	}
 }
@@ -726,7 +726,7 @@ func TestOutOfFamilyAssertionIsDeclined(t *testing.T) {
 	} {
 		schema := aTyped(t, []string{"x", "integer"}, tc.expr)
 		res := aAssess(t, schema, aRoot("x", "500"))
-		wantRecords(t, res, "cvc-assertion", loc(1, 1), "whose {test} is "+strconv.Quote(tc.expr)+", was not evaluated: this engine's XPath evaluator declined it because "+tc.why+", so whether the element root is ·valid·")
+		wantRecords(t, res, "cvc-assertion", loc(1, 1), "whose {test} is "+strconv.Quote(tc.expr)+", which was not evaluated: this engine's XPath evaluator declined it because "+tc.why+", so cvc-complex-type clause 6 is undecided")
 	}
 }
 
@@ -801,7 +801,7 @@ func TestAssertionOverAnUndecidedDefaultedAttributeIsDeclined(t *testing.T) {
 	}
 	last := len(undecided) - 1
 	if last < 0 || undecided[last].Rule() != "cvc-assertion" ||
-		!strings.HasPrefix(undecided[last].Msg(), "assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is \"not(@x)\", was not evaluated: the ·defaulted attribute· x of the element root has no ·actual value·") {
+		!strings.HasPrefix(undecided[last].Msg(), "element root was not assessed against assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is \"not(@x)\", which was not evaluated: the ·defaulted attribute· x of the element root has no ·actual value·") {
 		t.Fatalf("Unevaluated() = %v, want the assertion declined last for the defaulted x's missing ·actual value·", messages(undecided))
 	}
 }
@@ -1114,6 +1114,30 @@ func TestDefaultedAttributeAssertionsFacetIsEvaluated(t *testing.T) {
 	wantRecords(t, assess("InRange", "42"), "cvc-assertions-valid", loc(1, 1), "InRange")
 }
 
+// A cvc-assertions-valid decline opens with the item whose value the declined
+// {test} left undecided and that value, before the assertion value's decline
+// names (STYLE E5): an attribute's own value, a ·defaulted attribute·'s
+// default at the element lacking it, and an element's ·initial value·.
+func TestDeclinedFacetAssertionOpensWithTheItem(t *testing.T) {
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "42", nil, nil)
+	defaulted := aAssess(t, aSchema(t, aComplexType(t, []xsd.AttributeUse{typedUse(t, "n", local("InRange"), false, nil, &dflt)}, xsd.EmptyContent{}, nil), aFacetTypes(t)...),
+		&testElement{name: local("root"), loc: loc(1, 1)})
+	for _, c := range []struct {
+		name    string
+		res     *Result
+		opening string
+	}{
+		{"attribute", aAttributeAssessed(t, "InRange", "4"), `attribute n's value "4" was not decided: assertion 1 of 1 in the {value} of the assertions facet of `},
+		{"defaulted attribute", defaulted, `element root lacks attribute n, whose default "42" was not decided: assertion 1 of 1 in the {value} of the assertions facet of `},
+		{"element", aFixedElementAssessed(t, "InRange", "7", "4"), `element root's value "4" was not decided: assertion 1 of 1 in the {value} of the assertions facet of `},
+	} {
+		got := c.res.Unevaluated()
+		if len(got) == 0 || got[0].Rule() != ruleCvcAssertionsValid || !strings.HasPrefix(got[0].Msg(), c.opening) {
+			t.Errorf("%s: Unevaluated() = %v, want a cvc-assertions-valid record first, opening %q", c.name, messages(got), c.opening)
+		}
+	}
+}
+
 func TestResultUnevaluatedIsCopied(t *testing.T) {
 	// Unevaluated is a window, not a handle, on Violations' terms.
 	res := &Result{unevaluated: []Unevaluated{
@@ -1217,7 +1241,7 @@ func wantFixedCharge(t *testing.T, res *Result, rule xsderr.Rule, prefix, clause
 func TestFixedAttributeComparesThroughItsAssertionsFacet(t *testing.T) {
 	wantSatisfied(t, aFixedAttributeAssessed(t, "NonNegative", "7", "+7"), "+7 against a fixed 7")
 	wantFixedCharge(t, aFixedAttributeAssessed(t, "NonNegative", "7", "5"), "cvc-attribute",
-		`the ·actual value· of the attribute n is neither equal nor identical to the {value} of the fixed {value constraint} "7" on its attribute declaration`,
+		`attribute n's value "5" is neither equal nor identical to "7", the {value} of the fixed {value constraint} on its attribute declaration`,
 		"cvc-attribute clause 4", "5 against a fixed 7")
 }
 
@@ -1230,7 +1254,7 @@ func TestFixedAttributeComparesThroughItsAssertionsFacet(t *testing.T) {
 func TestFixedElementComparesThroughItsAssertionsFacet(t *testing.T) {
 	wantSatisfied(t, aFixedElementAssessed(t, "NonNegative", "7", "+7"), "+7 against a fixed 7")
 	wantFixedCharge(t, aFixedElementAssessed(t, "NonNegative", "7", "5"), "cvc-elt",
-		`the ·actual value· of the element root is neither equal nor identical to the {value} of the fixed {value constraint} "7"`,
+		`element root's value "5" is neither equal nor identical to "7", the {value} of its declaration's fixed {value constraint}`,
 		"cvc-elt clause 5.2.2.2.2", "5 against a fixed 7")
 }
 

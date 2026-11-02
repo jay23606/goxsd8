@@ -43,7 +43,7 @@ const ruleKeyCTATASelect xsderr.Rule = "key-cta-ta-select"
 // an unresolvable substitutionGroup head xs:anyType.
 func (w *walk) absentSelection(e Element, slot string) {
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
-		"the ·selected type definition· of the element %s is ·absent·: %s names a substitution group head with no element declaration in the schema, a missing sub-component that Structures §5.3 (Missing Sub-components) treats as if cvc-elt clause 1 had failed, so the element is ·laxly assessed·",
+		"element %s has an ·absent· ·selected type definition·: %s names a substitution group head with no element declaration in the schema, a missing sub-component, so the element is ·laxly assessed· as if cvc-elt clause 1 had failed",
 		e.Name(), slot))
 	w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1", "charged")
 }
@@ -63,7 +63,7 @@ func (w *walk) absentSelection(e Element, slot string) {
 // schema check, not to the instance walk.
 func (w *walk) resolvedSelection(e Element, slot string) {
 	w.decline("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1",
-		"the ·selected type definition· of the element %s was not determined, so it has no ·governing type definition· and was assessed against nothing: %s resolves to no type definition, an ·absent· (nil) {type definition} that sch-props-correct clause 1 leaves to the schema check, so cvc-elt clause 1 (Structures §5.3) is not charged here",
+		"element %s has no ·governing type definition· and was assessed against nothing: its ·selected type definition· was not determined, as %s resolves to no type definition, an ·absent· (nil) {type definition} that sch-props-correct clause 1 leaves to the schema check, so cvc-elt clause 1 is not charged here",
 		e.Name(), slot)
 }
 
@@ -136,8 +136,8 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 	if declined != nil {
 		test, _ := alts[i].Test()
 		w.decline("assessing element", e.Name(), e.Loc(), ruleKeyCTATASelect, "2",
-			"alternative %d of %d in the {alternatives} of the {type table} of %s's ·governing element declaration·, whose {test} is %q, was not evaluated: this engine's XPath evaluator declined it because %s, so whether it ·successfully selects· its {type definition} is undecided and the type the table ·conditionally selects· (§3.3.4.1, key-cta-select) is withheld along with it, together with every alternative behind it",
-			i+1, len(alts), e.Name(), test.Expression(), declined)
+			"element %s was not given a type by its declaration's {type table}: alternative %d of %d, whose {test} is %q, was not evaluated, this engine's XPath evaluator having declined it because %s, so the type the table ·conditionally selects· is withheld together with every alternative behind it, and key-cta-ta-select clause 2 is undecided for that alternative",
+			e.Name(), i+1, len(alts), test.Expression(), declined)
 		return nil, "", false
 	}
 	if i < len(alts) {

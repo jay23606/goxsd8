@@ -263,13 +263,15 @@ func TestOptionalAttributeAbsentIsNotCharged(t *testing.T) {
 	wantSilence(t, got, "clause 3 says nothing about an optional use")
 }
 
-// Clause 2 has no third arm: an attribute matching no attribute use (clause
-// 2.1) whose type has no {attribute wildcard} (clause 2.2.1) satisfies
-// neither case, so clause 2 is violated outright — decidable with no
-// datatype backend at all. The charge cites the ATTRIBUTE's position.
+// Clause 2 has no third case: an attribute matching no attribute use falls
+// outside case 2.1 into case 2.2, and with no {attribute wildcard} on its type
+// that case fails at its first conjunct, clause 2.2.1, so clause 2 is violated
+// outright — decidable with no datatype backend at all. The charge cites the
+// ATTRIBUTE's position and names cvc-complex-type clause 2.2.1, the conjunct
+// that fails.
 func TestUndeclaredAttributeWithNoWildcardChargesClauseTwo(t *testing.T) {
 	got := assessRoot(t, attributedRoot(local("stray")), []xsd.AttributeUse{aUse(t, "id", false, nil)}, nil)
-	wantCharge(t, got, "clause 2", loc(1, 10), "stray")
+	wantCharge(t, got, "cvc-complex-type clause 2.2.1", loc(1, 10), "stray")
 }
 
 // The same attribute against a type carrying an {attribute wildcard} that

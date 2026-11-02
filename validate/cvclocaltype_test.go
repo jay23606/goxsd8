@@ -93,7 +93,7 @@ func TestLocallyDeclaredTypeChargesAMismatchedWildcardChild(t *testing.T) {
 			if viol.Loc != loc(4, 3) {
 				t.Errorf("Loc = %s, want the wildcard child's %s", viol.Loc, loc(4, 3))
 			}
-			want := "the element e is a child of doc, and its ·governing type definition· {" + xsd.XMLSchemaNS + "}time is neither"
+			want := "element e, a child of doc, has the ·governing type definition· {" + xsd.XMLSchemaNS + "}time, which is neither"
 			if !strings.HasPrefix(viol.Msg, want) {
 				t.Errorf("Msg = %q, want the prefix %q", viol.Msg, want)
 			}
@@ -120,7 +120,7 @@ func TestLocallyDeclaredTypeChargesAnXSITypeWildcardChild(t *testing.T) {
 	if viol.Loc != loc(4, 3) {
 		t.Errorf("Loc = %s, want the wildcard child's %s", viol.Loc, loc(4, 3))
 	}
-	if !strings.Contains(viol.Msg, "{"+xsd.XMLSchemaNS+"}time is neither") ||
+	if !strings.Contains(viol.Msg, "{"+xsd.XMLSchemaNS+"}time, which is neither") ||
 		!strings.Contains(viol.Msg, "·locally declared type· {"+xsd.XMLSchemaNS+"}string within") {
 		t.Errorf("Msg = %q, want xs:time against the ·locally declared type· xs:string", viol.Msg)
 	}
@@ -243,12 +243,13 @@ func TestLocalGovernanceChargesAnOpenContentChild(t *testing.T) {
 		why       string
 		schema    *xsd.Schema
 		doc       *testElement
+		value     string
 		governing string
 	}{
 		{"a value xs:string accepts, against the ·locally declared type· xs:date",
-			ldtOpenSchema(t, "xs:date", "xs:string"), ldtDoc("2008-11-03", "", "e", "hello"), "date"},
+			ldtOpenSchema(t, "xs:date", "xs:string"), ldtDoc("2008-11-03", "", "e", "hello"), "hello", "date"},
 		{"a value xs:integer accepts, against an xsi:type of xs:positiveInteger ·overriding· it",
-			ldtOpenSchema(t, "xs:integer", "xs:integer"), ldtDoc("1", "", "e", "-5", xsiTypeAttr("xs:positiveInteger")), "positiveInteger"},
+			ldtOpenSchema(t, "xs:integer", "xs:integer"), ldtDoc("1", "", "e", "-5", xsiTypeAttr("xs:positiveInteger")), "-5", "positiveInteger"},
 	} {
 		t.Run(tc.why, func(t *testing.T) {
 			got, unevaluated := assessRecorded(t, tc.schema, tc.doc)
@@ -256,7 +257,7 @@ func TestLocalGovernanceChargesAnOpenContentChild(t *testing.T) {
 			if viol.Loc != loc(4, 3) {
 				t.Errorf("Loc = %s, want the {open content} child's %s", viol.Loc, loc(4, 3))
 			}
-			want := "the ·initial value· of the element e is not ·valid· with respect to its ·governing type definition· {" + xsd.XMLSchemaNS + "}" + tc.governing + ","
+			want := `element e's value "` + tc.value + `" is not a valid {` + xsd.XMLSchemaNS + "}" + tc.governing + ","
 			if !strings.HasPrefix(viol.Msg, want) {
 				t.Errorf("Msg = %q, want the prefix %q", viol.Msg, want)
 			}
@@ -303,7 +304,7 @@ func TestLocallyDeclaredTypeChargesAParticleChildOverASelection(t *testing.T) {
 		if viol.Loc != loc(4, 3) {
 			t.Errorf("Loc = %s, want the child's %s", viol.Loc, loc(4, 3))
 		}
-		want := "the element e is a child of doc, and its ·governing type definition· Leaf is neither"
+		want := "element e, a child of doc, has the ·governing type definition· Leaf, which is neither"
 		if !strings.HasPrefix(viol.Msg, want) || !strings.Contains(viol.Msg, "·locally declared type· Base within") {
 			t.Errorf("Msg = %q, want the prefix %q and the ·locally declared type· Base", viol.Msg, want)
 		}
@@ -336,7 +337,7 @@ func TestLocallyDeclaredTypeChargesAnXSErrorSelection(t *testing.T) {
 	if !slices.Equal(rules, want) {
 		t.Fatalf("Violations() = %v, want the rules %v", got, want)
 	}
-	if !strings.HasPrefix(got[0].Msg, "the element e is a child of doc, and its ·governing type definition· {"+xsd.XMLSchemaNS+"}error is neither") {
+	if !strings.HasPrefix(got[0].Msg, "element e, a child of doc, has the ·governing type definition· {"+xsd.XMLSchemaNS+"}error, which is neither") {
 		t.Errorf("Msg = %q, want clause 5 charged against ·xs:error·", got[0].Msg)
 	}
 }

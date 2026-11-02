@@ -296,8 +296,8 @@ func TestSimpleContentValidatesTheInitialValue(t *testing.T) {
 
 	got := cAssess(t, schema, cRoot("#abc"))
 	wantContentCharge(t, got, "cvc-complex-type", "1.2", loc(1, 1))
-	if !strings.Contains(got[0].Msg, "String Valid") {
-		t.Errorf("Msg = %q, want the String Valid delegation named", got[0].Msg)
+	if want := `element root's value "abc" is not a valid {` + xsd.XMLSchemaNS + `}integer, the {simple type definition} of its ·governing type definition·'s {content type}, which cvc-complex-type clause 1.2 requires: [cvc-pattern-valid] `; !strings.HasPrefix(got[0].Msg, want) {
+		t.Errorf("Msg = %q, want the prefix %q: the element, its value and the {simple type definition}, then the delegated verdict", got[0].Msg, want)
 	}
 }
 
@@ -583,7 +583,7 @@ func TestOpenContentChargesAnItemNeitherHalfAdmits(t *testing.T) {
 	got := cAssess(t, schema, cRoot("a", "zzz"))
 
 	wantContentCharge(t, got, "cvc-complex-content", "3", loc(3, 1))
-	if !strings.HasPrefix(got[0].Msg, "the element information item zzz is ") {
+	if !strings.HasPrefix(got[0].Msg, "element zzz, a child of root, ") {
 		t.Errorf("Msg = %q, want the offending CHILD as its subject and not the containing element", got[0].Msg)
 	}
 	if !strings.Contains(got[0].Msg, "{open content} wildcard") {

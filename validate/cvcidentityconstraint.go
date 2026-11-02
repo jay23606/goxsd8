@@ -375,8 +375,8 @@ func (c *icCheck) open(w *walk, g governance) {
 func (c *icCheck) declineFrame(w *walk, f *icFrame, part string) {
 	f.declined = true
 	w.decline("assessing identity constraint", c.e.Name(), c.e.Loc(), ruleCvcIdentityConstraint, "4",
-		"the identity constraint %s declared on %s was not evaluated: its %s lies outside the path subset this processor compiles (§3.11.6), so cvc-identity-constraint clauses 3 and 4 are undecided for it",
-		f.ic.Name(), c.e.Name(), part)
+		"element %s declares the identity constraint %s, which was not evaluated: its %s lies outside the path subset this processor compiles, so cvc-identity-constraint clauses 3 and 4 are undecided for it",
+		c.e.Name(), f.ic.Name(), part)
 }
 
 // addTarget records c's element as a member of f's ·target node set· and opens
@@ -499,7 +499,7 @@ func (c *icCheck) fieldDefaultedAttributes(w *walk, t *icTarget, i int, sel icpa
 		}
 		st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
 		if !simple {
-			t.decline(w, i, u.DeclarationName(), c.e.Loc(), "it is a ·defaulted attribute· whose declaration's {type definition} is absent or not a simple type definition")
+			t.decline(w, i, u.DeclarationName(), c.e.Loc(), "it is a ·defaulted attribute· whose declaration's {type definition} is absent")
 			continue
 		}
 		m, present, decided := w.keyMember(st, vc.LexicalForm(), value.ConstraintContext(vc), false, false)
@@ -698,8 +698,8 @@ func (t *icTarget) offer(w *walk, i int, name xsd.QName, loc xsderr.Loc, m icKey
 func (t *icTarget) decline(w *walk, i int, name xsd.QName, loc xsderr.Loc, why string) {
 	t.slots[i].declined = true
 	w.decline("assessing identity constraint", name, loc, ruleCvcIdentityConstraint, "3",
-		"the field %q of the identity constraint %s selected %s for the ·target node· %s, but %s, so cvc-identity-constraint clauses 3 and 4 are undecided for that constraint",
-		t.frame.ic.Fields()[i].Expression(), t.frame.ic.Name(), name, t.e.Name(), why)
+		"node %s, which the field %q of the identity constraint %s selected for the ·target node· %s, was not read: %s, so cvc-identity-constraint clauses 3 and 4 are undecided for that constraint",
+		name, t.frame.ic.Fields()[i].Expression(), t.frame.ic.Name(), t.e.Name(), why)
 }
 
 // record takes one decided field node of a simple-valued ·governing type
@@ -816,7 +816,7 @@ func (f *icFrame) qualify(w *walk, host Element) ([]*icTarget, bool) {
 			}
 			if s.charge != icClause3None {
 				w.res.violations = append(w.res.violations, xsderr.New(ruleCvcIdentityConstraint, s.loc,
-					s.charge.message(), f.ic.Fields()[i].Expression(), f.ic.Name(), host.Name(), t.e.Name()))
+					s.charge.message(), t.e.Name(), f.ic.Name(), host.Name(), f.ic.Fields()[i].Expression()))
 				ok = false
 				continue
 			}
@@ -834,13 +834,13 @@ func (f *icFrame) qualify(w *walk, host Element) ([]*icTarget, bool) {
 	return q, true
 }
 
-// message is the format of the clause 3 charge c, over the field's
-// expression, the constraint's name, the host's and the ·target node·'s.
+// message is the format of the clause 3 charge c, over the ·target node·'s
+// name, the constraint's, the host's and the field's expression.
 func (c icClause3) message() string {
 	if c == icClause3Other {
-		return "the field %q of the identity constraint %s declared on %s selects, for the ·target node· %s, a node whose ·governing type definition· is neither a simple type definition nor a complex type definition with {variety} simple, which cvc-identity-constraint clause 3 admits as none of its nodes"
+		return "element %s, a ·target node· of the identity constraint %s declared on %s, has its field %q select a node whose ·governing type definition· is neither a simple type definition nor a complex type definition with {variety} simple, which cvc-identity-constraint clause 3 admits as none of its nodes"
 	}
-	return "the field %q of the identity constraint %s declared on %s selects, for the ·target node· %s, more than one node whose ·governing type definition· is a simple type definition or a complex type definition with {variety} simple, ·nilled· nodes and nodes with an ·absent· [schema actual value] included, but cvc-identity-constraint clause 3 admits at most one"
+	return "element %s, a ·target node· of the identity constraint %s declared on %s, has its field %q select more than one node whose ·governing type definition· is a simple type definition or a complex type definition with {variety} simple, ·nilled· nodes and nodes with an ·absent· [schema actual value] included, but cvc-identity-constraint clause 3 admits at most one"
 }
 
 // duplicates is clause 4.1 for a unique and clause 4.2.2 for a key, which are
@@ -869,16 +869,16 @@ func (f *icFrame) duplicates(w *walk, host Element, q []*icTarget) {
 			if !decided && !undecided[j] {
 				undecided[j] = true
 				w.decline("assessing identity constraint", q[j].e.Name(), q[j].e.Loc(), ruleCvcIdentityConstraint, strings.TrimPrefix(f.duplicateClause(), "clause "),
-					"the ·key-sequence· of the ·target node· %s was not compared with the one at %s: the identity constraint %s declared on %s is a %s, and a member pair of the two could not be compared in one value space, so its %s is undecided",
-					q[j].e.Name(), q[i].e.Loc(), f.ic.Name(), host.Name(), f.ic.Category(), f.duplicateClause())
+					"element %s, a ·target node· of the %s %s declared on %s, was not compared with the one at %s: a member pair of their ·key-sequences· could not be compared in one value space, so cvc-identity-constraint %s is undecided",
+					q[j].e.Name(), f.ic.Category(), f.ic.Name(), host.Name(), q[i].e.Loc(), f.duplicateClause())
 			}
 			if !decided || !same {
 				continue
 			}
 			charged[j] = true
 			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcIdentityConstraint, q[j].e.Loc(),
-				"the ·target node· %s has a ·key-sequence· equal or identical to the one at %s, but the identity constraint %s declared on %s is a %s, whose %s forbids two members of the ·qualified node set· to share one (Datatypes §2.2 Equality and Identity)",
-				q[j].e.Name(), q[i].e.Loc(), f.ic.Name(), host.Name(), f.ic.Category(), f.duplicateClause()))
+				"element %s, a ·target node· of the %s %s declared on %s, has a ·key-sequence· equal or identical to the one at %s, but cvc-identity-constraint %s forbids two members of the ·qualified node set· to share one",
+				q[j].e.Name(), f.ic.Category(), f.ic.Name(), host.Name(), q[i].e.Loc(), f.duplicateClause()))
 		}
 	}
 }
@@ -915,7 +915,7 @@ func (f *icFrame) keyOnly(w *walk, host Element, q []*icTarget) {
 			continue
 		}
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcIdentityConstraint, t.e.Loc(),
-			"the ·target node· %s has a ·key-sequence· shorter than the {fields} of the identity constraint %s declared on %s, so it is not a member of the ·qualified node set·, and cvc-identity-constraint clause 4.2.1 requires a key's two node sets to be equal",
+			"element %s, a ·target node· of the key %s declared on %s, has a ·key-sequence· shorter than its {fields}, so it is not a member of the ·qualified node set·, but cvc-identity-constraint clause 4.2.1 requires a key's two node sets to be equal",
 			t.e.Name(), f.ic.Name(), host.Name()))
 	}
 	for _, t := range q {
@@ -925,8 +925,8 @@ func (f *icFrame) keyOnly(w *walk, host Element, q []*icTarget) {
 				continue
 			}
 			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcIdentityConstraint, t.slots[i].loc,
-				"the field %q of the identity constraint %s declared on %s contributes an element member to the ·key-sequence· of %s whose element declaration has {nillable} true, which cvc-identity-constraint clause 4.2.3 forbids for a key",
-				f.ic.Fields()[i].Expression(), f.ic.Name(), host.Name(), t.e.Name()))
+				"element %s, a ·target node· of the key %s declared on %s, has its field %q contribute an element member to its ·key-sequence· whose element declaration has {nillable} true, which cvc-identity-constraint clause 4.2.3 forbids for a key",
+				t.e.Name(), f.ic.Name(), host.Name(), f.ic.Fields()[i].Expression()))
 		}
 	}
 }
@@ -963,8 +963,8 @@ func (c *icCheck) keyrefs(w *walk) {
 		b, found := c.table.binding(ref)
 		if found && b.declined {
 			w.decline("assessing identity constraint", c.e.Name(), c.e.Loc(), ruleCvcIdentityConstraint, "4.3",
-				"the keyref %s declared on %s was not resolved: the node table of its {referenced key} %s was not assembled in full, so cvc-identity-constraint clause 4.3 is undecided for it",
-				f.ic.Name(), c.e.Name(), ref)
+				"element %s declares the keyref %s, which was not resolved: the node table of its {referenced key} %s was not assembled in full, so cvc-identity-constraint clause 4.3 is undecided for it",
+				c.e.Name(), f.ic.Name(), ref)
 			continue
 		}
 		for _, t := range q {
@@ -975,14 +975,14 @@ func (c *icCheck) keyrefs(w *walk) {
 				}
 				if !decided {
 					w.decline("assessing identity constraint", t.e.Name(), t.e.Loc(), ruleCvcIdentityConstraint, "4.3",
-						"the ·key-sequence· of %s was not resolved against the node table of %s, the {referenced key} of the keyref %s declared on %s: a member pair could not be compared in one value space, or it matched only an entry §3.11.5's conflict resolution could not settle, so cvc-identity-constraint clause 4.3 is undecided for it",
-						t.e.Name(), ref, f.ic.Name(), c.e.Name())
+						"element %s, a ·target node· of the keyref %s declared on %s, was not resolved against the node table of its {referenced key} %s: a member pair could not be compared in one value space, or it matched only an entry the table's conflict resolution could not settle, so cvc-identity-constraint clause 4.3 is undecided for it",
+						t.e.Name(), f.ic.Name(), c.e.Name(), ref)
 					continue
 				}
 			}
 			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcIdentityConstraint, t.e.Loc(),
-				"the ·key-sequence· of %s matches no entry in the node table of %s, the {referenced key} of the keyref %s declared on %s, and cvc-identity-constraint clause 4.3 resolves a keyref only against the node tables assembled from the sub-tree rooted at that element (§3.11.5)",
-				t.e.Name(), ref, f.ic.Name(), c.e.Name()))
+				"element %s, a ·target node· of the keyref %s declared on %s, has a ·key-sequence· matching no entry in the node table of its {referenced key} %s, which holds only the sub-tree rooted at %s, but cvc-identity-constraint clause 4.3 requires one to match",
+				t.e.Name(), f.ic.Name(), c.e.Name(), ref, c.e.Name()))
 		}
 	}
 }

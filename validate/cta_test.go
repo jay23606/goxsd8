@@ -248,7 +248,7 @@ func TestUnevaluableTestIsRecordedAsUnevaluated(t *testing.T) {
 	if got[0].Loc() != loc(1, 1) {
 		t.Errorf("Loc() = %s, want the element's %s", got[0].Loc(), loc(1, 1))
 	}
-	for _, want := range []string{"alternative 2 of 3", "count(@kind) > 0", "key-cta-select"} {
+	for _, want := range []string{"alternative 2 of 3", "count(@kind) > 0", "key-cta-ta-select clause 2"} {
 		if !strings.Contains(got[0].Msg(), want) {
 			t.Errorf("Msg() = %q, want it to name %s", got[0].Msg(), want)
 		}
@@ -256,8 +256,8 @@ func TestUnevaluableTestIsRecordedAsUnevaluated(t *testing.T) {
 }
 
 // The key-cta-ta-select record names WHY the {test} was not evaluated: the
-// reason xpath.CompileCTATest's *Decline carries, verbatim, between "declined
-// it because" and the rest of the sentence — a construct outside the subset,
+// reason xpath.CompileCTATest's *Decline carries, verbatim, between "having
+// declined it because" and the rest of the sentence — a construct outside the subset,
 // or, for a builder-built schema no parser charged, the static error the
 // {test} carries.
 func TestUnevaluableTestRecordNamesTheReason(t *testing.T) {
@@ -271,7 +271,7 @@ func TestUnevaluableTestRecordNamesTheReason(t *testing.T) {
 			t.Errorf("%q: Unevaluated() = %v, want the withheld type's key-cta-ta-select record first", tc.expr, messages(got))
 			continue
 		}
-		if want := "whose {test} is " + strconv.Quote(tc.expr) + ", was not evaluated: this engine's XPath evaluator declined it because " + tc.why + ", so whether it ·successfully selects·"; !strings.Contains(got[0].Msg(), want) {
+		if want := "whose {test} is " + strconv.Quote(tc.expr) + ", was not evaluated, this engine's XPath evaluator having declined it because " + tc.why + ", so the type the table ·conditionally selects· is withheld"; !strings.Contains(got[0].Msg(), want) {
 			t.Errorf("%q: Msg() = %q, want it to contain %q", tc.expr, got[0].Msg(), want)
 		}
 	}
@@ -599,18 +599,19 @@ func absentHeadTable(t *testing.T, alt, dflt xsd.TypeDefinitionOrRef) *xsd.TypeT
 // key-selected-type read.
 func wantAbsentSelection(t *testing.T, schema *xsd.Schema, kind, slot string) {
 	t.Helper()
-	wantMissingCharged(t, schema, kind, "the ·selected type definition· of the element root is ·absent·: "+slot+" names a substitution group head")
+	wantMissingCharged(t, schema, kind, "element root has an ·absent· ·selected type definition·: "+slot+" names a substitution group head")
 }
 
 // wantMissingCharged fails unless assessing selectionRoot(kind) against schema
 // charges exactly two violations and records no [Unevaluated]. The first is
 // cvc-elt at root's own location, its message opening with opening and naming
-// clause 1 and §5.3: the charge §5.3 makes "as if clause 1 of Element Locally
-// Valid (Element) had failed". The second is cvc-complex-type at the child's
-// kind attribute, which only the ·lax assessment· §5.3 falls back to reaches:
-// root assessed against nothing attributes its child to nothing, and the child
-// is then assessed against nothing too. No cvc-id record follows, because a
-// ·laxly assessed· element is no withheld type ([walk.idElement]).
+// clause 1 and the missing sub-component: the charge §5.3 makes "as if clause
+// 1 of Element Locally Valid (Element) had failed". The second is
+// cvc-complex-type at the child's kind attribute, which only the ·lax
+// assessment· §5.3 falls back to reaches: root assessed against nothing
+// attributes its child to nothing, and the child is then assessed against
+// nothing too. No cvc-id record follows, because a ·laxly assessed· element is
+// no withheld type ([walk.idElement]).
 func wantMissingCharged(t *testing.T, schema *xsd.Schema, kind, opening string) {
 	t.Helper()
 	res := selectionResult(t, schema, kind)
@@ -627,7 +628,7 @@ func wantMissingCharged(t *testing.T, schema *xsd.Schema, kind, opening string) 
 	if !strings.HasPrefix(got[0].Msg, opening) {
 		t.Errorf("Msg = %q, want it to open %q", got[0].Msg, opening)
 	}
-	for _, want := range []string{"cvc-elt clause 1", "§5.3", "·laxly assessed·"} {
+	for _, want := range []string{"cvc-elt clause 1", "a missing sub-component", "·laxly assessed·"} {
 		if !strings.Contains(got[0].Msg, want) {
 			t.Errorf("Msg = %q, want it to name %s", got[0].Msg, want)
 		}
@@ -703,7 +704,7 @@ func wantNilSelectionDeclined(t *testing.T, schema *xsd.Schema) {
 	if got[0].Loc() != loc(1, 1) {
 		t.Errorf("Loc() = %s, want root's %s", got[0].Loc(), loc(1, 1))
 	}
-	opening := "the ·selected type definition· of the element root was not determined"
+	opening := "element root has no ·governing type definition· and was assessed against nothing: its ·selected type definition· was not determined"
 	if !strings.HasPrefix(got[0].Msg(), opening) {
 		t.Errorf("Msg() = %q, want it to open %q", got[0].Msg(), opening)
 	}
@@ -763,7 +764,7 @@ func affiliationSchema(t *testing.T, heads ...xsd.QName) *xsd.Schema {
 // absentAffiliationOpening is the opening of the cvc-elt clause 1 charge for
 // root's ·absent· {substitution group affiliations} member nosuchhead, which
 // pins the subject and the head it names in that order (#1048).
-const absentAffiliationOpening = "the ·governing element declaration· of the element root has an ·absent· member in its {substitution group affiliations}: the substitution group head nosuchhead names no element declaration"
+const absentAffiliationOpening = "element root is governed by a declaration with an ·absent· member in its {substitution group affiliations}: the substitution group head nosuchhead names no element declaration"
 
 // A {substitution group affiliations} member naming no declaration is an
 // ·absent· value of root's declaration (§5.3 Missing Sub-components): cvc-elt

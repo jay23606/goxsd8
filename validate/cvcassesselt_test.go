@@ -246,7 +246,7 @@ func TestUnresolvedNameUnderAStrictWildcardChargesTheEnclosingElement(t *testing
 	// interpolates are both present whichever order they are passed in, so only
 	// the opening subject tells the ·attributed· child from the element the
 	// clause charges (#1048).
-	if !strings.HasPrefix(got[0].Msg, "the element information item stranger is ·attributed to·") {
+	if !strings.HasPrefix(got[0].Msg, "element stranger is ·attributed to·") {
 		t.Errorf("Msg = %q, want it to OPEN by naming the child as the ·attributed· item", got[0].Msg)
 	}
 
@@ -280,7 +280,7 @@ func TestAbsentSelectionUnderAStrictWildcardNamesItsCause(t *testing.T) {
 	if got[1].Rule != "cvc-assess-elt" || got[1].Loc != loc(2, 1) {
 		t.Errorf("violations[1] = %s at %s, want cvc-assess-elt at the child %s", got[1].Rule, got[1].Loc, loc(2, 1))
 	}
-	const prefix = "the element information item kid is ·attributed to· a ***strict*** ·wildcard particle· but ·resolves· to a top-level element declaration that has or contains an ·absent· component — an ·absent· ·selected type definition· or {substitution group affiliations} member (§5.3"
+	const prefix = "element kid is ·attributed to· a ***strict*** ·wildcard particle· but ·resolves· to a top-level element declaration that has or contains an ·absent· component — an ·absent· ·selected type definition· or {substitution group affiliations} member, a missing sub-component charged under cvc-elt clause 1, "
 	if !strings.HasPrefix(got[1].Msg, prefix) {
 		t.Errorf("Msg = %q, want it to open %q", got[1].Msg, prefix)
 	}
@@ -330,7 +330,7 @@ func TestBothWildcardKindsStrictChargeOnlyTheParticleAttributedChild(t *testing.
 	if got[0].Loc != loc(2, 1) {
 		t.Errorf("Loc = %s, want the particle-attributed child's position %s", got[0].Loc, loc(2, 1))
 	}
-	if !strings.HasPrefix(got[0].Msg, "the element information item p is ·attributed to·") {
+	if !strings.HasPrefix(got[0].Msg, "element p is ·attributed to·") {
 		t.Errorf("Msg = %q, want the PARTICLE-attributed child p as its subject, not the open-attributed o", got[0].Msg)
 	}
 	cWantLogged(t, visits,

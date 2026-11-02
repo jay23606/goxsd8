@@ -153,7 +153,7 @@ func TestXMLEntityValuesAndTheUnreadDTD(t *testing.T) {
 			}
 			continue
 		}
-		if len(got) != 1 || !strings.Contains(got[0].Msg, `the ·ENTITY value· "pic"`) {
+		if len(got) != 1 || !strings.Contains(got[0].Msg, `[cvc-simple-type] value "pic"`) {
 			t.Errorf("%s: Violations() = %v, want one String Valid clause 3 charge naming pic", tc.doc, got)
 			continue
 		}
@@ -192,7 +192,7 @@ func TestXMLEntityValuesAreReadAgainstTheInternalSubset(t *testing.T) {
 			}
 			continue
 		}
-		if len(got) != 1 || !strings.Contains(got[0].Msg, "the ·ENTITY value· \""+tc.ghost+"\"") ||
+		if len(got) != 1 || !strings.Contains(got[0].Msg, "[cvc-simple-type] value \""+tc.ghost+"\"") ||
 			!strings.Contains(got[0].Msg, "cvc-simple-type clause 3") {
 			t.Errorf("%s: Violations() = %v, want one String Valid clause 3 charge naming %q", tc.doc, got, tc.ghost)
 		}

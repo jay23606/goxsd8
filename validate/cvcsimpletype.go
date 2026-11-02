@@ -98,7 +98,7 @@ func (w *walk) entitiesDeclared(st *xsd.SimpleType, lexical string, ctx value.Co
 		}
 		if w.entities == nil {
 			return true, xsderr.New(ruleCvcSimpleType, loc,
-				"the ·ENTITY value· %q is not a ·declared entity name·: the source presents no [unparsedEntities] property of the document information item, and Appendix D makes every ·ENTITY value· of such a source fail cvc-simple-type clause 3",
+				"value %q is not a ·declared entity name·: the source presents no [unparsedEntities] property of the document information item, and Appendix D makes every ·ENTITY value· of such a source fail cvc-simple-type clause 3",
 				v.value)
 		}
 		if w.entities.HasUnparsedEntity(v.value) {
@@ -106,11 +106,11 @@ func (w *walk) entitiesDeclared(st *xsd.SimpleType, lexical string, ctx value.Co
 		}
 		if w.declsUnread {
 			return true, xsderr.New(ruleCvcSimpleType, loc,
-				"the ·ENTITY value· %q names no unparsed entity in the document's [unparsedEntities], so it is not a ·declared entity name· (key-vde), which cvc-simple-type clause 3 requires: the document's DTD was not fully read — an external DTD subset or a parameter entity went unread — and the name may be declared there, but a declaration that was not read declares nothing",
+				"value %q names no unparsed entity in the document's [unparsedEntities]: the document's DTD was not fully read — an external DTD subset or a parameter entity went unread — and the name may be declared there, but a declaration that was not read declares nothing, so it is not a ·declared entity name·, which cvc-simple-type clause 3 requires of an ·ENTITY value·",
 				v.value)
 		}
 		return true, xsderr.New(ruleCvcSimpleType, loc,
-			"the ·ENTITY value· %q names no unparsed entity in the document's [unparsedEntities], so it is not a ·declared entity name· (key-vde), which cvc-simple-type clause 3 requires",
+			"value %q names no unparsed entity in the document's [unparsedEntities], so it is not a ·declared entity name·, which cvc-simple-type clause 3 requires of an ·ENTITY value·",
 			v.value)
 	}
 	return true, nil

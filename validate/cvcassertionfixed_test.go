@@ -94,7 +94,7 @@ func fxWant(t *testing.T, res *Result, fixed xsderr.Rule, charged bool) {
 		t.Fatalf("Violations() = %v, want the rules %v", res.Violations(), want)
 	}
 	vs := res.Violations()
-	if fixed == ruleCvcAttribute && !strings.HasPrefix(vs[0].Msg, "the ·actual value· of the attribute d is neither equal nor identical to the {value} of the fixed {value constraint} \"2008-01-01T00:00:00\" on its attribute declaration, which cvc-attribute clause 4 requires") {
+	if fixed == ruleCvcAttribute && !fxFixedChargeOnD(vs[0].Msg) {
 		t.Errorf("Msg = %q, want the cvc-attribute clause 4 charge over d", vs[0].Msg)
 	}
 	if charged && !strings.HasPrefix(vs[len(vs)-1].Msg, "the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· ") {
@@ -221,7 +221,7 @@ func TestAssertionOverAnInvalidUnionAttributeDeclines(t *testing.T) {
 </xs:schema>`})
 	res := aAssess(t, schema, fxRoot("2009-01-01T00:00:00"))
 	smDeclined(t, res, "the attribute d of the element root is invalid by cvc-attribute clause 4, so the data model instance cvc-assertion clause 1 builds annotates it xs:anySimpleType with its [schema normalized value] as typed value, which this package does not read: its declaration's {type definition} has no single whiteSpace facet this package reads")
-	if got := fxRules(res); len(got) != 1 || got[0] != ruleCvcAttribute || !strings.HasPrefix(res.Violations()[0].Msg, "the ·actual value· of the attribute d is neither equal nor identical to the {value} of the fixed {value constraint} \"2008-01-01T00:00:00\" on its attribute declaration, which cvc-attribute clause 4 requires") {
+	if got := fxRules(res); len(got) != 1 || got[0] != ruleCvcAttribute || !fxFixedChargeOnD(res.Violations()[0].Msg) {
 		t.Errorf("Violations() = %v, want the cvc-attribute clause 4 charge over d alone", res.Violations())
 	}
 }
@@ -285,4 +285,11 @@ func TestAssertionBelowAFixedValueInvalidAttributeDeclines(t *testing.T) {
 // ccRootNamed is the validation root named name at 1:1 over kids.
 func ccRootNamed(name string, kids ...Child) *testElement {
 	return &testElement{name: local(name), loc: loc(1, 1), kids: kids}
+}
+
+// fxFixedChargeOnD reports whether msg is the cvc-attribute clause 4 charge
+// over d's disagreement with the fixed 2008-01-01T00:00:00, whatever d's value.
+func fxFixedChargeOnD(msg string) bool {
+	return strings.HasPrefix(msg, "attribute d's value ") &&
+		strings.HasSuffix(msg, ` is neither equal nor identical to "2008-01-01T00:00:00", the {value} of the fixed {value constraint} on its attribute declaration, which cvc-attribute clause 4 requires`)
 }

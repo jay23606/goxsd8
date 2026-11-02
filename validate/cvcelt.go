@@ -133,9 +133,10 @@ func (w *walk) nilCheck(e Element, g governance) bool {
 		return false
 	}
 	if present && v == instanceBooleanUnreadable {
+		a, _ := instanceAttribute(e, "nil")
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
-			"the xsi:nil attribute of the element %s has no ·actual value·: its lexical is outside the lexical space of the xs:boolean the Built-in Attribute Declarations (§3.2.7) type it by, so none of the three arms of cvc-elt clause 3.2 — no attribute (3.2.1), the value false (3.2.2), the value true (3.2.3) — holds, and the clause has no fourth",
-			e.Name()))
+			"the xsi:nil attribute of the element %s has the value %q, which is outside the lexical space of xs:boolean, the type the built-in declaration for the nil attribute gives it, so it has no ·actual value· and none of the three arms of cvc-elt clause 3.2 — no attribute (3.2.1), the value false (3.2.2), the value true (3.2.3) — holds, and the clause has no fourth",
+			e.Name(), a.Value()))
 		return false
 	}
 	isNilled := nilled(e, g)

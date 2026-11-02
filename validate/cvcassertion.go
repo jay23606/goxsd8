@@ -132,14 +132,14 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 			i+1, len(asserts.tests), typeName(asserts.ct), c.a.Test().Expression())
 		if lack != nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
-				"%s was not evaluated: %s, so whether the element is ·valid· with respect to it, as cvc-complex-type clause 6 requires, is undecided",
-				site, lack.declined(e.Name()))
+				"element %s was not assessed against %s which was not evaluated: %s, so cvc-complex-type clause 6 is undecided for that assertion",
+				e.Name(), site, lack.declined(e.Name()))
 			continue
 		}
 		if c.declined != nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
-				"%s was not evaluated: this engine's XPath evaluator declined it because %s, so whether the element %s is ·valid· with respect to it, as cvc-complex-type clause 6 requires, is undecided",
-				site, c.declined, e.Name())
+				"element %s was not assessed against %s which was not evaluated: this engine's XPath evaluator declined it because %s, so cvc-complex-type clause 6 is undecided for that assertion",
+				e.Name(), site, c.declined)
 			continue
 		}
 		if c.test.Evaluate(w.backend, w.schema, e, in.yield, asserts.yieldChildren, c.tally, in.value, w.now) {
@@ -147,7 +147,7 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 			continue
 		}
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssertion, e.Loc(),
-			"the element %s is not ·valid· with respect to %s which did not evaluate to true without raising a dynamic or type error, as Assertion Satisfied (§3.13.4.1) requires of each assertion cvc-complex-type clause 6 quantifies over",
+			"the element %s is not ·valid· with respect to %s which did not evaluate to true without raising a dynamic or type error, as cvc-assertion requires of each assertion cvc-complex-type clause 6 quantifies over",
 			e.Name(), site))
 		w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "charged")
 	}
@@ -1859,11 +1859,12 @@ func (w *walk) assertionValue(e Element, asserts *assertionCheck, content *conte
 // declineAssertions records err, the non-verdict [walk.stringValid] withheld a
 // verdict on, as a decline under cvc-assertions-valid at the item named name at
 // loc, under event, where it is an assertions-facet decline
-// ([value.IsAssertionDeclined]), and reports whether it was one. withheld names
-// the caller's clause the decline leaves undecided. The message is the one
-// value's decline carries, naming the assertion, the simple type its facet is
-// effective on and its {test}: an assertion component carries no Loc of its
-// own (#35).
+// ([value.IsAssertionDeclined]), and reports whether it was one. item names the
+// element or attribute and its value, which the message opens with (STYLE E5),
+// and withheld the caller's clause the decline leaves undecided. Between them
+// the message carries the one value's decline carries, naming the assertion,
+// the simple type its facet is effective on and its {test}: an assertion
+// component carries no Loc of its own (#35).
 //
 // cvc-assertions-valid (§4.3.13.3) is evaluated inside String Valid: the value
 // pipeline runs each assertions facet it reaches through
@@ -1884,12 +1885,12 @@ func (w *walk) assertionValue(e Element, asserts *assertionCheck, content *conte
 // is w.res.violations and its one reader [Result.Violations], which charge on a
 // violation PRESENT, so a decline can only cost a rejection and can manufacture
 // none. (#1042)
-func (w *walk) declineAssertions(err error, event string, name xsd.QName, loc xsderr.Loc, withheld string) bool {
+func (w *walk) declineAssertions(err error, event string, name xsd.QName, loc xsderr.Loc, item, withheld string) bool {
 	if !value.IsAssertionDeclined(err) {
 		return false
 	}
 	w.decline(event, name, loc, ruleCvcAssertionsValid, "",
-		"%s; that facet is reached from cvc-datatype-valid clause 3, so %s is undecided", declinedAssertion(err), withheld)
+		"%s was not decided: %s; that facet is reached from cvc-datatype-valid clause 3, so %s is undecided", item, declinedAssertion(err), withheld)
 	return true
 }
 
