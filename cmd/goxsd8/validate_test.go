@@ -1889,6 +1889,37 @@ func TestValidateAdversarialArguments(t *testing.T) {
 	}
 }
 
+// TestValidateEndOfOptionsOperand pins that a `--` ending the flags makes the
+// instance behind it a path even when it is spelled like a flag: validate reads
+// -weird.xml, a valid instance, and reports nothing for it (#3332). The schema
+// is loaded first, so on Windows, where that load can fail, only the absence
+// of the misplacement is pinned.
+func TestValidateEndOfOptionsOperand(t *testing.T) {
+	t.Chdir("testdata")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"validate", "-schema", "order.xsd", "--", "-weird.xml"}, &stdout, &stderr)
+	if code == exitUsage || strings.Contains(stderr.String(), "stands after a positional argument") {
+		t.Fatalf("run = %d, stderr %q — the instance behind -- is a path, not a misplaced flag", code, stderr.String())
+	}
+	if code == exitOK && (stdout.Len() != 0 || stderr.Len() != 0) {
+		t.Errorf("stdout = %q, stderr = %q, want both empty for a valid instance", stdout.String(), stderr.String())
+	}
+}
+
+// TestValidateEndOfOptionsIsAFlagValue pins that a `--` given as -schema's
+// value is not the terminator: the flag package took it as the schema, so the
+// flag-shaped operand after the instance is still a misplacement (#3332).
+func TestValidateEndOfOptionsIsAFlagValue(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"validate", "-schema", "--", validInstance, "-weird.xml"}, &stdout, &stderr)
+	if code != exitUsage {
+		t.Fatalf("run = %d, want %d — the -- is -schema's value, not the end of options", code, exitUsage)
+	}
+	if !strings.Contains(stderr.String(), "-weird.xml stands after a positional argument") {
+		t.Errorf("stderr = %q, want the misplacement diagnosis naming -weird.xml", stderr.String())
+	}
+}
+
 // TestValidateFlagAfterPositional pins the same consequence parse's own test
 // does, and the same reversal (#1290): a subcommand's flags precede its
 // positional arguments, and a trailing -no-hints is now reported as a

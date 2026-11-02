@@ -439,7 +439,9 @@
 // location nor is the summary it asked to suppress printed. The exact
 // spelling - is never a misplaced flag — it is validate's standard-input
 // instance argument — and a positional genuinely named -q is spelled ./-q, as
-// a file named - is.
+// a file named - is. A `--` ending a subcommand's flags is consumed by the flag
+// package, so the operands after it are paths: in goxsd8 validate -schema
+// s.xsd -- -q.xml, -q.xml is the instance.
 //
 // A -- standing in a flag's place, before a subcommand's first positional, is
 // read by the flag package as the end of that subcommand's options: every

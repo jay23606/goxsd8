@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A valid instance of order.xsd: every item carries the sku the ItemKey
+     needs, and each matches the Sku pattern. -->
+<o:order xmlns:o="http://example.com/order" createdBy="ada">
+  <o:item sku="ABC-1234"/>
+  <o:item sku="XYZ-9876"/>
+</o:order>

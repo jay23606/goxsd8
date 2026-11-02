@@ -62,6 +62,20 @@ func assertAbsent(t *testing.T, path string) {
 		t.Errorf("%s exists (lstat: %v), want nothing written there", path, err)
 	}
 }
+// TestGenEndOfOptionsOperand pins the answer gen gives a `--` ending its flags:
+// the operand behind it is a positional argument, which gen takes none of, so
+// it is reported as one and not as a misplaced flag (#3332).
+func TestGenEndOfOptionsOperand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"gen", "-schema", flatFixture, "-out", t.TempDir(), "--", "-weird.xsd"}, &stdout, &stderr)
+	if code != exitUsage {
+		t.Fatalf("run = %d, want %d — gen takes no positional argument", code, exitUsage)
+	}
+	if !strings.Contains(stderr.String(), "-weird.xsd: gen takes no positional argument") {
+		t.Errorf("stderr = %q, want the no-positional diagnosis naming -weird.xsd", stderr.String())
+	}
+}
+
 
 // TestGenWritesWhatGenerateWrites pins exit 0: each pair's -out receives the
 // file codegen.Generate writes for a Target built from parser.Parse of the
