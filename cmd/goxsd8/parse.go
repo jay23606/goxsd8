@@ -36,9 +36,9 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 	verbose := flags.Bool("v", false, "log the parser's assembly at debug level to stderr")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return usageError(stderr, fmt.Sprintf(helpNotAFlagValueFmt, "parse"))
+			return subcommandUsageError(stderr, "parse", fmt.Sprintf(helpNotAFlagValueFmt, "parse"))
 		}
-		return usageError(stderr, fmt.Sprintf("goxsd8: parse: %v", err))
+		return subcommandUsageError(stderr, "parse", fmt.Sprintf("goxsd8: parse: %v", err))
 	}
 	locations := flags.Args()
 	// Before anything is compiled: a flag written after the first schema
@@ -46,10 +46,10 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 	// would print a summary the misplaced flag may have asked to suppress
 	// (#1290).
 	if arg, ok := flagShapedIn(locations); ok {
-		return usageError(stderr, fmt.Sprintf(flagAfterPositionalFmt, "parse", arg))
+		return subcommandUsageError(stderr, "parse", fmt.Sprintf(flagAfterPositionalFmt, "parse", arg))
 	}
 	if len(locations) == 0 {
-		return usageError(stderr, "goxsd8: parse: no schema given")
+		return subcommandUsageError(stderr, "parse", "goxsd8: parse: no schema given")
 	}
 
 	// A nil logger selects parser's silent default, so -v is the whole of the
@@ -84,7 +84,7 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 	if _, err := io.WriteString(stdout, summarize(location, schema)); err != nil {
 		// The summary the user asked for never arrived; that is an IO fault,
 		// not a verdict about the schema.
-		return usageError(stderr, fmt.Sprintf("goxsd8: parse: writing the summary for %s: %v", location, err))
+		return subcommandUsageError(stderr, "parse", fmt.Sprintf("goxsd8: parse: writing the summary for %s: %v", location, err))
 	}
 	return exitOK
 }
@@ -99,7 +99,7 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 func compileArgument(verb, location string, log *slog.Logger, stderr io.Writer) (*xsd.Schema, int) {
 	root, err := rootLocation(location)
 	if err != nil {
-		return nil, usageError(stderr, fmt.Sprintf("goxsd8: %s: %v", verb, err))
+		return nil, subcommandUsageError(stderr, verb, fmt.Sprintf("goxsd8: %s: %v", verb, err))
 	}
 	// The resolver is rooted at the filesystem root and the document is named
 	// by its absolute path, so that an argument spelled absolutely or through
@@ -257,12 +257,25 @@ func shortfallClause(compiled bool) string {
 	return "; the rejected assembly is short of whatever that document declares"
 }
 
-// usageError reports a usage or IO fault: the message, then the remedy, on
-// stderr, and exit 2. Nothing reaches stdout, which carries verdicts alone.
+// usageError reports a usage fault charged before any subcommand is known: the
+// message, then the remedy, on stderr, and exit 2. Nothing reaches stdout,
+// which carries verdicts alone. A fault charged inside a subcommand goes
+// through subcommandUsageError instead.
 func usageError(stderr io.Writer, msg string) int {
 	// A failed stderr write cannot change the outcome — the exit code is 2
 	// either way, and stderr is the only channel left to report it on.
 	_, _ = fmt.Fprintf(stderr, "%s\n%s\n", msg, helpPointer)
+	return exitUsage
+}
+
+// subcommandUsageError reports a usage or IO fault charged inside the
+// subcommand name: the message, then usage: and name's synopsis line, then the
+// remedy, on stderr, and exit 2 (#3110). Every exit-2 line a subcommand prints
+// comes through here, so the synopsis repeats wherever the remedy does.
+func subcommandUsageError(stderr io.Writer, name, msg string) int {
+	// A failed stderr write cannot change the outcome — the exit code is 2
+	// either way, and stderr is the only channel left to report it on.
+	_, _ = fmt.Fprintf(stderr, "%s\nusage: %s\n%s\n", msg, synopsis(name), helpPointer)
 	return exitUsage
 }
 

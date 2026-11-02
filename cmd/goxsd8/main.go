@@ -43,7 +43,9 @@ Usage (contract; subcommands land with their milestones):
               is open.
   2     4     usage, or an I/O fault on an argument or on stdout, gen's
               refusal of an -out included: never a verdict about a
-              schema or an instance.
+              schema or an instance. Each such line a subcommand prints
+              is followed by usage: and that subcommand's synopsis line
+              below, then by the line pointing to this help.
   3     none  validate only: the -schema set does not compile, an I/O
               fault reading a document it references included. Unranked:
               it answers before any instance is opened, so no instance's
@@ -359,6 +361,38 @@ one of the three, that a help flag is spelled with a value, as
 -help=<value>, that a flag stands before the subcommand it qualifies, or
 that the first argument is a flag and no subcommand was given.
 `
+
+// synopsisIndent is the indent of a subcommand's synopsis line in usage. The
+// prose lines that open with goxsd8 and a name sit in column 0 (goxsd8 parse
+// compiles ...), so anchoring on these exact two spaces is what keeps
+// synopsisLines off them.
+const synopsisIndent = "  "
+
+// synopsisLines returns every line of usage spelled as name's synopsis line,
+// its indent stripped. TestUsageCoversContract pins exactly one per name in
+// subcommands.
+func synopsisLines(name string) []string {
+	prefix := synopsisIndent + "goxsd8 " + name + " "
+	var lines []string
+	for line := range strings.Lines(usage) {
+		if strings.HasPrefix(line, prefix) {
+			lines = append(lines, strings.TrimSuffix(strings.TrimPrefix(line, synopsisIndent), "\n"))
+		}
+	}
+	return lines
+}
+
+// synopsis returns name's synopsis line as usage spells it, read from usage
+// itself so that the line has one encoding (STYLE D3). A name with no such
+// line, or with several, is a broken usage rather than an input fault, and
+// panics rather than printing an empty or an arbitrary usage: line.
+func synopsis(name string) string {
+	lines := synopsisLines(name)
+	if len(lines) != 1 {
+		panic(fmt.Sprintf("goxsd8: usage spells %d synopsis lines for %s, want 1", len(lines), name))
+	}
+	return lines[0]
+}
 
 // The exit codes the CLI answers with: a clean run, a rejected document, an
 // argument list or a file this process could not work with at all, a schema set

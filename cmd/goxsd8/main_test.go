@@ -133,6 +133,62 @@ func TestRunDispatch(t *testing.T) {
 	}
 }
 
+// The usage: lines a subcommand's exit-2 diagnosis prints, held as literals so
+// that a test comparing stderr against them fails when usage loses or changes
+// the synopsis line: an expectation read through synopsis would follow usage
+// wherever it went (#3110).
+const (
+	parseUsageLine    = "usage: goxsd8 parse [-q] [-v] <schema.xsd>..."
+	validateUsageLine = "usage: goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>..."
+	genUsageLine      = "usage: goxsd8 gen [-q] [-v] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]..."
+)
+
+// TestSubcommandDiagnosisPrintsSynopsis pins #3110: a diagnosis charged inside
+// a subcommand prints three lines on stderr, the diagnosis, usage: and that
+// subcommand's synopsis line, then helpPointer. dispatchCases pins the
+// diagnoses charged before a subcommand is known, which print no synopsis.
+func TestSubcommandDiagnosisPrintsSynopsis(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"validate", "x.xml"}, "goxsd8: validate: no schema given\n" + validateUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"gen", "-schema"}, "goxsd8: gen: flag needs an argument: -schema\n" + genUsageLine + "\n" + helpPointer + "\n"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(c.args, &stdout, &stderr); code != exitUsage {
+			t.Errorf("run(%q) = %d, want %d", c.args, code, exitUsage)
+		}
+		if stdout.Len() != 0 {
+			t.Errorf("run(%q) stdout = %q, want empty", c.args, stdout.String())
+		}
+		if stderr.String() != c.want {
+			t.Errorf("run(%q) stderr = %q, want %q", c.args, stderr.String(), c.want)
+		}
+	}
+}
+
+// TestStdoutFaultPrintsSynopsis pins the I/O-fault arm of #3110: a failed
+// write of parse's summary or of validate's report is charged exit 2 inside
+// the subcommand, so its line carries the synopsis too.
+func TestStdoutFaultPrintsSynopsis(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"parse", "testdata/order.xsd"}, "goxsd8: parse: writing the summary for testdata/order.xsd: closed pipe\n" + parseUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"validate", "-schema", "testdata/order.xsd", "testdata/order-invalid.xml"}, "goxsd8: validate: writing the report of testdata/order-invalid.xml: closed pipe\n" + validateUsageLine + "\n" + helpPointer + "\n"},
+	} {
+		var stderr bytes.Buffer
+		if code := run(c.args, errWriter{}, &stderr); code != exitUsage {
+			t.Errorf("run(%q) = %d, want %d", c.args, code, exitUsage)
+		}
+		if stderr.String() != c.want {
+			t.Errorf("run(%q) stderr = %q, want %q", c.args, stderr.String(), c.want)
+		}
+	}
+}
+
 // TestHelpPointerResolvesOutsideTheModule pins #870's second half: the remedy
 // a usage error names must work where an installed binary runs. A `go doc`
 // invocation does not — it needs the module tree — so no message may name one.
@@ -443,10 +499,12 @@ func lineAt(lines []string, i int) string {
 // these checks holds usage to dispatch.
 func TestUsageCoversContract(t *testing.T) {
 	// This pins the vocabulary dispatch reads against the text a user is
-	// shown, so the two cannot become separate lists (STYLE D3/T4).
+	// shown, so the two cannot become separate lists (STYLE D3/T4). Exactly
+	// one synopsis line per name: synopsis panics on any other count, and a
+	// prose line naming the subcommand does not count (#3110).
 	for _, name := range subcommands {
-		if !strings.Contains(usage, "goxsd8 "+name+" ") {
-			t.Errorf("usage documents no %q subcommand, but dispatch reserves it", name)
+		if got := synopsisLines(name); len(got) != 1 {
+			t.Errorf("usage spells %d synopsis lines for %q (%q), want 1: dispatch reserves it, and subcommandUsageError prints its one line", len(got), name, got)
 		}
 	}
 	// jsonsrcLine's routing of jsonsrc's error channel by class, each class's

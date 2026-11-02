@@ -62,19 +62,19 @@ func runGen(args []string, stderr io.Writer) int {
 	_ = flags.Bool("q", false, "accepted; gen has no informational output to suppress")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return usageError(stderr, fmt.Sprintf(helpNotAFlagValueFmt, "gen"))
+			return subcommandUsageError(stderr, "gen", fmt.Sprintf(helpNotAFlagValueFmt, "gen"))
 		}
-		return usageError(stderr, fmt.Sprintf("goxsd8: gen: %v", err))
+		return subcommandUsageError(stderr, "gen", fmt.Sprintf("goxsd8: gen: %v", err))
 	}
 	if arg, ok := flagShapedIn(flags.Args()); ok {
-		return usageError(stderr, fmt.Sprintf(flagAfterPositionalFmt, "gen", arg))
+		return subcommandUsageError(stderr, "gen", fmt.Sprintf(flagAfterPositionalFmt, "gen", arg))
 	}
 	if len(flags.Args()) > 0 {
-		return usageError(stderr, fmt.Sprintf("goxsd8: gen: %s: gen takes no positional argument, only -schema/-out pairs", flags.Arg(0)))
+		return subcommandUsageError(stderr, "gen", fmt.Sprintf("goxsd8: gen: %s: gen takes no positional argument, only -schema/-out pairs", flags.Arg(0)))
 	}
 	pairs, err := pairTargets(occurrences)
 	if err != nil {
-		return usageError(stderr, fmt.Sprintf("goxsd8: gen: %v", err))
+		return subcommandUsageError(stderr, "gen", fmt.Sprintf("goxsd8: gen: %v", err))
 	}
 
 	// A nil logger selects parser's silent default, for the reason parse.go's
@@ -97,7 +97,7 @@ func runGen(args []string, stderr io.Writer) int {
 	}
 	code := exitOK
 	for _, err := range codegen.CheckTargets(targets) {
-		code = worse(code, usageError(stderr, "goxsd8: gen: "+err.Error()))
+		code = worse(code, subcommandUsageError(stderr, "gen", "goxsd8: gen: "+err.Error()))
 	}
 	for i, p := range pairs {
 		schema, c := compileArgument("gen", p.schema, log, stderr)
@@ -113,11 +113,11 @@ func runGen(args []string, stderr io.Writer) int {
 // reportGenerate prints each element of codegen.Generate's error err on its
 // own line on stderr and returns the exit code they charge, exitOK for a nil
 // err. An element holding a *codegen.DeclineError, which errors.As retrieves,
-// charges exit 4 with no helpPointer under it; every other element charges
-// exit 2 as usageError prints it. errors.Is(e, errors.ErrUnsupported) does not
-// route: it also answers true for an OS fault whose syscall.Errno is ENOSYS,
-// ENOTSUP or EOPNOTSUPP, which Generate wraps with %w and which is no decline
-// (#3090).
+// charges exit 4 with no synopsis or helpPointer under it; every other element
+// charges exit 2 as subcommandUsageError prints it. errors.Is(e,
+// errors.ErrUnsupported) does not route: it also answers true for an OS fault
+// whose syscall.Errno is ENOSYS, ENOTSUP or EOPNOTSUPP, which Generate wraps
+// with %w and which is no decline (#3090).
 func reportGenerate(err error, stderr io.Writer) int {
 	if err == nil {
 		return exitOK
@@ -131,7 +131,7 @@ func reportGenerate(err error, stderr io.Writer) int {
 		line := "goxsd8: gen: " + e.Error()
 		var de *codegen.DeclineError
 		if !errors.As(e, &de) {
-			code = worse(code, usageError(stderr, line))
+			code = worse(code, subcommandUsageError(stderr, "gen", line))
 			continue
 		}
 		// A failed stderr write cannot change the outcome: the exit code is

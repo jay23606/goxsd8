@@ -311,8 +311,8 @@ func TestGenVerboseLogs(t *testing.T) {
 	generatedFile(t, out)
 }
 
-// TestGenUsageAndIOFaults pins exit 2: each row's stderr is exactly its line
-// and helpPointer, and nothing is written at the paths it names. Every row
+// TestGenUsageAndIOFaults pins exit 2: each row's stderr is exactly its line,
+// genUsageLine and helpPointer, and nothing is written at the paths it names. Every row
 // runs in a fresh working directory, so the -out . row cannot write into the
 // package.
 func TestGenUsageAndIOFaults(t *testing.T) {
@@ -407,7 +407,7 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 			if stdout.Len() != 0 {
 				t.Errorf("gen %q stdout = %q, want empty", r.args, stdout.String())
 			}
-			if want := r.want + "\n" + helpPointer + "\n"; stderr.String() != want {
+			if want := r.want + "\n" + genUsageLine + "\n" + helpPointer + "\n"; stderr.String() != want {
 				t.Errorf("gen %q stderr = %q, want %q", r.args, stderr.String(), want)
 			}
 			for _, p := range r.absent {
@@ -465,7 +465,7 @@ func TestGenModuleRefusals(t *testing.T) {
 			if code := run(append([]string{"gen"}, tt.args...), &stdout, &stderr); code != exitUsage {
 				t.Errorf("gen %q = %d, want %d", tt.args, code, exitUsage)
 			}
-			if want := tt.want + "\n" + helpPointer + "\n"; stderr.String() != want {
+			if want := tt.want + "\n" + genUsageLine + "\n" + helpPointer + "\n"; stderr.String() != want {
 				t.Errorf("gen %q stderr = %q, want %q", tt.args, stderr.String(), want)
 			}
 			for _, out := range []string{"free/gen", "nomodule/gen", "one/gen", "two/gen"} {
@@ -547,10 +547,10 @@ func TestGenDeclines(t *testing.T) {
 	}
 }
 
-// TestReportGenerateOSFaultNotDecline pins exit 2 with helpPointer for an
-// element of Generate's error that answers errors.Is(_, errors.ErrUnsupported)
-// but holds no *codegen.DeclineError: a phase-2 OS fault whose errno is
-// ENOTSUP, wrapped with %w as Generate wraps it (#3090).
+// TestReportGenerateOSFaultNotDecline pins exit 2 with genUsageLine and
+// helpPointer for an element of Generate's error that answers errors.Is(_,
+// errors.ErrUnsupported) but holds no *codegen.DeclineError: a phase-2 OS
+// fault whose errno is ENOTSUP, wrapped with %w as Generate wraps it (#3090).
 func TestReportGenerateOSFaultNotDecline(t *testing.T) {
 	fault := fmt.Errorf("target 0: writing x/xsd_gen.go: %w", syscall.ENOTSUP)
 	if !errors.Is(fault, errors.ErrUnsupported) {
@@ -560,14 +560,14 @@ func TestReportGenerateOSFaultNotDecline(t *testing.T) {
 	if code := reportGenerate(errors.Join(fault), &stderr); code != exitUsage {
 		t.Errorf("reportGenerate = %d, want %d", code, exitUsage)
 	}
-	if want := "goxsd8: gen: " + fault.Error() + "\n" + helpPointer + "\n"; stderr.String() != want {
+	if want := "goxsd8: gen: " + fault.Error() + "\n" + genUsageLine + "\n" + helpPointer + "\n"; stderr.String() != want {
 		t.Errorf("reportGenerate stderr = %q, want %q", stderr.String(), want)
 	}
 }
 
 // TestGenRefusalsOutrankEveryPair pins exit 2 for every refused -out, whatever
 // any pair compiles or declines, its own pair's decline included: each refusal
-// prints its line and helpPointer, in argument order, before any line a
+// prints its line, genUsageLine and helpPointer, in argument order, before any line a
 // -schema's compilation prints, and nothing is written. Every row runs in a
 // fresh working directory holding dec.xsd, a schema the generator declines,
 // and its -out paths are relative to it.
@@ -575,7 +575,7 @@ func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 	flat := absFixture(t, flatFixture)
 	broken := absFixture(t, "testdata/broken.xsd")
 	refusal := func(schema, out, msg string) string {
-		return "goxsd8: gen: -schema " + schema + " -out " + out + ": " + msg + "\n" + helpPointer + "\n"
+		return "goxsd8: gen: -schema " + schema + " -out " + out + ": " + msg + "\n" + genUsageLine + "\n" + helpPointer + "\n"
 	}
 	notIdentifier := `the package name "my-pkg" is not a Go identifier`
 	rows := []struct {

@@ -18,7 +18,9 @@
 //	            is open.
 //	2     4     usage, or an I/O fault on an argument or on stdout, gen's
 //	            refusal of an -out included: never a verdict about a
-//	            schema or an instance.
+//	            schema or an instance. Each such line a subcommand prints
+//	            is followed by usage: and that subcommand's synopsis line
+//	            below, then by the line pointing to this help.
 //	3     none  validate only: the -schema set does not compile, an I/O
 //	            fault reading a document it references included. Unranked:
 //	            it answers before any instance is opened, so no instance's
