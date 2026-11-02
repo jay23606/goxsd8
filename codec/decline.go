@@ -7,29 +7,53 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// A DeclineError is a construct [Decode] does not decode; Decode's doc states
-// when it is returned.
+// A DeclineError is a construct [Decode] does not decode; it wraps
+// errors.ErrUnsupported, and Decode's doc states when it is returned.
 type DeclineError struct {
 	construct construct
 	loc       xsderr.Loc
-	// detail names the declining component and its schema Loc or, for xsi:type, the element and the type it names.
+	// detail is the text Error's doc states after the construct.
 	detail string
 }
+
+// Construct returns the construct the decline declines.
+func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 
 // Loc returns the instance Loc of the element the decline is charged to: the
 // document element for a construct of its declaration or its type, and the
 // element carrying it for xsi:type.
 func (e *DeclineError) Loc() xsderr.Loc { return e.loc }
 
-// Error names the instance Loc and the construct, then the declining component
-// with its schema Loc or, for xsi:type, the element and the type it names.
+// Error names the instance Loc and the construct, then the declining
+// declaration, the document element's, a local element's or an attribute's,
+// and, for a construct of the document element's type, that type
+// labelled as one, each with its schema Loc, which is the zero Loc for a
+// built-in component; for xsi:type, it names the element and the type the
+// xsi:type names.
 func (e *DeclineError) Error() string {
 	return e.loc.String() + ": codec does not decode " + e.construct.name() + ": " + e.detail +
-		"; a decoder limitation, not a schema or instance fault"
+		"; a decoder refusal, not a schema or instance fault"
 }
 
 // Unwrap returns errors.ErrUnsupported.
 func (e *DeclineError) Unwrap() error { return errors.ErrUnsupported }
+
+// A Construct is a construct Decode declines: two declines of the same
+// construct have equal Constructs; the zero Construct names none. A Construct
+// is comparable: == reports whether two name the same construct, and it may be
+// used as a map key. The package exports no Construct value, because a
+// release that lifts a construct stops returning its Construct; compare a
+// Construct only with another obtained from [DeclineError.Construct]. The
+// package doc's "What decodes" section states what declines.
+type Construct struct{ c construct }
+
+// String returns the construct's name for display, distinct for each
+// Construct; it is not the decline's message. The names are not stable across
+// releases: a release may rename a construct, split one into several, or stop
+// returning a name once Decode covers its construct, and no name is reserved.
+// To tell constructs apart, use the Constructs themselves, as [Construct]
+// states, never a name.
+func (c Construct) String() string { return c.c.name() }
 
 // construct is the closed set of constructs Decode declines, one per
 // declining site. The zero value is invalid (STYLE T1).
@@ -110,9 +134,8 @@ func (c construct) name() string {
 }
 
 // decline returns the *DeclineError for construct c at the instance Loc loc,
-// detail naming the declining component and its schema Loc or, for xsi:type,
-// the element and the type it names. No schema or instance rule is violated,
-// so it carries no xsderr rule (STYLE E2).
+// detail the text Error's doc states after the construct. No schema or
+// instance rule is violated, so it carries no xsderr rule (STYLE E2).
 func decline(loc xsderr.Loc, c construct, detail string) *DeclineError {
 	return &DeclineError{construct: c, loc: loc, detail: detail}
 }

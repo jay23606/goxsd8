@@ -27,7 +27,7 @@ func sequenceOf(particles string) string {
 // the construct's *DeclineError at the declining element's instance Loc,
 // wrapping errors.ErrUnsupported, and no value. Each row decodes into a
 // struct with no field, so a decline is never reported as the T check's
-// caller fault: the declines precede it.
+// ErrTypeMismatch: the declines precede it.
 func TestDecodeDeclines(t *testing.T) {
 	const a = `<s:a>x</s:a>`
 	rows := []struct {
@@ -143,6 +143,91 @@ func TestDecodeUndeclaredRootXsiType(t *testing.T) {
 	assertDecline(t, err, constructXsiType, 1, 1)
 }
 
+// TestDeclineConstruct pins DeclineError.Construct's contract: two declines
+// of one construct, from two schemas and declining sites, have equal
+// Constructs, and declines of two different constructs have different ones.
+// One row per construct group: the declaration, the content, a particle, an
+// attribute use and xsi:type.
+func TestDeclineConstruct(t *testing.T) {
+	const a = `<s:a>x</s:a>`
+	xsiImport := `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>`
+	type decl struct{ decls, attrs, content string }
+	rows := []struct {
+		group string
+		pair  [2]decl
+	}{
+		{"declaration", [2]decl{
+			{`<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`, "", a},
+			{sequenceOf(`<xs:element name="a" type="xs:string" nillable="true"/>`), "", a},
+		}},
+		{"content", [2]decl{
+			{root(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`), "", a},
+			{`<xs:complexType name="ct"><xs:choice><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
+		}},
+		{"particle", [2]decl{
+			{sequenceOf(`<xs:any processContents="lax"/>`), "", a},
+			{sequenceOf(`<xs:element name="b" type="xs:string"/><xs:any processContents="skip"/>`), "", `<s:b>y</s:b><s:c/>`},
+		}},
+		{"attribute use", [2]decl{
+			{xsiImport + root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:nil"/>`), "", a},
+			{xsiImport + root(`<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence><xs:attribute name="c" type="xs:string"/><xs:attribute ref="xsi:schemaLocation"/>`), "", `<s:b>y</s:b>`},
+		}},
+		{"xsi:type", [2]decl{
+			{`<xs:complexType name="rt"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType><xs:element name="r" type="s:rt"/>`, ` xsi:type="s:rt"`, a},
+			{sequenceOf(`<xs:element name="a" type="xs:string"/>`), "", `<s:a xsi:type="xs:token">x</s:a>`},
+		}},
+	}
+	constructs := make([]Construct, len(rows))
+	for i, row := range rows {
+		var got [2]Construct
+		for j, d := range row.pair {
+			schema := schemaOf(t, d.decls)
+			data := instanceOf(d.attrs, d.content)
+			mustAccept(t, schema, data)
+			_, err := Decode[struct{ A string }](schema, strict.New(), data)
+			var de *DeclineError
+			if !errors.As(err, &de) {
+				t.Fatalf("%s %d: Decode error = %v, want a *DeclineError", row.group, j, err)
+			}
+			got[j] = de.Construct()
+		}
+		if got[0] != got[1] {
+			t.Errorf("%s: two declines of one construct have Constructs %s and %s, want equal", row.group, got[0], got[1])
+		}
+		constructs[i] = got[0]
+	}
+	for i := range rows {
+		for j := i + 1; j < len(rows); j++ {
+			if constructs[i] == constructs[j] {
+				t.Errorf("the %s and %s declines have equal Constructs %s, want different", rows[i].group, rows[j].group, constructs[i])
+			}
+		}
+	}
+}
+
+// TestDeclineErrorText pins a decline's whole message for a construct of the
+// document element's type: the declaration's schema Loc, then the type's,
+// labelled as the type's, then the refusal tail.
+func TestDeclineErrorText(t *testing.T) {
+	schema := schemaOf(t, root(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`))
+	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", `<s:a>x</s:a>`))
+	const want = "?:1:1: codec does not decode choice content: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at s.xsd:1:202; a decoder refusal, not a schema or instance fault"
+	if err == nil || err.Error() != want {
+		t.Errorf("error = %v, want %q", err, want)
+	}
+}
+
+// TestDeclineErrorTextSimpleRoot pins the message of a decline of the
+// document element's type when that type is simple and built in.
+func TestDeclineErrorTextSimpleRoot(t *testing.T) {
+	schema := schemaOf(t, `<xs:element name="r" type="xs:string"/>`)
+	_, err := Decode[string](schema, strict.New(), instanceOf("", `x`))
+	const want = "?:1:1: codec does not decode a document element of simple type: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at ?; a decoder refusal, not a schema or instance fault"
+	if err == nil || err.Error() != want {
+		t.Errorf("error = %v, want %q", err, want)
+	}
+}
+
 // mustAccept fails the test unless validate accepts data against schema.
 func mustAccept(t *testing.T, schema *xsd.Schema, data []byte) {
 	t.Helper()
@@ -164,8 +249,8 @@ func assertDecline(t *testing.T, err error, c construct, line, col int) {
 	if !errors.As(err, &de) {
 		t.Fatalf("Decode error = %v, want a *DeclineError", err)
 	}
-	if de.construct != c {
-		t.Errorf("construct = %s, want %s", de.construct.name(), c.name())
+	if got := de.Construct(); got != (Construct{c}) || got.String() != c.name() {
+		t.Errorf("Construct() = %s, want %s", got, c.name())
 	}
 	if de.Loc().Line != line || de.Loc().Col != col {
 		t.Errorf("Loc = %s, want %d:%d", de.Loc(), line, col)

@@ -9,6 +9,10 @@
 //	func (e *DeclineError) Loc() xsderr.Loc
 //	func (e *DeclineError) Error() string
 //	func (e *DeclineError) Unwrap() error
+//	func (e *DeclineError) Construct() Construct
+//	type Construct struct{ ... }
+//	func (c Construct) String() string
+//	var ErrTypeMismatch error
 //
 // [Decode] decodes a valid XML instance into the struct package codegen
 // emits for its document element's declaration, and [Decode]'s doc states
@@ -60,7 +64,8 @@
 //
 // Every error about the instance carries its instance Loc: a violation's,
 // an undecided check's, and a decline's, which also names its construct and,
-// for a construct of the schema, the declining component's schema Loc.
+// for a construct of the schema, the declining component's schema Loc; and
+// [DeclineError.Construct] returns its construct.
 //
 // # Planned decode paths, one semantics (M10 — not yet implemented)
 //

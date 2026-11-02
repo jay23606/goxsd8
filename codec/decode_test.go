@@ -16,6 +16,7 @@ import (
 	"github.com/kud360/goxsd8/codegen"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -317,7 +318,9 @@ func TestDecodeNilArguments(t *testing.T) {
 }
 
 // TestDecodeTypeMismatch pins item 6 of Decode's doc: a T that is not the
-// struct codegen emits is a plain error, no decline, and nothing is filled.
+// struct codegen emits is an error errors.Is reports as ErrTypeMismatch, no
+// decline and no rule, and nothing is filled; an error that is no T mismatch
+// is not reported as one.
 func TestDecodeTypeMismatch(t *testing.T) {
 	schema := schemaOf(t, shapesSchema)
 	data := instanceOf(` req="r"`, "<s:one>x</s:one><s:tok>t</s:tok>")
@@ -346,13 +349,13 @@ func TestDecodeTypeMismatch(t *testing.T) {
 		want   string
 	}{
 		{"renamed field", func() (any, error) { return Decode[renamed](schema, strict.New(), data) },
-			"codec: field 5 of codec.renamed is Opt3 *string where codegen emits Opt2 *string"},
+			ErrTypeMismatch.Error() + ": field 5 of codec.renamed is Opt3 *string where codegen emits Opt2 *string"},
 		{"retyped field", func() (any, error) { return Decode[retyped](schema, strict.New(), data) },
-			"codec: field 1 of codec.retyped is Opt string where codegen emits Opt *string"},
+			ErrTypeMismatch.Error() + ": field 1 of codec.retyped is Opt string where codegen emits Opt *string"},
 		{"field count", func() (any, error) { return Decode[short](schema, strict.New(), data) },
-			"codec: codec.short has 1 fields where codegen emits 6 for the document element"},
+			ErrTypeMismatch.Error() + ": codec.short has 1 fields where codegen emits 6"},
 		{"no struct", func() (any, error) { return Decode[string](schema, strict.New(), data) },
-			"codec: string is no struct, so it is not the type codegen emits for the document element"},
+			ErrTypeMismatch.Error() + ": string is no struct"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -363,10 +366,31 @@ func TestDecodeTypeMismatch(t *testing.T) {
 			if err.Error() != row.want {
 				t.Errorf("error = %q, want %q", err, row.want)
 			}
-			if _, isRule := xsderr.RuleOf(err); isRule || errors.Is(err, errors.ErrUnsupported) {
-				t.Errorf("error %v is a rule or a decline, want a plain caller's fault", err)
+			if !errors.Is(err, ErrTypeMismatch) {
+				t.Errorf("error %v is not ErrTypeMismatch", err)
+			}
+			var de *DeclineError
+			if _, isRule := xsderr.RuleOf(err); isRule || errors.Is(err, errors.ErrUnsupported) || errors.As(err, &de) {
+				t.Errorf("error %v is a rule or a decline, want ErrTypeMismatch alone", err)
 			}
 		})
+	}
+	// A document element with no top-level declaration and no xsi:type is
+	// charged by the validator (cvc-assess-elt) before Decode binds it, so
+	// the row calls bind, whose error Decode returns as it is.
+	empty := schemaOf(t, "")
+	_, err := Decode[struct{}](empty, strict.New(), instanceOf("", ""))
+	if rule, _ := xsderr.RuleOf(err); rule != "cvc-assess-elt" {
+		t.Fatalf("Decode(undeclared document element) = %v, want the validator's cvc-assess-elt", err)
+	}
+	start, err := documentElement(xmltree.NewReader("", bytes.NewReader(instanceOf("", ""))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = bind(empty, start)
+	const want = "codec: ?:1:1: the document element {urn:s}r has no top-level declaration"
+	if err == nil || err.Error() != want || errors.Is(err, ErrTypeMismatch) {
+		t.Errorf("bind(undeclared document element) = %v, want %q, no ErrTypeMismatch", err, want)
 	}
 }
 

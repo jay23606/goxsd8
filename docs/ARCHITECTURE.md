@@ -99,7 +99,8 @@ Value implementations, parsing, validation, and generation live above them.
 identifier for either of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
-`codec` has left this note: it exports `Decode` and `DeclineError`, and
+`codec` has left this note: it exports `Decode`, `DeclineError` and its
+`Construct`, and `ErrTypeMismatch`, and
 imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
 `xsderr` and `internal/goname` (its section says what ships).
 `codegen` has left this note: it exports `Generate`, `CheckTargets` and
@@ -707,7 +708,8 @@ that follow it, and its "Determinism" and "Naming" sections state what `Generate
 does not. `codec` (M10) exports `Decode`, which decodes a valid XML
 instance into the struct `codegen` emits for its document element, for the
 slice `codec/doc.go`'s "What decodes" states, declining every other
-construct, and `DeclineError`. Its runtime path today reads no value space:
+construct, `DeclineError` and its `Construct`, and `ErrTypeMismatch`. Its
+runtime path today reads no value space:
 each value is the string the whiteSpace stage leaves
 (`value.ApplyWhiteSpace`), and no `value.Mapping` runs. `value.Emitter` does
 not exist (its API freezes in M10; not declared). A bullet `codegen/doc.go`

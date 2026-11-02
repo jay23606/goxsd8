@@ -14,6 +14,10 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
+// ErrTypeMismatch is the error [Decode] wraps when T is not the struct codegen
+// emits for the document element's declaration; Decode's doc states when.
+var ErrTypeMismatch = errors.New("codec: T is not the struct codegen emits for the document element")
+
 // The names of the primitives the slice reads by identity.
 var (
 	stringPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
@@ -49,19 +53,25 @@ var (
 //     of the first validate.Unevaluated and wrapping errors.ErrUnsupported.
 //     It is no *DeclineError: errors.As tells the two apart.
 //  5. A construct of the document element's declaration or type outside the
-//     slice: a *DeclineError at the document element's instance Loc. Each is
-//     found in this order: the declaration's {type table}, {nillable} and
-//     {value constraint}, its {type definition} and that type's content, each
-//     particle of its content in order, each of its attribute uses in
-//     order, and its {attribute wildcard}.
+//     slice: a *DeclineError at the document element's instance Loc, whose
+//     [DeclineError.Construct] is that construct's. Each is found in this
+//     order: the declaration's {type table}, {nillable} and {value
+//     constraint}, its {type definition} and that type's content, each
+//     particle of its content in order, each of its attribute uses in order,
+//     and its {attribute wildcard}.
 //  6. T is not a struct whose fields are exactly those codegen emits for the
-//     declaration, in name, order and Go type: a plain error, a caller's
-//     fault, so that a struct that does not match the schema is never filled.
+//     declaration, in name, order and Go type, as Decode derives them from
+//     the schema: an error errors.Is reports as [ErrTypeMismatch], no
+//     *DeclineError, so that a struct that does not match the schema is never
+//     filled. Decode never reads the fields from T, so for a struct codegen
+//     emitted from this schema the error is a defect of Decode's, and for any
+//     other T it is a T that does not match.
 //  7. An element carrying xsi:type, the document element or a child: a
 //     *DeclineError at that element's instance Loc, the first in document
-//     order. A document element no top-level declaration declares, which
-//     validation accepts only through its xsi:type (§3.3.4.6 cvc-assess-elt),
-//     declines so in place of item 5.
+//     order, whose [DeclineError.Construct] is xsi:type's. A document element
+//     no top-level declaration declares, which validation accepts only
+//     through its xsi:type (§3.3.4.6 cvc-assess-elt), declines so in place of
+//     item 5.
 func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte) (*T, error) {
 	v, err := validate.New(schema, backend)
 	if err != nil {
@@ -196,11 +206,11 @@ func bind(schema *xsd.Schema, root *xmltree.StartElement) (*binding, error) {
 	if !ok {
 		return nil, fmt.Errorf("codec: %s: the {type definition} of %s does not resolve", loc, declSubject(decl))
 	}
+	typeSubject := fmt.Sprintf("the {type definition} of %s, a type defined at %s", declSubject(decl), td.Loc())
 	ct, ok := td.(xsd.ComplexType)
 	if !ok {
-		return nil, decline(loc, constructSimpleRoot, declSubject(decl))
+		return nil, decline(loc, constructSimpleRoot, typeSubject)
 	}
-	typeSubject := fmt.Sprintf("the {type definition} of %s, at %s", declSubject(decl), ct.Loc())
 	particles, d := contentParticles(ct)
 	if d != 0 {
 		return nil, decline(loc, d, typeSubject)
@@ -434,18 +444,18 @@ func occursShape(occurs xsd.Occurs, el xsd.ElementDeclaration) (shape, error) {
 }
 
 // check returns nil when t is the struct codegen emits for b, and otherwise
-// the plain error Decode's doc states, item 6.
+// the ErrTypeMismatch error Decode's doc states, item 6.
 func (b *binding) check(t reflect.Type) error {
 	if t.Kind() != reflect.Struct {
-		return fmt.Errorf("codec: %s is no struct, so it is not the type codegen emits for the document element", t)
+		return fmt.Errorf("%w: %s is no struct", ErrTypeMismatch, t)
 	}
 	if t.NumField() != len(b.fields) {
-		return fmt.Errorf("codec: %s has %d fields where codegen emits %d for the document element", t, t.NumField(), len(b.fields))
+		return fmt.Errorf("%w: %s has %d fields where codegen emits %d", ErrTypeMismatch, t, t.NumField(), len(b.fields))
 	}
 	for i, want := range b.fields {
 		got := t.Field(i)
 		if got.Name != want.name || got.Type != want.shape.goType() || got.Anonymous {
-			return fmt.Errorf("codec: field %d of %s is %s %s where codegen emits %s %s", i, t, got.Name, got.Type, want.name, want.shape.goType())
+			return fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, i, t, got.Name, got.Type, want.name, want.shape.goType())
 		}
 	}
 	return nil
