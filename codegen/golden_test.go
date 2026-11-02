@@ -53,11 +53,11 @@ func TestGenerateGolden(t *testing.T) {
 	}
 }
 
-// TestGenerateAssertionsInert pins the package doc's "# Coverage" sentences on
-// {assertions}: the assertions fixture, each <assert> blanked to spaces of
-// equal length so that every header's Loc is unchanged, generates the bytes
-// of assertions.golden, which TestGenerateGolden pins for the fixture as
-// written.
+// TestGenerateAssertionsInert pins the package doc's "# Complex types"
+// sentences on {assertions}: the assertions fixture, each <assert> blanked to
+// spaces of equal length so that every header's Loc is unchanged, generates
+// the bytes of assertions.golden, which TestGenerateGolden pins for the
+// fixture as written.
 func TestGenerateAssertionsInert(t *testing.T) {
 	const location = "testdata/assertions.xsd"
 	src, err := os.ReadFile(location)
@@ -143,8 +143,8 @@ func typeCheck(t *testing.T, src []byte) {
 // alone decides the import, emits a package that type-checks only when the
 // import is emitted exactly when a declaration names math/big, since a missing
 // and an unused import are both type errors. The xs:gMonthDay, xs:gDay and
-// xs:gMonth rows, whose datatype structs "# Coverage" gives no math/big field,
-// pin the import's absence; every other row pins its presence.
+// xs:gMonth rows, whose datatype structs "# Simple types" gives no math/big
+// field, pin the import's absence; every other row pins its presence.
 func TestGenerateImportsBig(t *testing.T) {
 	for _, typ := range []string{"xs:integer", "xs:decimal",
 		"xs:dateTime", "xs:dateTimeStamp", "xs:time", "xs:date", "xs:gYearMonth", "xs:gYear",

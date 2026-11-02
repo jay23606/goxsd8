@@ -35,11 +35,13 @@
 // structs of the slice codec's package doc states, and you fill every other.
 // Package validate is today what enforces the constraints the types do not:
 // facets, {assertions}, identity constraints, value constraints and wildcard
-// constraints, the last four as their "Coverage" rules state.
+// constraints, the last four as "Complex types", "Particles", "Open content",
+// "Attributes" and "Element declarations" state.
 //
-// Each supported construct gets the Go shape below, a summary of the
-// "Coverage" rules each row quotes, by a rule's opening or by a sentence of
-// one, which state its exceptions.
+// Each supported construct gets the Go shape below, a summary of the rules
+// each row quotes, in the sections from "Simple types" to "Element
+// declarations", by a rule's opening or by a sentence of one, which state its
+// exceptions.
 //
 //   - complex type → a struct ("A sequence or an all group gives"), or its
 //     content choice's sealed interface ("A choice gives")
@@ -107,9 +109,10 @@
 // [DeclineError]'s [DeclineError.Construct] (see [Construct] for comparing
 // them), each a permanent decline: uncovered primitive, local element
 // declaration with {abstract} true and struct-value recursion, for the reasons
-// this section states; and particle with {max occurs} 0, since an element,
-// group reference, model group or wildcard with minOccurs=maxOccurs=0 maps to
-// no component at all (Structures §3.3.2, §3.7.2, §3.8.2, §3.10.2).
+// the paragraph after the list and, for struct-value recursion, "Particles"
+// state; and particle with {max occurs} 0, since an element, group reference,
+// model group or wildcard with minOccurs=maxOccurs=0 maps to no component at
+// all (Structures §3.3.2, §3.7.2, §3.8.2, §3.10.2).
 //
 //   - uncovered primitive
 //   - particle with {max occurs} 0
@@ -191,7 +194,10 @@
 //     field, a list's item or a union's member is declared over, each followed
 //     by one variant type per basic member
 //
-// Generate declines everything outside this slice, which these rules state:
+// Generate declines everything outside this slice, which the rules in the
+// eight sections that follow, "Simple types" to "Element declarations", state.
+//
+// # Simple types
 //
 //   - An element whose {type definition} is a simple type gets a named type
 //     over string for a special type (Datatypes §2.4.2 dt-special),
@@ -299,6 +305,9 @@
 //     though no schema document yields one
 //     (src-union-memberTypes-or-simpleTypes), gets its interface alone, which
 //     no variant implements.
+//
+// # xs:anyType
+//
 //   - An element whose {type definition} is xs:anyType (§3.4.7
 //     any-type-itself), named by its type attribute or the default for an
 //     element declared with no type and no substitutionGroup (§3.3.2), holds
@@ -321,6 +330,9 @@
 //     not resolve from the struct. AnyType reaches itself only through the
 //     slice Children, so no element of type xs:anyType closes a struct-value
 //     recursion, and none of the four names math/big.
+//
+// # Complex types
+//
 //   - An element whose {type definition} is a complex type other than
 //     xs:anyType with {abstract} false, named or anonymous, gets a type of
 //     its own whatever its derivation, restriction or extension, of complex or
@@ -352,18 +364,19 @@
 //     with no particle field; a struct with no field is spelled struct{}.
 //   - Mixed content ({variety} mixed, §3.4.1) gives the struct element-only
 //     content of the same {particle} gives, with two changes. Its first field,
-//     ahead of every field the rules here give, is Text, a string holding the
-//     characters before the first child element, "" for none. And every field
-//     its particles give for an element particle, in the struct, in an
-//     occurrence type, or in a choice's or a flattened interface's branch
-//     struct, holds MixedChild[T] in place of the T it would hold, whatever T
-//     is, a sealed interface included: MixedChild holds that child as Element
-//     and as Tail the characters after it, before the next child or the end, and
-//     the occurrence rules below apply to MixedChild[T] as to any struct, so
-//     {min occurs} 0 with {max occurs} 1 gives *MixedChild[T]. A wildcard
-//     particle's field holds AnyChild in place of AnyElement. A field holding a
-//     model group's occurrence type, a choice's interface or a flattened field's
-//     slice is not wrapped: it is not a child element.
+//     ahead of every field the rules from "Simple types" to "Element
+//     declarations" give, is Text, a string holding the characters before the
+//     first child element, "" for none. And every field its particles give for
+//     an element particle, in the struct, in an occurrence type, or in a
+//     choice's or a flattened interface's branch struct, holds MixedChild[T] in
+//     place of the T it would hold, whatever T is, a sealed interface included:
+//     MixedChild holds that child as Element and as Tail the characters after
+//     it, before the next child or the end, and the occurrence rules below apply
+//     to MixedChild[T] as to any struct, so {min occurs} 0 with {max occurs} 1
+//     gives *MixedChild[T]. A wildcard particle's field holds AnyChild in place
+//     of AnyElement. A field holding a model group's occurrence type, a choice's
+//     interface or a flattened field's slice is not wrapped: it is not a child
+//     element.
 //   - So the instance's character data round-trips: Text, then each child in
 //     the order the struct holds it, each followed by its Tail. The characters
 //     are raw and of no simple type (§3.4.4.2 cvc-complex-type clause 1.4
@@ -414,6 +427,9 @@
 //     occurs} and the choice's own occurrence, the content {particle}
 //     included, is flattened, as stated below: a branch over that alternative
 //     would hold the empty match.
+//
+// # Substitution groups
+//
 //   - An <element ref> particle to a head that has {abstract} true, or whose
 //     substitution group ([xsd.Schema.SubstitutionGroup], §3.3.6.4 key-eq)
 //     holds a declaration with {abstract} false other than the head, gives a
@@ -440,6 +456,9 @@
 //     branch's declaration is checked in group order as at an <element ref>
 //     particle to it, its properties and the shape of its type, so a declining
 //     one declines the interface there.
+//
+// # Particles
+//
 //   - A sequence or all group {particle} that is not spliced, a choice
 //     {particle} that occurs other than exactly once, or a choice {particle}
 //     that occurs exactly once and either has {particles} one occurrence of
@@ -611,6 +630,9 @@
 //     accepts, and how one particle's children interleave with another's is
 //     lost. Every such interleaving is valid (§3.8.4.1.3 all-mg: an all group's
 //     language is the interleave of its particles').
+//
+// # Open content
+//
 //   - A complex type's {open content} (§3.4.2.3.3 dcl.ctd.ctcc.common clauses 5
 //     and 6), read from its own {content type}, so one an extension inherits
 //     counts (clause 4.2.3.3) and an <openContent mode="none"> adds none of its
@@ -634,6 +656,9 @@
 //     one follows them all (clauses 2 and 3). Neither the {mode} nor the
 //     {wildcard}'s {namespace constraint} or {process contents} (§3.10.1) is
 //     represented; enforcing either is the validator's.
+//
+// # Attributes
+//
 //   - Each attribute use of a type emitted as a struct, but one whose
 //     {attribute declaration} is the built-in xsi:nil, gives one field after
 //     the particle fields and the open-content field, or the value field, if
@@ -678,21 +703,24 @@
 //     wildcard would not admit (cvc-wildcard, cvc-complex-type clause 2.2.2),
 //     and holds every match raw whether a strict or lax wildcard would assess
 //     it; enforcing either is the validator's.
+//
+// # Element declarations
+//
 //   - An element declaration with {nillable} true (§3.3.1 ed-nillable) and no
 //     {value constraint} of {variety} fixed is nillable: a field over it holds,
-//     in place of the T the rules here give it, Nillable[T, A], a generic
-//     sealed interface, the closed-sum exception as a choice's is, whose one
-//     method is unexported and takes T and A, so that an arm implements it for
-//     its own type arguments alone. Its arms are Nilled[T, A], holding as
-//     Attributes the attributes of a nilled element, which has no character or
-//     element children (§3.3.4.3 cvc-elt clause 3.2.3) and keeps its
-//     attributes (§3.4.4.2 cvc-complex-type clauses 2 to 4), and Content[T, A],
-//     holding T as Content for an element that is not nilled. The three are
-//     emitted once per package. The field takes the occurrence rules above as
-//     a sealed interface: the bare interface, nil meaning absent, which a
-//     required element's field admits though no valid instance gives it, as a
-//     required choice's does; a slice of it when repeated; MixedChild over it
-//     in mixed content.
+//     in place of the T the rules from "Simple types" to "Element declarations"
+//     give it, Nillable[T, A], a generic sealed interface, the closed-sum
+//     exception as a choice's is, whose one method is unexported and takes T
+//     and A, so that an arm implements it for its own type arguments alone. Its
+//     arms are Nilled[T, A], holding as Attributes the attributes of a nilled
+//     element, which has no character or element children (§3.3.4.3 cvc-elt
+//     clause 3.2.3) and keeps its attributes (§3.4.4.2 cvc-complex-type clauses
+//     2 to 4), and Content[T, A], holding T as Content for an element that is
+//     not nilled. The three are emitted once per package. The field takes the
+//     occurrence rules above as a sealed interface: the bare interface, nil
+//     meaning absent, which a required element's field admits though no valid
+//     instance gives it, as a required choice's does; a slice of it when
+//     repeated; MixedChild over it in mixed content.
 //   - A is struct{} when T is a simple type's Go type or a complex type's with
 //     no attribute field, and otherwise T's attributes struct, one per T,
 //     shared by every nillable element of that type: T's attribute fields and

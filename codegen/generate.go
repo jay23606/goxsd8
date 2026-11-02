@@ -158,15 +158,15 @@ func (t Target) failed(i int, err error) error {
 // Two particles refine that walk order: a local element whose type is already
 // emitted, and an <element ref>. A local element that occurs exactly once and
 // whose type, not a choice, is already emitted has that type checked again,
-// through such elements, for a type reaching itself, and the decline "Coverage"
-// states for one found there precedes every decline the depth-first walk meets
-// after that element. The walk does not enter the type of the top-level
-// declaration an <element ref> particle names, which that declaration's own
-// turn emits. A ref to a declaration not yet reached checks that declaration's
-// properties and the shape of its type where the ref is met — for a
-// declaration given a sealed interface over its governing types, the shape of
-// each complex type among them, its simple ones checked at its own turn. A
-// ref to a substitution-group head given an interface checks so each
+// through such elements, for a type reaching itself, and the decline
+// "Particles" states for one found there precedes every decline the depth-first
+// walk meets after that element. The walk does not enter the type of the
+// top-level declaration an <element ref> particle names, which that
+// declaration's own turn emits. A ref to a declaration not yet reached checks
+// that declaration's properties and the shape of its type where the ref is met
+// — for a declaration given a sealed interface over its governing types, the
+// shape of each complex type among them, its simple ones checked at its own
+// turn. A ref to a substitution-group head given an interface checks so each
 // declaration of its group with {abstract} false, in group order. Any other
 // ref that occurs exactly once to a complex type that is not a choice has that
 // type checked there, in the same way, for an element or type reaching itself,

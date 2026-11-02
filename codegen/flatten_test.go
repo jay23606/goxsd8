@@ -6,13 +6,13 @@ import (
 	"testing"
 )
 
-// TestGenerateFlattenGates pins the three gates the package doc's "# Coverage"
-// states for a flattened field at their boundaries, on element e's anonymous
-// complex type: each row's source, which type-checks, matches every pattern in
-// want and none in absent. A flattened particle's interface is named E plus
-// its compositor and holds one branch per basic particle its group reaches,
-// named from that particle, never from a model group; the rows that keep an
-// occurrence type show a branch or struct only that shape gives.
+// TestGenerateFlattenGates pins the three gates the package doc's
+// "# Particles" states for a flattened field at their boundaries, on element
+// e's anonymous complex type: each row's source, which type-checks, matches
+// every pattern in want and none in absent. A flattened particle's interface
+// is named E plus its compositor and holds one branch per basic particle its
+// group reaches, named from that particle, never from a model group; the rows
+// that keep an occurrence type show a branch or struct only that shape gives.
 func TestGenerateFlattenGates(t *testing.T) {
 	const str = `type="xs:string"`
 	// slice is the pattern of e's flattened field of compositor word, and

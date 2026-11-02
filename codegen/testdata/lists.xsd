@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            xmlns:t="urn:t" targetNamespace="urn:t">
-  <!-- The list types the package doc's "# Coverage" maps: builtin and user
+  <!-- The list types the package doc's "# Simple types" maps: builtin and user
        lists, a restriction of a list, an anonymous list and an anonymous
        item, each as a top-level element, a required, optional and repeated
        local element, a required and optional attribute, and a choice

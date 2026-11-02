@@ -418,7 +418,7 @@ func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType) (construct, error) {
 }
 
 // occursShape returns the shape codegen gives the field of a particle of el
-// occurring as occurs, by codegen's package doc "# Coverage" pointer and
+// occurring as occurs, by codegen's package doc "# Particles" pointer and
 // slice rules. Decode's check of T is what holds the two to one answer.
 func occursShape(occurs xsd.Occurs, el xsd.ElementDeclaration) (shape, error) {
 	upper, bounded := occurs.Max()

@@ -702,8 +702,8 @@ declarations for the schema shapes `codegen/doc.go`'s "Coverage" states and
 declines every other, `CheckTargets`, which reports the `Target`s `Generate`
 refuses without reading a schema, and the error types both return
 (`TargetError`, `DeclineError` and its `Construct`). **Read which of the bullets below ship in
-`codegen/doc.go`, not here:** its "Coverage", "Determinism" and "Naming"
-sections state what `Generate` does today, and its "Planned" sections what it
+`codegen/doc.go`, not here:** its "Coverage" section, the eight sections
+that follow it, and its "Determinism" and "Naming" sections state what `Generate` does today, and its "Planned" sections what it
 does not. `codec` (M10) exports `Decode`, which decodes a valid XML
 instance into the struct `codegen` emits for its document element, for the
 slice `codec/doc.go`'s "What decodes" states, declining every other

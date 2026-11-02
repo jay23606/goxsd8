@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            xmlns:t="urn:t" targetNamespace="urn:t">
-  <!-- The union types the package doc's "# Coverage" maps: a named union of
+  <!-- The union types the package doc's "# Simple types" maps: a named union of
        a builtin and an anonymous enumeration, read by an optional local
        element, an optional attribute, a simple-content extension, a list and
        a top-level element of the type's own name; a union whose members

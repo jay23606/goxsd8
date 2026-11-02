@@ -43,19 +43,19 @@ var (
 	unsignedByteBuiltin  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedByte"}
 )
 
-// The math/big types "# Coverage" maps to; a field or named type of either
-// makes the generated file import math/big (analysis.usesBig).
+// The math/big types "# Simple types" maps to; a field or named type of
+// either makes the generated file import math/big (analysis.usesBig).
 const (
 	bigInt = "big.Int"
 	bigRat = "big.Rat"
 )
 
-// datatypeStruct is the struct "# Coverage" maps one date, time or duration
-// datatype, or QName and NOTATION, to (Datatypes §3.3.6–§3.3.14, §3.3.18,
-// §3.3.19, §3.4.26–§3.4.28): one field per property its values carry, in the
-// order of the seven-property model (§D.2.1), of duration's two properties
-// (§3.3.6.1), or of QName's {namespace name, local part} (§3.3.18). doc is the
-// header's line after its first, "" for none.
+// datatypeStruct is the struct "# Simple types" maps one date, time or
+// duration datatype, or QName and NOTATION, to (Datatypes §3.3.6–§3.3.14,
+// §3.3.18, §3.3.19, §3.4.26–§3.4.28): one field per property its values carry,
+// in the order of the seven-property model (§D.2.1), of duration's two
+// properties (§3.3.6.1), or of QName's {namespace name, local part} (§3.3.18).
+// doc is the header's line after its first, "" for none.
 type datatypeStruct struct {
 	datatype xsd.QName
 	doc      string
@@ -231,16 +231,17 @@ type emitter struct {
 }
 
 // nillableNames is the names claimed for the generic sealed interface
-// Nillable and its two arms, Nilled and Content, which "# Coverage" gives a
-// field over a nillable element declaration, in claim order.
+// Nillable and its two arms, Nilled and Content, which
+// "# Element declarations" gives a field over a nillable element
+// declaration, in claim order.
 type nillableNames struct {
 	sum, nilled, content string
 }
 
-// precisionDecimalNames is the names claimed for the struct "# Coverage" gives
-// xs:precisionDecimal (precisionDecimal §3.1 sec-vs-pD), the sealed interface
-// its one field holds, and that interface's four arms, one per case of
-// ·numericalValue· (vp-pd-numVal), in claim order.
+// precisionDecimalNames is the names claimed for the struct "# Simple types"
+// gives xs:precisionDecimal (precisionDecimal §3.1 sec-vs-pD), the sealed
+// interface its one field holds, and that interface's four arms, one per case
+// of ·numericalValue· (vp-pd-numVal), in claim order.
 type precisionDecimalNames struct {
 	wrapper, value, numerical, positiveInfinity, negativeInfinity, notANumber string
 }
@@ -262,10 +263,11 @@ type nilledAttributes struct {
 	slot     int
 }
 
-// rawNames is the names claimed for the four raw-content structs "# Coverage"
-// gives an element of type xs:anyType (§3.4.7 any-type-itself), a wildcard
-// particle of a model group, and an {attribute wildcard} (§3.4.2.5
-// dcl.ctd.anyatt), in claim order.
+// rawNames is the names claimed for the four raw-content structs the package
+// doc's "# xs:anyType", "# Particles" and "# Attributes" give, in that order,
+// an element of type xs:anyType (§3.4.7 any-type-itself), a wildcard particle
+// of a model group, and an {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt), in
+// claim order.
 type rawNames struct {
 	anyType, attribute, child, element string
 }
@@ -648,7 +650,7 @@ func headerLoc(base string, loc xsderr.Loc) string {
 }
 
 // topLevel emits the type of one top-level element declaration: a named type
-// over the raw-content struct AnyType ("# Coverage") for xs:anyType, over
+// over the raw-content struct AnyType ("# xs:anyType") for xs:anyType, over
 // string for a special one, over an atomic Go type for an atomic simple {type
 // definition}, over a slice of one for a list, over a union's sealed interface
 // for a union (unionType), a struct or sealed interface for an accepted
@@ -866,11 +868,11 @@ type declaredSlot struct{}
 func (declaredSlot) anonymous() string { return "typeDefinition" }
 func (declaredSlot) name() string      { return "{type definition}" }
 
-// governingTypes returns the types the package doc's "# Coverage" lets govern
-// an instance of the element declaration decl, in its order and by its
-// identity, and sum, true exactly when "# Coverage" gives decl a sealed
-// interface over them. The slots are decl's {type table} alternatives in order
-// then its {default type definition} (§3.3.4.1 key-selected-type,
+// governingTypes returns the types the package doc's "# Element declarations"
+// lets govern an instance of the element declaration decl, in its order and by
+// its identity, and sum, true exactly when "# Element declarations" gives decl
+// a sealed interface over them. The slots are decl's {type table} alternatives
+// in order then its {default type definition} (§3.3.4.1 key-selected-type,
 // key-cta-select), or, with no {type table}, its {type definition} alone, each
 // resolved through [xsd.Schema.ResolvedType]. A {type table} slot holding
 // xs:error, matched by name (errorTypeName), gives nothing. A slot holding a
@@ -922,13 +924,13 @@ func (e *emitter) governingTypes(decl xsd.ElementDeclaration) (branches []tableB
 	return branches, len(branches) != 1, nil
 }
 
-// abstractMembers returns the members "# Coverage" gives the complex type t,
-// which has {abstract} true, in a slot of the element declaration decl: each
-// named complex type with {abstract} false among [xsd.Schema.Types], in its
-// order, for which [xsd.Schema.ValidlySubstitutable] answers true against t
-// under decl's {disallowed substitutions}, t's {prohibited substitutions} being
-// the one it adds (§3.3.4.2 key-overrides clause 2). An error from
-// ValidlySubstitutable is returned, never a decline.
+// abstractMembers returns the members "# Element declarations" gives the
+// complex type t, which has {abstract} true, in a slot of the element
+// declaration decl: each named complex type with {abstract} false among
+// [xsd.Schema.Types], in its order, for which [xsd.Schema.ValidlySubstitutable]
+// answers true against t under decl's {disallowed substitutions}, t's
+// {prohibited substitutions} being the one it adds (§3.3.4.2 key-overrides
+// clause 2). An error from ValidlySubstitutable is returned, never a decline.
 func (e *emitter) abstractMembers(decl xsd.ElementDeclaration, t xsd.ComplexType) ([]xsd.TypeDefinition, error) {
 	var members []xsd.TypeDefinition
 	for _, td := range e.schema.Types() {
@@ -950,19 +952,19 @@ func (e *emitter) abstractMembers(decl xsd.ElementDeclaration, t xsd.ComplexType
 // simpleGoType is a special type's string, the atomic Go type, the slice,
 // or the union's sealed interface that a simple-typed element's or
 // attribute's field, or an element's named type, is declared over, chosen
-// by the package doc's "# Coverage" (goType). subject names the
+// by the package doc's "# Simple types" (goType). subject names the
 // declaration the type is read from, and loc, its Loc, is a decline's;
 // under is goType's.
 func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType, under unionNaming) (emittedType, error) {
 	return e.goType(subject, fmt.Sprintf("%s with {type definition} %s", subject, typeName(t)), loc, t, under)
 }
 
-// goType is the Go type "# Coverage" maps the simple type t to: for a special
-// t (Datatypes §2.4.2 dt-special), xs:anySimpleType or xs:anyAtomicType known
-// by identity ahead of its {variety}, string, holding the literal; for an atomic
-// t, its atomic Go type, chosen through builtinType and then t's {primitive
-// type definition} (Datatypes §4.1.1), a math/big type, a datatype struct
-// holding one, or PrecisionDecimal among them; for a list (Datatypes
+// goType is the Go type "# Simple types" maps the simple type t to: for a
+// special t (Datatypes §2.4.2 dt-special), xs:anySimpleType or xs:anyAtomicType
+// known by identity ahead of its {variety}, string, holding the literal; for an
+// atomic t, its atomic Go type, chosen through builtinType and then t's
+// {primitive type definition} (Datatypes §4.1.1), a math/big type, a datatype
+// struct holding one, or PrecisionDecimal among them; for a list (Datatypes
 // §2.4.1.2, a finite sequence of its item type's values), a slice of the type
 // its {item type definition} (§3.16.1) maps to, read through
 // [xsd.SimpleType.Item], which takes a restriction's item from its base
@@ -1061,15 +1063,15 @@ func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.Simpl
 		return "string", nil
 	case booleanPrimitive:
 		return "bool", nil
-	case floatPrimitive: // Datatypes §3.3.4.1, as "# Coverage" states
+	case floatPrimitive: // Datatypes §3.3.4.1, as "# Simple types" states
 		return "float32", nil
-	case doublePrimitive: // Datatypes §3.3.5.1, as "# Coverage" states
+	case doublePrimitive: // Datatypes §3.3.5.1, as "# Simple types" states
 		return "float64", nil
-	case decimalPrimitive: // Datatypes §3.3.3, as "# Coverage" states
+	case decimalPrimitive: // Datatypes §3.3.3, as "# Simple types" states
 		return bigRat, nil
-	case hexBinaryPrimitive, base64BinaryPrimitive: // Datatypes §3.3.15.1, §3.3.16.1, as "# Coverage" states
+	case hexBinaryPrimitive, base64BinaryPrimitive: // Datatypes §3.3.15.1, §3.3.16.1, as "# Simple types" states
 		return "[]byte", nil
-	case qNamePrimitive, notationPrimitive: // Datatypes §3.3.18, §3.3.19, as "# Coverage" states
+	case qNamePrimitive, notationPrimitive: // Datatypes §3.3.18, §3.3.19, as "# Simple types" states
 		return e.datatypeType(qNameStruct), nil
 	case dateTimeStruct.datatype: // Datatypes §3.3.7
 		return e.datatypeType(dateTimeStruct), nil
@@ -1089,13 +1091,13 @@ func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.Simpl
 		return e.datatypeType(gMonthStruct), nil
 	case durationStruct.datatype: // Datatypes §3.3.6
 		return e.datatypeType(durationStruct), nil
-	case precisionDecimalPrimitive: // precisionDecimal §3.1 sec-vs-pD, as "# Coverage" states
+	case precisionDecimalPrimitive: // precisionDecimal §3.1 sec-vs-pD, as "# Simple types" states
 		return e.precisionDecimalType(), nil
 	}
 	return "", decline(loc, constructUncoveredPrimitive, typed, primitive.Name())
 }
 
-// unionType returns the sealed interface "# Coverage" gives the union simple
+// unionType returns the sealed interface "# Simple types" gives the union simple
 // type t (Datatypes §2.4.1.3), emitting it and its variants when no earlier
 // declaration did: the interface's name is claimed first (unionName), then
 // each variant's, the interface's name plus variantWord's, in basicMembers' order,
@@ -1270,10 +1272,10 @@ func (e *emitter) datatypeType(ds datatypeStruct) string {
 }
 
 // precisionDecimalType returns the name of the struct PrecisionDecimal, which
-// "# Coverage" gives xs:precisionDecimal (precisionDecimal §3.1 sec-vs-pD).
-// When no earlier declaration needed them, it claims the six names in e.types,
-// in precisionDecimalNames' order, by the package doc's "Naming", appends
-// their declarations to e.tailDecls in that order.
+// "# Simple types" gives xs:precisionDecimal (precisionDecimal §3.1
+// sec-vs-pD). When no earlier declaration needed them, it claims the six names
+// in e.types, in precisionDecimalNames' order, by the package doc's "Naming",
+// appends their declarations to e.tailDecls in that order.
 func (e *emitter) precisionDecimalType() string {
 	if e.precisionDecimal.wrapper != "" {
 		return e.precisionDecimal.wrapper
@@ -1358,13 +1360,13 @@ func (e *emitter) mixedChildType() string {
 }
 
 // nillable reports whether a field over the element declaration decl holds
-// the sum "# Coverage" gives a nillable element: decl has {nillable} true
-// (§3.3.1 ed-nillable) and no {value constraint} of {variety} fixed, which
-// makes every nilled instance invalid (§3.3.4.3 cvc-elt clause 3.2.3.2), so
-// that such a decl emits as one with {nillable} false. It is the one test
-// every site that wraps a type in Nillable, or passes a field over decl as no
-// struct value, reads: topLevel, field, substitutionType, tableType and
-// valueCycle, and refType through field's value.
+// the sum "# Element declarations" gives a nillable element: decl has
+// {nillable} true (§3.3.1 ed-nillable) and no {value constraint} of {variety}
+// fixed, which makes every nilled instance invalid (§3.3.4.3 cvc-elt clause
+// 3.2.3.2), so that such a decl emits as one with {nillable} false. It is the
+// one test every site that wraps a type in Nillable, or passes a field over
+// decl as no struct value, reads: topLevel, field, substitutionType,
+// tableType and valueCycle, and refType through field's value.
 func nillable(decl xsd.ElementDeclaration) bool {
 	if !decl.Nillable() {
 		return false
@@ -1442,8 +1444,8 @@ func (e *emitter) attributesType(of string) string {
 	return n.name
 }
 
-// builtinType is the Go type "# Coverage" maps t to through the eight bounded
-// builtin integer types (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24),
+// builtinType is the Go type "# Simple types" maps t to through the eight
+// bounded builtin integer types (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24),
 // xs:integer (§3.4.13), and the three builtins derived from a date, time or
 // duration primitive that get a datatype struct of their own (§3.4.26–§3.4.28),
 // walking t's {base type definition} chain (Structures §3.16.1) from t itself
@@ -1496,9 +1498,9 @@ func typeName(t xsd.TypeDefinition) string {
 	return t.Name().String()
 }
 
-// shape checks the complex type t against the package doc's "# Coverage"
+// shape checks the complex type t against the package doc's "# Complex types"
 // shape, naming it in declines by o's subject, and returns the type it emits
-// as name, sealed exactly when "# Coverage" gives the choice t's content
+// as name, sealed exactly when "# Complex types" gives the choice t's content
 // particle holds as t itself — it reads t's mixedness (isMixed), then its
 // attribute fields (hasAttributeFields) and its {open content}
 // (hasOpenContent) from the finalized component, so inherited ones count, and
@@ -1538,9 +1540,10 @@ func hasAttributeFields(t xsd.ComplexType) bool {
 }
 
 // hasOpenContent reports whether the complex type t has an {open content},
-// read from its finalized {content type} as the package doc's "# Coverage"
-// states: exactly when the struct body emits for t holds the open-content
-// field, and so when shape never answers a sealed interface for t.
+// read from its finalized {content type} as the package doc's
+// "# Open content" states: exactly when the struct body emits for t holds
+// the open-content field, and so when shape never answers a sealed
+// interface for t.
 func hasOpenContent(t xsd.ComplexType) bool {
 	content, isElement := t.ContentType().(xsd.ElementContent)
 	return isElement && content.OpenContent != nil
@@ -1757,11 +1760,11 @@ func (e *emitter) occurrence(typ emittedType, nested scope, site groupSite, o or
 
 // flattens reports whether groupField gives the model group particle c a
 // flattened field (flattened), by the three gates the package doc's
-// "# Coverage" states: c's group is a choice one of whose alternatives' term
-// is an emptiable model group (termEmptiable, which answers false for an
-// element declaration or a wildcard), whatever c's occurrence; or c's {max
-// occurs} is above 1 or unbounded and either its group is a sequence one
-// occurrence of which is emptiable, or its group has a repeating edge
+// "# Particles" states: c's group is a choice one of whose alternatives'
+// term is an emptiable model group (termEmptiable, which answers false for
+// an element declaration or a wildcard), whatever c's occurrence; or c's
+// {max occurs} is above 1 or unbounded and either its group is a sequence
+// one occurrence of which is emptiable, or its group has a repeating edge
 // (repeatingEdge). subject and loc name the complex type holding c in the
 // error termEmptiable or repeatingEdge returns.
 func (e *emitter) flattens(subject string, loc xsderr.Loc, c groupParticle) (bool, error) {
@@ -1794,7 +1797,7 @@ func (e *emitter) flattens(subject string, loc xsderr.Loc, c groupParticle) (boo
 // flattened emits typ, the sealed interface occurrenceType names for a model
 // group particle at site whose term holds particles and which flattens answers
 // true for, of the complex type t generated from o, in the package doc's
-// "# Coverage" shape: the interface, then one branch struct per particle reach
+// "# Particles" shape: the interface, then one branch struct per particle reach
 // returns for particles, in that order, each followed by the types its field
 // reaches, the anonymous ones named in nested as if the flattened group were
 // absent; for none, the interface alone, which no branch implements. reach
@@ -1937,7 +1940,7 @@ func (e *emitter) particleFields(nested scope, site groupSite, chain []valueNode
 // once, so every one is spliced. A complex-content extension's
 // content particle (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.3) is one such
 // sequence, nesting its base's when the base is itself an extension, so the
-// splice recurses; the package doc's "# Coverage" states the fields that
+// splice recurses; the package doc's "# Particles" states the fields that
 // gives. Every other particle is kept as is, and field gives a choice and a
 // sequence splices does not splice, inline or referenced alike, the field
 // groupField returns. subject and loc name the complex type holding
@@ -1975,7 +1978,7 @@ func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Partic
 // group's own particles give (spliced, contentFields): group is a sequence or an
 // all group, and occurs is exactly once, or {min occurs} 0 and {max occurs} 1
 // when one occurrence of group can match nothing (termEmptiable, §3.9.6.3
-// cos-group-emptiable), as the package doc's "# Coverage" states. subject and
+// cos-group-emptiable), as the package doc's "# Particles" states. subject and
 // loc name the complex type holding the particle in the error termEmptiable
 // returns.
 func (e *emitter) splices(subject string, loc xsderr.Loc, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error) {
@@ -2049,9 +2052,9 @@ func renderStruct(name string, fields []goField) string {
 // sealedType emits the sealed interface name for the complex type t generated
 // from o, a choice of particles at site (groupSite) (§3.8.4.1.2 sec-choices:
 // one alternative per pass), the term of t's content particle or of a model
-// group particle nested in it, in the package doc's "# Coverage" shape: the
-// interface, then each branch struct in particle order, followed by the types
-// its alternative reaches, the anonymous ones named in nested; for no
+// group particle nested in it, in the package doc's "# Complex types" shape:
+// the interface, then each branch struct in particle order, followed by the
+// types its alternative reaches, the anonymous ones named in nested; for no
 // particles, the interface alone, which no branch implements. A branch
 // struct's fields are particleFields' for its one alternative particle, read
 // through branchParticle, at site.branch(k), k its 1-based position in
@@ -2134,15 +2137,15 @@ func (e *emitter) termEmptiable(subject string, loc xsderr.Loc, term xsd.TermOrR
 
 // repeatingEdge reports whether group, the term of a model group particle with
 // {max occurs} above 1 or unbounded, holds a particle that repeats (repeats)
-// at both its edges, as the package doc's "# Coverage" states (othersEmptiable
-// reads a sequence's edges). It reads model group terms through
-// modelGroupTerm, never enters an element's type, and stops at the first
-// repeating edge particle; the <group ref> graph is acyclic after finalize, so
-// the walk ends. No all group is reached: cos-all-limited (§3.8.6.2 clauses
-// 1.2 and 1.3) admits a particle whose term is one only as a content particle
-// with {max occurs} 1 or as an all group's member, neither of which is group's
-// particle or inside it. subject and loc name the complex type holding group
-// in the error modelGroupTerm returns.
+// at both its edges, as the package doc's "# Particles" states
+// (othersEmptiable reads a sequence's edges). It reads model group terms
+// through modelGroupTerm, never enters an element's type, and stops at the
+// first repeating edge particle; the <group ref> graph is acyclic after
+// finalize, so the walk ends. No all group is reached: cos-all-limited
+// (§3.8.6.2 clauses 1.2 and 1.3) admits a particle whose term is one only as a
+// content particle with {max occurs} 1 or as an all group's member, neither of
+// which is group's particle or inside it. subject and loc name the complex
+// type holding group in the error modelGroupTerm returns.
 func (e *emitter) repeatingEdge(subject string, loc xsderr.Loc, group xsd.ModelGroup) (bool, error) {
 	particles := group.Particles()
 	for i, p := range particles {
@@ -2182,7 +2185,7 @@ func (e *emitter) othersEmptiable(particles []xsd.Particle, i int) bool {
 }
 
 // repeats reports whether a particle of occurs repeats, as the package doc's
-// "# Coverage" defines the word.
+// "# Particles" defines the word.
 func repeats(occurs xsd.Occurs) bool {
 	upper, bounded := occurs.Max()
 	return !bounded || upper > 1 && upper != occurs.Min()
@@ -2250,7 +2253,7 @@ type groupParticle struct {
 }
 
 // contentGroup checks the complex type t, named in declines by subject, against
-// the package doc's "# Coverage" complex-type shape. It reads t's finalized
+// the package doc's "# Complex types" complex-type shape. It reads t's finalized
 // component alone, never its base, so a base that itself declines does not
 // block t, and an extension is checked as a restriction is: its {content type}
 // already holds what it takes from its base (§3.4.2.3.3 dcl.ctd.ctcc.common
@@ -2297,13 +2300,13 @@ type fieldSpec struct {
 
 // field returns the field of particle p in a struct whose nested types are
 // named in nested and whose particles chain is valueChain's for, of the complex
-// type t generated from o, typed by the package doc's "# Coverage" field rules.
-// In a t of mixed content (isMixed), an element particle's field holds
-// MixedChild (mixedChildType, claimed before the field's type is computed) over
-// the type the rules below give, and a wildcard particle's AnyChild in place of
-// AnyElement; a model group particle's field is not wrapped. The field of a
-// wildcard particle (wildcardTerm) is named from the local name any and holds
-// the raw-content struct AnyElement (anyTypeType) by p's occurrence
+// type t generated from o, typed by the package doc's "# Complex types" and
+// "# Particles" field rules. In a t of mixed content (isMixed), an element
+// particle's field holds MixedChild (mixedChildType, claimed before the field's
+// type is computed) over the type the rules below give, and a wildcard particle's
+// AnyChild in place of AnyElement; a model group particle's field is not wrapped.
+// The field of a wildcard particle (wildcardTerm) is named from the local name
+// any and holds the raw-content struct AnyElement (anyTypeType) by p's occurrence
 // (occursGoType), whatever the wildcard's {namespace constraint} and {process
 // contents}, which it never reads; that path never calls shape, contentGroup,
 // nestedType or valueChain, and gives a choice's wildcard alternative its
@@ -2419,9 +2422,9 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 }
 
 // occursGoType is the Go type of a field holding typ under occurs, by the
-// package doc's "# Coverage" pointer and slice rules: a slice for {max occurs}
-// above 1 or unbounded, a pointer for {min occurs} 0 with {max occurs} 1
-// unless typ is a sealed interface, a choice's or a union's, and typ itself
+// package doc's "# Particles" pointer and slice rules: a slice for {max
+// occurs} above 1 or unbounded, a pointer for {min occurs} 0 with {max occurs}
+// 1 unless typ is a sealed interface, a choice's or a union's, and typ itself
 // otherwise. ok is false, and goType "", exactly when {max occurs} is 0; the
 // caller declines that particle naming its own term.
 func occursGoType(typ emittedType, occurs xsd.Occurs) (goType string, ok bool) {
@@ -2515,13 +2518,13 @@ func (e *emitter) substitutionSum(decl xsd.ElementDeclaration) (members []xsd.El
 
 // substitutionType returns the sealed interface a field over an <element ref>
 // particle to the head declaration head holds, members being substitutionSum's
-// for head, emitting it once per package in the package doc's "# Coverage"
-// shape: the interface, named from head's local name plus SubstitutionGroup,
-// then one branch struct per declaration of members in order, none when
-// members is empty, named from the interface's name plus the declaration's
-// local name and holding one field, named from that local name, of the type
-// elementType returns for it. Each declaration's type is resolved by
-// declaredType and claimed by elementType at its branch, after the branch's
+// for head, emitting it once per package in the package doc's
+// "# Substitution groups" shape: the interface, named from head's local name
+// plus SubstitutionGroup, then one branch struct per declaration of members in
+// order, none when members is empty, named from the interface's name plus the
+// declaration's local name and holding one field, named from that local name,
+// of the type elementType returns for it. Each declaration's type is resolved
+// by declaredType and claimed by elementType at its branch, after the branch's
 // name, so the shape of its type, or of each of its governing types,
 // declines the interface at the first such declaration in group order, with the
 // same DeclineError its own topLevel turn returns first; a decline in a
@@ -2593,21 +2596,21 @@ func (e *emitter) localTable(parent scope, decl xsd.ElementDeclaration, branches
 	return typ, nil
 }
 
-// tableType emits typ, the sealed interface "# Coverage" gives the element
-// declaration decl that governingTypes answers a sum for with branches, its
-// path ifc: the interface, generated from decl's {type table}, or from its
-// {type definition} when it has none, then one branch struct per branch in
-// branches' order, named from the interface's name plus the branch's local
-// name (tableBranch.local), generated from its slot (tableBranch.slot) and
-// holding one field, named from that local name, of the type branchType
-// returns, each followed by the types that field first needs. The branch's
-// name is claimed before its field's type is computed. The branch types carry
-// no method: a named one may be selected by several tables, or held by fields
-// of its own. For a nillable decl (nillable), each branch's field holds
-// Nillable over that type (nillableType), its names claimed after the
-// type's, but a branch of xs:anyType, whose AnyType holds xsi:nil among its
-// Attributes; the interface itself is not wrapped. With no branch, the
-// interface is emitted alone.
+// tableType emits typ, the sealed interface "# Element declarations" gives
+// the element declaration decl that governingTypes answers a sum for with
+// branches, its path ifc: the interface, generated from decl's {type table},
+// or from its {type definition} when it has none, then one branch struct per
+// branch in branches' order, named from the interface's name plus the
+// branch's local name (tableBranch.local), generated from its slot
+// (tableBranch.slot) and holding one field, named from that local name, of
+// the type branchType returns, each followed by the types that field first
+// needs. The branch's name is claimed before its field's type is computed.
+// The branch types carry no method: a named one may be selected by several
+// tables, or held by fields of its own. For a nillable decl (nillable), each
+// branch's field holds Nillable over that type (nillableType), its names
+// claimed after the type's, but a branch of xs:anyType, whose AnyType holds
+// xsi:nil among its Attributes; the interface itself is not wrapped. With no
+// branch, the interface is emitted alone.
 func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclaration, branches []tableBranch) error {
 	marker := "is" + typ.name
 	slots := "the {type table} of "
@@ -2685,8 +2688,8 @@ func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b table
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex
 // type at loc named in declines by subject, typed and declined by the package
-// doc's "# Coverage" attribute-use rule. An attribute use carries no Loc, so its
-// declines cite the declaration it resolves to, the global one for an
+// doc's "# Attributes" attribute-use rule. An attribute use carries no Loc, so
+// its declines cite the declaration it resolves to, the global one for an
 // <attribute ref>. An anonymous union type is named by attributePath, nested
 // being the scope of the struct holding the field. The field holds a pointer
 // to its type for a use with {required} false unless that type is a union's
@@ -2939,7 +2942,7 @@ func valueNodes(decl xsd.ElementDeclaration, t xsd.ComplexType) []valueNode {
 // type t, reached through the element declaration decl from particles whose
 // chain is chain, or declines a struct-value recursion. A chain is the nodes
 // (valueNodes) a walk has pushed through value fields only since its last
-// other field, in path order: a value field is one "# Coverage" types by the
+// other field, in path order: a value field is one "# Particles" types by the
 // bare struct, which needs a particle that occurs exactly once (value) and a
 // t emitted as a struct, not a sealed interface (shape). A value field appends
 // the step's nodes, and declines on one already in chain, since the emitted Go

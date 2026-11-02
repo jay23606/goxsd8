@@ -93,13 +93,13 @@ The open issues are **323 `ready`, 17 `blocked` and 2 `epic`**, which sums to 34
 
 - **Filed:**
   - #3287, cliuser finding 3 (HIGH, reproduced). A later pair whose `-out` lies in a nested module imports the earlier pair's package anyway, and `go build` fails. This holds both for one schema given twice and for two schemas that import one document.
-  - #3290 covers libuser findings 1, 3 and 6, and the README half of cliuser finding 7. It says where a header's `declared at` path comes from on each route, states the go.mod rule as a rule, and adds a shared-document example. Finding 1's arrival is real: README's CLI example writes `../../order.xsd:3:3` and its library block `order.xsd:3:3`, with nothing between them. Its claim that go doc does not state the base is false: `codegen/doc.go`:1034 states it.
+  - #3290 covers libuser findings 1, 3 and 6, and the README half of cliuser finding 7. It says where a header's `declared at` path comes from on each route, states the go.mod rule as a rule, and adds a shared-document example. Finding 1's arrival is real: README's CLI example writes `../../order.xsd:3:3` and its library block `order.xsd:3:3`, with nothing between them. Its claim that go doc does not state the base is false: `codegen/doc.go`:1047 states it.
   - #3288 covers libuser findings 4 and 5: `Generate`'s 30-line sharing paragraph, and the verbless sentence at `codegen/generate.go`:171–173.
   - #3289 covers cliuser finding 2's doc half and finding 7: `-help` defines "agree", states the cross-pair build coupling, and names one run per pair as the way not to share.
 - **Dismissed:**
   - Libuser finding 2. `go doc ./cmd/goxsd8` renders `-help`, whose gen paragraph states the import and alias (`cmd/goxsd8/doc.go`:273).
   - Cliuser finding 2's opt-out flag. Sharing is among one call's targets (`Generate`'s doc: "the earlier targets of the same call"), so one `gen` run per pair already shares nothing. #3289 says so.
-  - Cliuser finding 4. Wildcards are inside "Coverage" (`codegen/doc.go`:98, `AnyChild`), so exit 0 with `Any*` types is intended. Exit 4 is a decline only.
+  - Cliuser finding 4. Wildcards are inside "Coverage" (`codegen/doc.go`:100, `AnyChild`), so exit 0 with `Any*` types is intended. Exit 4 is a decline only.
   - Cliuser finding 6. `gen: open nope.xsd` names the argument as typed, which is what `-help`'s Paths paragraph promises for "the I/O fault opening an argument". Pair naming is the refusals' form.
 - **Passed:** cliuser finding 1 (the alias works). **Not tested:** cliuser finding 8.
 - **Consumed:** every finding is disposed of above. The last round's #3257, #3258 and #1406 stay filed and banded. The next round is due with #3291's landing, which gives `codec` its first exported identifiers. That is a surface change, and `go doc ./codec` now has something to read.

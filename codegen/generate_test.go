@@ -673,12 +673,13 @@ func TestGenerateVacuousSequence(t *testing.T) {
 
 // TestGenerateEmptyContent pins the forms whose {content type} has {variety}
 // empty (§3.4.1) beyond the golden's, each emitted as the package doc's
-// "# Coverage" states. Explicit content is empty for no model group child, an
-// all or sequence with no children, a choice with minOccurs 0 and no
-// children, or a model group with maxOccurs 0 (§3.4.2.3.3 dcl.ctd.ctcc.common
-// clause 2.1); {variety} is then empty when effective mixed is false (clause
-// 4.1.1), and a <defaultOpenContent> without appliesToEmpty is no wildcard
-// element for it (clause 5.2), so clause 6.1 keeps that empty content type.
+// "# Complex types" states. Explicit content is empty for no model group
+// child, an all or sequence with no children, a choice with minOccurs 0 and
+// no children, or a model group with maxOccurs 0 (§3.4.2.3.3
+// dcl.ctd.ctcc.common clause 2.1); {variety} is then empty when effective
+// mixed is false (clause 4.1.1), and a <defaultOpenContent> without
+// appliesToEmpty is no wildcard element for it (clause 5.2), so clause 6.1
+// keeps that empty content type.
 func TestGenerateEmptyContent(t *testing.T) {
 	tests := []struct{ name, body, want string }{
 		{"empty all", `<xs:element name="e"><xs:complexType><xs:all/></xs:complexType></xs:element>`,
@@ -845,7 +846,7 @@ func TestGenerateGroupRefs(t *testing.T) {
 
 // TestGenerateWildcardVariants pins that a wildcard particle of a sequence
 // gives the same field whatever its {namespace constraint} and {process
-// contents} (§3.10.1), neither of which "# Coverage" represents: each row's
+// contents} (§3.10.1), neither of which "# Particles" represents: each row's
 // output is byte-identical to that of a lax ##any wildcard in the same schema
 // element, whose attributes the row's schema field holds.
 func TestGenerateWildcardVariants(t *testing.T) {
