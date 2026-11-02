@@ -675,15 +675,15 @@
 //     an atomic Go type, a slice, or a union's sealed interface, as an
 //     element's does; {required} true gives that type, false a pointer to it
 //     (*[]T for a list), but the bare interface for a union, nil meaning
-//     absent.
+//     absent from the post-schema-validation infoset, which supplies an
+//     attribute whose use has an effective value constraint (below).
 //   - The use's effective value constraint (§3.5.4 key-evc), default or fixed,
 //     whether the use or a global declaration it references carries it, is
-//     accepted and not represented. The field holds the attribute as the
-//     element's [attributes] carry it, so a nil field still means absent from
-//     the instance, although for an optional use whose declaration is not a
-//     built-in xsi: one the post-schema-validation infoset supplies the
-//     constraint's value when the attribute is absent (§3.4.5.1 key-dflt-att).
-//     Supplying that value and enforcing a fixed one are the validator's.
+//     accepted and changes neither the field's Go type nor its name. The field
+//     holds the attribute of the post-schema-validation infoset, so for an
+//     optional use whose declaration is not a built-in xsi: one, an absent
+//     attribute's field holds the constraint's value (§3.4.4.2 key-dflt-att,
+//     §3.4.5.1 sic-attrDefault). Enforcing a fixed value is the validator's.
 //   - An {attribute wildcard} of a type emitted as a struct, its own, one an
 //     extension inherits, or one an attribute group reference or the schema's
 //     defaultAttributes brings (§3.4.2.5 dcl.ctd.anyatt), gives one field after
@@ -789,8 +789,10 @@
 //     identity constraint restricts the values an instance holds and adds no
 //     content or attribute (§3.11.1). So the element emits exactly as it would
 //     without either, but for the fixed {value constraint} of a declaration
-//     with {nillable} true, stated above, and supplying a default and
-//     enforcing a fixed value or an identity constraint are the validator's.
+//     with {nillable} true, stated above, and a field over it holds the
+//     post-schema-validation infoset's value, the constraint's for an empty
+//     element that is not nilled (cvc-elt clause 5.1); enforcing a fixed value
+//     or an identity constraint is the validator's.
 //
 // # Determinism
 //

@@ -65,8 +65,6 @@ type construct uint8
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
-	constructElementDefault
-	constructElementFixed
 	constructSimpleRoot
 	constructEmptyContent
 	constructSimpleContent
@@ -84,11 +82,8 @@ const (
 	constructList
 	constructUnion
 	constructSpecial
-	constructAnyURI
 	constructOtherPrimitive
 	constructXsiAttribute
-	constructAttributeDefault
-	constructAttributeFixed
 	constructAttributeWildcard
 	constructXsiType
 )
@@ -97,8 +92,6 @@ const (
 var constructNames = [...]string{
 	constructTypeTable:         "an element declaration with a {type table}",
 	constructNillable:          "an element declaration with {nillable} true",
-	constructElementDefault:    "an element declaration with a default {value constraint}",
-	constructElementFixed:      "an element declaration with a fixed {value constraint}",
 	constructSimpleRoot:        "a document element of simple type",
 	constructEmptyContent:      "empty content",
 	constructSimpleContent:     "simple content",
@@ -116,11 +109,8 @@ var constructNames = [...]string{
 	constructList:              "a list simple type",
 	constructUnion:             "a union simple type",
 	constructSpecial:           "a special simple type",
-	constructAnyURI:            "an xs:anyURI simple type",
-	constructOtherPrimitive:    "an atomic simple type whose primitive is not xs:string",
+	constructOtherPrimitive:    "an atomic simple type whose primitive is neither xs:string nor xs:anyURI",
 	constructXsiAttribute:      "an attribute use in the xsi namespace",
-	constructAttributeDefault:  "an attribute use with a default value constraint",
-	constructAttributeFixed:    "an attribute use with a fixed value constraint",
 	constructAttributeWildcard: "an {attribute wildcard}",
 	constructXsiType:           "an element carrying xsi:type",
 }

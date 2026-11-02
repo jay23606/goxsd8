@@ -42,8 +42,9 @@ func TestDecodeDeclines(t *testing.T) {
 			<xs:element name="r" type="s:rt"><xs:alternative test="@k" type="s:rt"/></xs:element>`, "", a, constructTypeTable, 1, 1},
 		{"nillable", `<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
 			"", a, constructNillable, 1, 1},
-		{"element default", sequenceOf(`<xs:element name="a" type="xs:string" default="d"/>`), "", a, constructElementDefault, 1, 1},
-		{"element fixed", sequenceOf(`<xs:element name="a" type="xs:string" fixed="x"/>`), "", a, constructElementFixed, 1, 1},
+		{"nillable local element with a fixed value", sequenceOf(`<xs:element name="a" type="xs:string" nillable="true" fixed="x"/>`), "", `<s:a>x</s:a>`, constructNillable, 1, 1},
+		{"document element of mixed content with a default", `<xs:element name="r" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`,
+			"", "", constructMixedContent, 1, 1},
 		{"simple root", `<xs:element name="r" type="xs:string"/>`, "", "x", constructSimpleRoot, 1, 1},
 		{"empty content", root(``), "", "", constructEmptyContent, 1, 1},
 		{"simple content", root(`<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`), "", "x", constructSimpleContent, 1, 1},
@@ -64,18 +65,15 @@ func TestDecodeDeclines(t *testing.T) {
 		{"local element of complex type", `<xs:complexType name="ct"><xs:sequence/></xs:complexType>` + sequenceOf(`<xs:element name="a" type="s:ct"/>`),
 			"", `<s:a/>`, constructComplexElement, 1, 1},
 		{"local element of xs:anyType", sequenceOf(`<xs:element name="a"/>`), "", a, constructComplexElement, 1, 1},
+		{"local element of emptiable mixed content with a default", sequenceOf(`<xs:element name="a" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`),
+			"", `<s:a/>`, constructComplexElement, 1, 1},
 		{"particles sharing an expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/>`),
 			"", a + `<s:b>y</s:b>` + a, constructSharedName, 1, 1},
 		{"list", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list itemType="xs:string"/></xs:simpleType></xs:element>`), "", a, constructList, 1, 1},
 		{"union", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:element>`), "", a, constructUnion, 1, 1},
 		{"xs:anySimpleType", sequenceOf(`<xs:element name="a" type="xs:anySimpleType"/>`), "", a, constructSpecial, 1, 1},
 		{"xs:anyAtomicType", sequenceOf(`<xs:element name="a" type="xs:anyAtomicType"/>`), "", a, constructSpecial, 1, 1},
-		{"xs:anyURI", sequenceOf(`<xs:element name="a" type="xs:anyURI"/>`), "", a, constructAnyURI, 1, 1},
 		{"other primitive", sequenceOf(`<xs:element name="a" type="xs:int"/>`), "", `<s:a>1</s:a>`, constructOtherPrimitive, 1, 1},
-		{"attribute default", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b" type="xs:string" default="d"/>`),
-			"", a, constructAttributeDefault, 1, 1},
-		{"attribute fixed", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b" type="xs:string" fixed="f"/>`),
-			"", a, constructAttributeFixed, 1, 1},
 		{"attribute use's type", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b" type="xs:boolean"/>`),
 			` b="true"`, a, constructOtherPrimitive, 1, 1},
 		{"attribute use in the xsi namespace", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>` +
@@ -260,5 +258,17 @@ func assertDecline(t *testing.T, err error, c construct, line, col int) {
 	}
 	if want := de.Loc().String() + ": codec does not decode " + c.name() + ": "; !strings.HasPrefix(err.Error(), want) {
 		t.Errorf("error %q does not open with %q", err, want)
+	}
+}
+
+// TestDeclineErrorTextOtherPrimitive pins the message of a decline of a
+// local element whose type's primitive is neither xs:string nor xs:anyURI,
+// the two primitives simpleDecline admits.
+func TestDeclineErrorTextOtherPrimitive(t *testing.T) {
+	schema := schemaOf(t, sequenceOf(`<xs:element name="a" type="xs:int"/>`))
+	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", `<s:a>1</s:a>`))
+	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is neither xs:string nor xs:anyURI: element {urn:s}a declared at s.xsd:1:231; a decoder refusal, not a schema or instance fault"
+	if err == nil || err.Error() != want {
+		t.Errorf("error = %v, want %q", err, want)
 	}
 }
