@@ -40,19 +40,25 @@ package xsd
 //     st-props-correct clause 2 as a no-op for that reason) and the chain ends
 //     at xs:anySimpleType, whose base is nil.
 
-// SubstitutionGroup returns the ·substitution group· of the top-level element
-// declaration named head (§3.3.6.4): every declaration in {element declarations}
-// that is ·substitutable· for it by Substitution Group OK (Transitive)
-// (§3.3.6.3), clauses 1 through 2.3 decided in full. head itself is always a
-// member (clause 1), so the result holds no other declaration when none
+// SubstitutionGroup returns every top-level element declaration that is
+// substitutable for head, head included — an {abstract} member among them,
+// though cvc-elt clause 2 keeps an abstract declaration itself out of an
+// instance. That is the ·substitution group· of the top-level element
+// declaration named head (§3.3.6.4 key-eq): every declaration in {element
+// declarations} that is ·substitutable· for it by Substitution Group OK
+// (Transitive) (§3.3.6.3 cos-equiv-derived-ok-rec), clauses 1 through 2.3
+// decided in full; {abstract} plays no part. head itself is always a member
+// (clause 1), so the result is a group of one, len 1, when no declaration
 // affiliates with head, when head's {disallowed substitutions} contains
 // substitution (clause 2.1), or when the ·derivation· of each affiliate's {type
-// definition} is blocked (clause 2.3). {abstract} plays no part. The
-// declarations are in the order Elements returns them; the slice is fresh and
-// the declarations are shared with s and immutable. It is nil exactly when s
-// declares no top-level element named head: a local declaration heads no
-// substitution group. It is exported for package codegen, which types a field
-// over an <element ref> to head as a sum over this group.
+// definition} is blocked (clause 2.3). The declarations are in the order
+// Elements returns them, so head sits at its own place in that order, not
+// first, and members from any namespace of the schema set s holds are
+// included, not only head's. The slice is fresh and the declarations are
+// shared with s and immutable. It is nil exactly when s declares no top-level
+// element named head: a local declaration heads no substitution group. It is
+// exported for package codegen, which types a field over an <element ref> to
+// head as a sum over this group.
 func (s *Schema) SubstitutionGroup(head QName) []ElementDeclaration {
 	// The scan is over the document-order slice, never elementIndex (STYLE D2);
 	// each candidate's membership is the one exact predicate below (STYLE T4).

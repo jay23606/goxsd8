@@ -234,20 +234,18 @@ func (s *Schema) resolveTermGroup(t TermOrRef) (ModelGroup, bool) {
 	}
 }
 
-// ParticleEmptiable reports whether the particle p is ·emptiable· (Particle
-// Emptiable, §3.9.6.3 cos-group-emptiable): clause 1, p's {min occurs} is 0;
-// or clause 2, p's {term} is a model group, inline or the {model group} of the
-// definition a <group ref> names on s (§3.7.2), and the minimum of p's
-// effective total range (§3.8.6.5 cos-seq-range for a sequence or all,
-// §3.8.6.6 cos-choice-range for a choice, 0 for a group with no {particles})
-// is 0. For a <group ref> that does not resolve on s, clause 2's antecedent
-// fails, so the answer is whether p's {min occurs} is 0.
-//
-// Clause 2's "the effective total range of that group" is the range of the
-// PARTICLE whose {term} is that group — §3.8.6.5/6 define the pair for a
-// particle P, folding P.{min occurs} in as a factor — so clause 2 is read off
-// effectiveTotalRange(p) directly. A zero p.{min occurs} would already have
-// satisfied clause 1, so the two readings never disagree.
+// ParticleEmptiable reports whether p can match an empty sequence of elements:
+// whether p is ·emptiable· (Particle Emptiable, §3.9.6.3 cos-group-emptiable).
+// Clause 1: p's {min occurs} is 0. Clause 2: p's {term} is a model group,
+// inline or the {model group} of the definition a <group ref> names on s
+// (§3.7.2), and the minimum of p's effective total range (§3.8.6.5
+// cos-seq-range for a sequence or all, §3.8.6.6 cos-choice-range for a
+// choice, 0 for a group with no {particles}) is 0. s is needed because a
+// <group ref> term resolves on s; for one that does not resolve on s, clause
+// 2's antecedent fails, so the answer is whether p's {min occurs} is 0. It is
+// exported for package codegen, which reads it to decide whether a model
+// group term can match nothing and whether a sequence's other particles are
+// emptiable.
 func (s *Schema) ParticleEmptiable(p Particle) bool {
 	if p.Occurs().Min() == 0 {
 		return true // clause 1
@@ -255,5 +253,10 @@ func (s *Schema) ParticleEmptiable(p Particle) bool {
 	if _, ok := s.resolveTermGroup(p.Term()); !ok {
 		return false // clause 2's antecedent fails: the {term} is not a group
 	}
+	// Clause 2's "the effective total range of that group" is the range of the
+	// PARTICLE whose {term} is that group — §3.8.6.5/6 define the pair for a
+	// particle P, folding P.{min occurs} in as a factor — so clause 2 is read off
+	// effectiveTotalRange(p) directly. A zero p.{min occurs} would already have
+	// satisfied clause 1, so the two readings never disagree.
 	return s.effectiveTotalRange(p).isEmptiable() // clause 2
 }
