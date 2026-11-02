@@ -47,6 +47,10 @@ var (
 // has a character child and holds its own value; and an element absent from
 // the instance supplies nothing, its field nil or not appended to.
 //
+// Every instance Loc an error of Decode carries — a source fault's, a
+// violation's, an undecided check's and a decline's — names the document
+// [WithURI] gives; without it, or with an empty uri, the URI renders "?".
+//
 // The first of these that applies is returned:
 //
 //  1. A nil schema: validate.New's plain error. A nil backend panics, on
@@ -81,19 +85,20 @@ var (
 //     no top-level declaration declares, which validation accepts only
 //     through its xsi:type (§3.3.4.6 cvc-assess-elt), declines so in place of
 //     item 5.
-func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte) (*T, error) {
+func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error) {
+	cfg := newConfig(opts)
 	v, err := validate.New(schema, backend)
 	if err != nil {
 		return nil, err
 	}
-	res, err := xmlsrc.Validate(v, bytes.NewReader(data))
+	res, err := xmlsrc.Validate(v, bytes.NewReader(data), xmlsrc.WithURI(cfg.uri))
 	if err != nil {
 		return nil, err
 	}
 	if err := verdict(res); err != nil {
 		return nil, err
 	}
-	r := xmltree.NewReader("", bytes.NewReader(data))
+	r := xmltree.NewReader(cfg.uri, bytes.NewReader(data))
 	root, err := documentElement(r)
 	if err != nil {
 		return nil, err

@@ -4,7 +4,9 @@
 //
 // # Decode (M10's first slice)
 //
-//	func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte) (*T, error)
+//	func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error)
+//	type Option func(*config)
+//	func WithURI(uri string) Option
 //	type DeclineError struct{ ... }
 //	func (e *DeclineError) Loc() xsderr.Loc
 //	func (e *DeclineError) Error() string
@@ -57,10 +59,11 @@
 // A value constraint of an element or attribute use, default or fixed,
 // decodes; [Decode]'s doc states the value its field holds.
 //
-// Every error about the instance carries its instance Loc: a violation's,
-// an undecided check's, and a decline's, which also names its construct and,
-// for a construct of the schema, the declining component's schema Loc; and
-// [DeclineError.Construct] returns its construct.
+// Every error about the instance carries its instance Loc, under the URI
+// [WithURI] names: a violation's, an undecided check's, and a decline's,
+// which also names its construct and, for a construct of the schema, the
+// declining component's schema Loc; and [DeclineError.Construct] returns its
+// construct.
 //
 // # Planned decode paths, one semantics (M10 — not yet implemented)
 //
