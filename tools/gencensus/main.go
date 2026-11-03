@@ -14,22 +14,23 @@
 // that are invalid on purpose.
 //
 // A decline is counted by the codegen.Construct of the *codegen.DeclineError
-// that errors.As retrieves from Generate's error, and by nothing parsed from
-// its text; a construct's line prints its Construct's String. Any other
-// error Generate returns, one holding no decline, is counted on a line of
+// that errors.As retrieves from the first element of Generate's result that
+// holds one, and by nothing parsed from its text; a construct's line prints
+// its Construct's String. A result holding no decline is counted on a line of
 // its own, never under a construct; a failure that follows a document's
-// declines in Generate's error is not counted.
+// declines in Generate's result is not counted.
 //
 // Usage:
 //
 //	go tool gencensus [-paths] [dir]
 //
 // dir defaults to the suite at [suiteroot.Default]. -paths adds each construct's
-// documents, and each document whose Generate error is not a decline with
-// that error. An absent or document-free tree is a supported mode, not a
-// failure: the submodule is absent in a fresh container (#659), so the tool
-// says so, names the command that initializes it, and exits 0. It exits 0 for
-// a completed census whatever it finds, and 2 for an operational error.
+// documents, and each document whose Generate result holds no decline with
+// that result's failures, one per line as errors.Join prints them. An absent or
+// document-free tree is a supported mode, not a failure: the submodule is absent
+// in a fresh container (#659), so the tool says so, names the command that
+// initializes it, and exits 0. It exits 0 for a completed census whatever it
+// finds, and 2 for an operational error.
 package main
 
 import (
@@ -112,10 +113,10 @@ type tally struct {
 	docs      []string
 }
 
-// failure is a document whose Generate error is not a decline.
+// failure is a document whose Generate result holds no decline.
 type failure struct {
-	doc string
-	err error
+	doc  string
+	errs []*codegen.TargetError
 }
 
 // report is what the census found. The assembled and declined counts are not
@@ -157,14 +158,19 @@ func census(root string, docs []string, out string) report {
 		if err != nil {
 			continue
 		}
-		err = codegen.Generate([]codegen.Target{{Schema: schema, Dir: out, Package: "census", Name: doc}})
-		if err == nil {
+		errs := codegen.Generate([]codegen.Target{{Schema: schema, Dir: out, Package: "census", Name: doc}})
+		if errs == nil {
 			rep.generated++
 			continue
 		}
 		var de *codegen.DeclineError
-		if !errors.As(err, &de) {
-			rep.other = append(rep.other, failure{doc: doc, err: err})
+		for _, e := range errs {
+			if errors.As(e, &de) {
+				break
+			}
+		}
+		if de == nil {
+			rep.other = append(rep.other, failure{doc: doc, errs: errs})
 			continue
 		}
 		i, seen := index[de.Construct()]
@@ -234,7 +240,7 @@ func walkSchemas(root string) (docs []string, present bool, err error) {
 
 // caveats are the limits on reading any figure the census prints.
 var caveats = []string{
-	"One decline per document: the census counts the first decline in Generate's error, so a document counts once, under its first decline.",
+	"One decline per document: the census counts the first decline in Generate's result, so a document counts once, under its first decline.",
 	"Documents, not cases: every .xsd is taken as a root, once, however many test cases name it and whether or not any case uses it as one.",
 	"The suite's schemas exercise the spec; they do not resemble an adopter's, so a count ranks a construct within this corpus only.",
 	"No count is a yield: lifting a construct exposes each of its documents' next decline, so its count bounds from above the documents lifting it alone makes generate.",
@@ -242,7 +248,7 @@ var caveats = []string{
 
 // printReport renders the census: the counts, the declined constructs largest
 // first, the caveats, and with withPaths each construct's documents and each
-// document whose Generate error is not a decline. A bufio.Writer keeps its
+// document whose Generate result holds no decline. A bufio.Writer keeps its
 // first write error and Flush returns it, so checking Flush checks every
 // write.
 func printReport(dst io.Writer, rep report, withPaths bool) error {
@@ -271,8 +277,8 @@ func printReport(dst io.Writer, rep report, withPaths bool) error {
 }
 
 // printPaths renders the -paths sections: each construct's documents, in
-// order's order, then each document whose Generate error is not a decline,
-// with that error.
+// order's order, then each document whose Generate result holds no decline,
+// with its failures as the package doc's -paths states.
 func printPaths(w *bufio.Writer, rep report, order []tally) {
 	_, _ = fmt.Fprintln(w, "\n=== Documents, by construct ===")
 	for _, t := range order {
@@ -283,6 +289,10 @@ func printPaths(w *bufio.Writer, rep report, order []tally) {
 	}
 	_, _ = fmt.Fprintf(w, "\n=== Generate errors other than a decline: %d ===\n", len(rep.other))
 	for _, f := range rep.other {
-		_, _ = fmt.Fprintf(w, "  %s — %v\n", f.doc, f.err)
+		texts := make([]string, len(f.errs))
+		for i, e := range f.errs {
+			texts[i] = e.Error()
+		}
+		_, _ = fmt.Fprintf(w, "  %s — %s\n", f.doc, strings.Join(texts, "\n"))
 	}
 }

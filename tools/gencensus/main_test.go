@@ -124,6 +124,23 @@ struct-value recursion (2):
 	}
 }
 
+// TestCensusPathsListsOtherFailures pins -paths' line for a document whose
+// Generate result holds no decline: the document, then the failure's text.
+// The output directory lies under no go.mod, so Generate refuses the target.
+func TestCensusPathsListsOtherFailures(t *testing.T) {
+	root := writeTree(t, map[string]string{"a.xsd": schemaDoc(generates)})
+	out := t.TempDir()
+	var report bytes.Buffer
+	if err := printReport(&report, census(root, []string{"a.xsd"}, out), true); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	want := "\n=== Generate errors other than a decline: 1 ===\n" +
+		"  a.xsd — a.xsd: no go.mod lies in the output directory " + out + " or any directory above it, so it has no import path\n"
+	if !strings.HasSuffix(report.String(), want) {
+		t.Errorf("report closes\n%s\nwant\n%s", report.String(), want)
+	}
+}
+
 // TestCensusAbsentRootIsAMode holds an absent tree, and one with no .xsd
 // document, to the supported mode: a report saying so, and no error.
 func TestCensusAbsentRootIsAMode(t *testing.T) {

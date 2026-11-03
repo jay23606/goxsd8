@@ -266,23 +266,27 @@ func TestGenerateDeclines(t *testing.T) {
 	}
 }
 
-// assertFirstDecline pins that Generate, given schema, returns an error
-// wrapping errors.ErrUnsupported, not an *xsderr.Error, whose first
-// *DeclineError has Construct kind and a text holding detail, a Loc on line 2
-// of s.xsd and the limitation's wording, and writes nothing.
+// assertFirstDecline pins that Generate, given schema, returns failures none
+// of which is an *xsderr.Error or holds a misused format verb, the first
+// wrapping errors.ErrUnsupported and holding a *DeclineError that has
+// Construct kind and a text holding detail, a Loc on line 2 of s.xsd and the
+// limitation's wording, and writes nothing.
 func assertFirstDecline(t *testing.T, schema *xsd.Schema, kind construct, detail string) {
 	t.Helper()
 	out := filepath.Join(moduleTempDir(t), "out")
-	err := Generate([]Target{{Schema: schema, Dir: out, Package: "p"}})
-	if err == nil {
-		t.Fatal("Generate succeeded, want a decline")
-	}
+	errs := Generate([]Target{{Schema: schema, Dir: out, Package: "p"}})
+	err := firstFailure(t, errs)
 	if !errors.Is(err, errors.ErrUnsupported) {
 		t.Errorf("error %v does not wrap errors.ErrUnsupported", err)
 	}
-	var xe *xsderr.Error
-	if errors.As(err, &xe) {
-		t.Errorf("error %v is an *xsderr.Error, want a plain error", err)
+	for _, e := range errs {
+		var xe *xsderr.Error
+		if errors.As(e, &xe) {
+			t.Errorf("error %v is an *xsderr.Error, want a plain error", e)
+		}
+		if strings.Contains(e.Error(), "%!") {
+			t.Errorf("error %q holds a misused format verb", e)
+		}
 	}
 	var de *DeclineError
 	if !errors.As(err, &de) {
@@ -298,9 +302,6 @@ func assertFirstDecline(t *testing.T, schema *xsd.Schema, kind construct, detail
 		if !strings.Contains(de.Error(), want) {
 			t.Errorf("first decline %q does not contain %q", de, want)
 		}
-	}
-	if strings.Contains(err.Error(), "%!") {
-		t.Errorf("error %q holds a misused format verb", err)
 	}
 	if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("Dir %s exists after a decline (stat: %v)", out, err)
@@ -430,7 +431,7 @@ func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			errs := elements(t, Generate([]Target{{Schema: primitiveSchema(t, tt.body), Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p"}}))
+			errs := Generate([]Target{{Schema: primitiveSchema(t, tt.body), Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p"}})
 			got := make([]string, len(errs))
 			for i, err := range errs {
 				got[i] = err.Error()
@@ -466,7 +467,7 @@ func TestGenerateDeclinesSubstitutionMemberOnce(t *testing.T) {
 		{"head with {abstract} false", `<xs:element name="h" type="xs:anyType"/>`, decline("2:156")},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			errs := elements(t, Generate([]Target{{Schema: primitiveSchema(t, holder+tt.head+member), Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p"}}))
+			errs := Generate([]Target{{Schema: primitiveSchema(t, holder+tt.head+member), Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p"}})
 			got := make([]string, len(errs))
 			for i, err := range errs {
 				got[i] = err.Error()
@@ -541,7 +542,7 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			schema := vacuousSchema(t, ctName, tt.term, tt.inner, tt.outer)
 			out := filepath.Join(moduleTempDir(t), "out")
-			err := Generate([]Target{{Schema: schema, Dir: out, Package: "p"}})
+			err := firstFailure(t, Generate([]Target{{Schema: schema, Dir: out, Package: "p"}}))
 			if !errors.Is(err, errors.ErrUnsupported) {
 				t.Fatalf("Generate = %v, want a decline wrapping errors.ErrUnsupported", err)
 			}
@@ -647,7 +648,7 @@ func TestGenerateDeclinesAbstractLocal(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			out := filepath.Join(moduleTempDir(t), "out")
-			errs := elements(t, Generate([]Target{{Schema: tt.schema, Dir: out, Package: "p"}}))
+			errs := Generate([]Target{{Schema: tt.schema, Dir: out, Package: "p"}})
 			got := make([]string, len(errs))
 			for i, err := range errs {
 				got[i] = err.Error()
@@ -951,7 +952,7 @@ func TestGenerateDeclinesUncoveredPrimitive(t *testing.T) {
 				t.Fatalf("Finalize: %v", err)
 			}
 			out := filepath.Join(moduleTempDir(t), "out")
-			err = Generate([]Target{{Schema: schema, Dir: out, Package: "p"}})
+			err = firstFailure(t, Generate([]Target{{Schema: schema, Dir: out, Package: "p"}}))
 			if !errors.Is(err, errors.ErrUnsupported) {
 				t.Fatalf("Generate = %v, want a decline wrapping errors.ErrUnsupported", err)
 			}
@@ -970,7 +971,7 @@ func TestGenerateDeclinesUncoveredPrimitive(t *testing.T) {
 }
 
 // TestDeclineErrorAs pins that errors.As retrieves the *DeclineError from the
-// error Generate returns for a named and an unnamed target, with its Construct
+// failure Generate returns for a named and an unnamed target, with its Construct
 // and Loc as values, and that the target's name opens the error outside the
 // *DeclineError's own text.
 func TestDeclineErrorAs(t *testing.T) {
@@ -983,7 +984,7 @@ func TestDeclineErrorAs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Generate([]Target{{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p", Name: tt.targetName}})
+			err := firstFailure(t, Generate([]Target{{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p", Name: tt.targetName}}))
 			var de *DeclineError
 			if !errors.As(err, &de) {
 				t.Fatalf("Generate = %v, want an error errors.As retrieves a *DeclineError from", err)
@@ -1097,7 +1098,7 @@ func plainText(texts []comment.Text) string {
 func parsedDecline(t *testing.T, body string) *DeclineError {
 	t.Helper()
 	schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+body+"\n</xs:schema>\n")
-	err := Generate([]Target{{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p"}})
+	err := firstFailure(t, Generate([]Target{{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p"}}))
 	var de *DeclineError
 	if !errors.As(err, &de) {
 		t.Fatalf("Generate = %v, want an error errors.As retrieves a *DeclineError from", err)
@@ -1113,7 +1114,7 @@ func parsedDecline(t *testing.T, body string) *DeclineError {
 func TestConstructMapKey(t *testing.T) {
 	construct := func(schema *xsd.Schema) Construct {
 		t.Helper()
-		err := Generate([]Target{{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p"}})
+		err := firstFailure(t, Generate([]Target{{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p"}}))
 		var de *DeclineError
 		if !errors.As(err, &de) {
 			t.Fatalf("Generate = %v, want an error errors.As retrieves a *DeclineError from", err)

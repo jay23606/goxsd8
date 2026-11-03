@@ -5,8 +5,8 @@
 // # Entry point
 //
 //	type Target struct { Schema *xsd.Schema; Dir, Package, Name string }
-//	func Generate(targets []Target) error
-//	func CheckTargets(targets []Target) []error
+//	func Generate(targets []Target) []*TargetError
+//	func CheckTargets(targets []Target) []*TargetError
 //
 // Each target carries one finalized [xsd.Schema] — what parser.Parse
 // assembles from a root location and its composition closure; the
@@ -18,7 +18,7 @@
 //
 //	s, err := parser.Parse("testdata/example.xsd")
 //	// ...
-//	err = codegen.Generate([]codegen.Target{{Schema: s, Dir: "gen/order", Package: "order"}})
+//	errs := codegen.Generate([]codegen.Target{{Schema: s, Dir: "gen/order", Package: "order"}})
 //
 // ExampleGenerate, in codegen/example_test.go, runs those calls, into a
 // temporary directory, and prints the whole file Generate writes for that

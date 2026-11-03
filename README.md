@@ -357,10 +357,10 @@ Continuing the program, add
 
 ```go
 // Writes package order into gen/order.
-if err := codegen.Generate([]codegen.Target{{Schema: schema, Dir: "gen/order", Package: "order"}}); err != nil {
-	// Every non-nil error is an errors.Join: print each of its elements, a
+if errs := codegen.Generate([]codegen.Target{{Schema: schema, Dir: "gen/order", Package: "order"}}); errs != nil {
+	// Generate returns one *codegen.TargetError per failure: print each, a
 	// decline by its Loc and Construct, any other failure as it reads.
-	for _, e := range err.(interface{ Unwrap() []error }).Unwrap() {
+	for _, e := range errs {
 		var de *codegen.DeclineError
 		if errors.As(e, &de) {
 			fmt.Printf("%s: codegen declined %s\n", de.Loc(), de.Construct())
@@ -372,9 +372,7 @@ if err := codegen.Generate([]codegen.Target{{Schema: schema, Dir: "gen/order", P
 }
 ```
 
-`errors.As` on the joined `err` itself retrieves only the first decline's
-`*codegen.DeclineError`; each decline is retrieved from its own element, as
-`Generate`'s doc states. For the program's `order.xsd`, `Generate` writes this
+For the program's `order.xsd`, `Generate` writes this
 `gen/order/xsd_gen.go`:
 
 ```go

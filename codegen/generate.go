@@ -84,7 +84,7 @@ func (e *TargetError) Unwrap() error { return e.err }
 
 // failed is err as Generate and CheckTargets return it for the target at slice
 // index i, and the one construction site of a TargetError.
-func (t Target) failed(i int, err error) error {
+func (t Target) failed(i int, err error) *TargetError {
 	return &TargetError{index: i, name: t.Name, err: err}
 }
 
@@ -172,35 +172,34 @@ func (t Target) failed(i int, err error) error {
 // type checked there, in the same way, for an element or type reaching itself,
 // ahead of every decline the depth-first walk meets after the ref.
 //
-// Every non-nil error Generate returns is an errors.Join of one error per
-// failure, in that order, a phase-2 fault alone; each opens with the failing
-// target's name: its Name, or "target N" for the target at slice index N when
-// Name is empty. An unnamed target's error opens "codegen: target N: ", a
-// named one's "<Name>: " with no "codegen: " before it. The refusal of a Dir
-// equal to an earlier target's Dir, and that of a Dir whose import path equals
-// an earlier target's, open with the failing target's name like every other
-// error, and their text names that earlier target too: by its Name, or "target
-// N" for its slice index N when Name is empty, with no "codegen: " before it.
-// Each element is a *TargetError, which errors.As retrieves: its
-// Index method returns N, and it unwraps to the failure the opening precedes.
+// Generate returns nil when it writes every target, and otherwise one
+// *TargetError per failure, in that order, a phase-2 fault alone; each opens
+// with the failing target's name: its Name, or "target N" for the target at
+// slice index N when Name is empty. An unnamed target's error opens "codegen:
+// target N: ", a named one's "<Name>: " with no "codegen: " before it. The
+// refusal of a Dir equal to an earlier target's Dir, and that of a Dir whose
+// import path equals an earlier target's, open with the failing target's name
+// like every other error, and their text names that earlier target too: by its
+// Name, or "target N" for its slice index N when Name is empty, with no
+// "codegen: " before it. A *TargetError's Index method returns N, and it
+// unwraps to the failure the opening precedes.
 //
 // A decline is a generator limitation, not a schema fault: it is a
 // *DeclineError, never an *xsderr.Error, and it wraps errors.ErrUnsupported,
-// so errors.Is(err, errors.ErrUnsupported) reports every error that holds a
-// decline, and errors.As retrieves the first one's *DeclineError; each decline
-// is retrieved from its own element. Its Construct method returns the
-// construct declined, and its Loc method the Loc that method's doc states. Its
-// text names both; the opening with the target's name, stated
-// above, precedes that text and is no part of it. The package doc's "Coverage"
-// section states what the generator accepts.
+// so errors.Is(e, errors.ErrUnsupported) reports an element e that holds a
+// decline, and errors.As(e, &de) retrieves that element's *DeclineError. Its
+// Construct method returns the construct declined, and its Loc method the Loc
+// that method's doc states. Its text names both; the opening with the target's
+// name, stated above, precedes that text and is no part of it. The package
+// doc's "Coverage" section states what the generator accepts.
 //
 // Phase 2 creates Dir and its parents when absent. An existing xsd_gen.go is
 // overwritten only when its first line matches `^// Code generated .* DO NOT
 // EDIT\.$`; otherwise phase 1 fails. Generate never deletes a file and never
 // touches another file in Dir. An I/O failure during phase 2 is the only
 // failure that can leave some targets written and others not.
-func Generate(targets []Target) error {
-	var errs []error
+func Generate(targets []Target) []*TargetError {
+	var errs []*TargetError
 	units := make([]*unit, len(targets))
 	for i, t := range targets {
 		u, declines, err := prepare(t, targets[:i])
@@ -208,25 +207,25 @@ func Generate(targets []Target) error {
 			errs = append(errs, t.failed(i, d))
 		}
 		if err != nil {
-			return errors.Join(append(errs, t.failed(i, err))...)
+			return append(errs, t.failed(i, err))
 		}
 		units[i] = u
 	}
 	if len(errs) > 0 {
-		return errors.Join(errs...)
+		return errs
 	}
 	for i, t := range targets {
 		if err := link(units, i); err != nil {
-			return errors.Join(t.failed(i, err))
+			return []*TargetError{t.failed(i, err)}
 		}
 	}
 	for i, t := range targets {
 		if err := os.MkdirAll(t.Dir, 0o755); err != nil {
-			return errors.Join(t.failed(i, fmt.Errorf("creating %s: %w", t.Dir, err)))
+			return []*TargetError{t.failed(i, fmt.Errorf("creating %s: %w", t.Dir, err))}
 		}
 		path := filepath.Join(t.Dir, fileName)
 		if err := os.WriteFile(path, units[i].src, 0o644); err != nil {
-			return errors.Join(t.failed(i, fmt.Errorf("writing %s: %w", path, err)))
+			return []*TargetError{t.failed(i, fmt.Errorf("writing %s: %w", path, err))}
 		}
 	}
 	return nil
@@ -253,10 +252,10 @@ func prepare(t Target, earlier []Target) (u *unit, declines []*DeclineError, err
 }
 
 // CheckTargets reports, without reading any Schema and without writing, the
-// targets Generate refuses whatever their Schemas hold: for each refused
-// target, in slice order, the first of its refusals below, opened with the
-// target's name and each a *TargetError, as Generate's errors are. It returns nil
-// when no target is refused. A target is refused, in this order, when its Dir or
+// targets Generate refuses whatever their Schemas hold. It returns nil when no
+// target is refused, and otherwise one *TargetError per refused target, in
+// slice order, the first of its refusals below, opened with the target's name
+// as Generate's are. A target is refused, in this order, when its Dir or
 // Package breaks its field's rule; when its Dir equals an earlier target's
 // non-empty Dir after filepath.Clean, the earlier target refused or not; when
 // filepath.Abs cannot make its Dir absolute; and when its Dir exists and is not a
@@ -268,8 +267,8 @@ func prepare(t Target, earlier []Target) (u *unit, declines []*DeclineError, err
 // target, the earlier target refused or not. Generate states how the
 // duplicate-Dir and duplicate-import-path refusals name the earlier target,
 // and the overwrite rule.
-func CheckTargets(targets []Target) []error {
-	var errs []error
+func CheckTargets(targets []Target) []*TargetError {
+	var errs []*TargetError
 	for i, t := range targets {
 		if _, _, _, err := checkTarget(t, targets[:i]); err != nil {
 			errs = append(errs, t.failed(i, err))

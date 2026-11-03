@@ -33,8 +33,8 @@ func ExampleGenerate() {
 	}
 	dir := filepath.Join(root, "gen", "order")
 
-	if err := codegen.Generate([]codegen.Target{{Schema: s, Dir: dir, Package: "order"}}); err != nil {
-		log.Fatal(err)
+	if errs := codegen.Generate([]codegen.Target{{Schema: s, Dir: dir, Package: "order"}}); errs != nil {
+		log.Fatal(errs)
 	}
 
 	src, err := os.ReadFile(filepath.Join(dir, "xsd_gen.go"))

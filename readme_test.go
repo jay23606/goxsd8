@@ -160,10 +160,10 @@ func TestReadmeSharedDocument(t *testing.T) {
 // program's variable of that name.
 func readmeCodegen(schema *xsd.Schema) {
 	// Writes package order into gen/order.
-	if err := codegen.Generate([]codegen.Target{{Schema: schema, Dir: "gen/order", Package: "order"}}); err != nil {
-		// Every non-nil error is an errors.Join: print each of its elements, a
+	if errs := codegen.Generate([]codegen.Target{{Schema: schema, Dir: "gen/order", Package: "order"}}); errs != nil {
+		// Generate returns one *codegen.TargetError per failure: print each, a
 		// decline by its Loc and Construct, any other failure as it reads.
-		for _, e := range err.(interface{ Unwrap() []error }).Unwrap() {
+		for _, e := range errs {
 			var de *codegen.DeclineError
 			if errors.As(e, &de) {
 				fmt.Printf("%s: codegen declined %s\n", de.Loc(), de.Construct())
