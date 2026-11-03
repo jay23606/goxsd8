@@ -99,6 +99,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	flags.Var(&schemas, "schema", "a schema document of the set; repeat it for each")
 	format := flags.String("format", "", "force the instance source format: xml, json or ber")
 	noHints := flags.Bool("no-hints", false, "ignore the xsi:schemaLocation hints of XML instances")
+	strictSkips := flags.Bool(strictFlag, false, strictFlagUsage)
 	verbose := flags.Bool("v", false, "log assembly and assessment at debug level to stderr")
 	// -q is defined because the contract makes it common to every subcommand,
 	// and is read by nothing: validate writes no informational output, its
@@ -187,15 +188,16 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	// Reported once for the same reason, and before any instance is assessed so
 	// that the shortfall stands above the report it explains. Every entry names
 	// a directive inside the set's own documents: the -schema arguments are
-	// roots, which the report never lists among its directives.
-	reportUnfollowed(stderr, "validate", assemblyCompiled, report)
+	// roots, which the report never lists among its directives. Under -strict
+	// the set's skip is charged to the run once, beside the outcome of every
+	// instance, each of which is still assessed.
+	code := skipCode(*strictSkips, reportUnfollowed(stderr, "validate", assemblyCompiled, report))
 	v, err := validate.New(base, backend, validate.WithLogger(log))
 	if err != nil {
 		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 
-	job := validation{roots: roots, base: v, backend: backend, forced: forced, hints: !*noHints, log: log}
-	code := exitOK
+	job := validation{roots: roots, base: v, backend: backend, forced: forced, hints: !*noHints, strict: *strictSkips, log: log}
 	for _, instance := range instances {
 		code = worse(code, job.one(instance, stdout, stderr))
 	}
@@ -222,6 +224,9 @@ type validation struct {
 	// the set, which -no-hints turns off. A JSON instance carries none
 	// (assessJSON).
 	hints bool
+	// strict is -strict, under which an instance's hint resolving to no
+	// document charges that instance skipCode's code.
+	strict bool
 	// log is the debug logger -v installed, nil when it was not given.
 	log *slog.Logger
 }
@@ -263,9 +268,9 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 // [xml-wf] line on either channel the fault reaches.
 func (vn *validation) assessXML(instance string, src io.Reader, stdout, stderr io.Writer) int {
 	read := &watchedReader{r: src}
-	v, src, code := vn.validatorFor(instance, read, stderr)
-	if code != exitOK {
-		return code
+	v, src, floor := vn.validatorFor(instance, read, stderr)
+	if v == nil {
+		return floor
 	}
 
 	result, err := xmlsrc.Validate(v, src, xmlsrc.WithURI(instance))
@@ -286,10 +291,10 @@ func (vn *validation) assessXML(instance string, src io.Reader, stdout, stderr i
 		// verdict about the instance in the same rendering a violation gets,
 		// so it lands on stdout with them and counts as invalid — nothing in
 		// the document was shown valid.
-		return reportLines(stdout, stderr, instance, []string{violationLine(err) + hint}, exitInvalid)
+		return worse(floor, reportLines(stdout, stderr, instance, []string{violationLine(err) + hint}, exitInvalid))
 	}
 	lines, code := assessmentLines(result, hint)
-	return reportLines(stdout, stderr, instance, lines, code)
+	return worse(floor, reportLines(stdout, stderr, instance, lines, code))
 }
 
 // assessJSON assesses the JSON instance in src through jsonsrc.Validate,
@@ -396,9 +401,10 @@ func (w *watchedReader) Read(p []byte) (int, error) {
 // (#2721).
 const jsonsrcToken = "jsonsrc"
 
-// validatorFor returns the validator instance is assessed against and the
-// reader to assess it from, or a non-exitOK code that is the instance's whole
-// outcome.
+// validatorFor returns the validator instance is assessed against, the reader
+// to assess it from, and skipCode's code over its hint lines, which the caller
+// raises the assessment's own code from through worse. A nil validator comes
+// back with a code that is the instance's whole outcome instead.
 //
 // The reader coming back is not always the one going in: reading an instance's
 // hints consumes its prefix, so what the assessment reads is the replay
@@ -429,7 +435,7 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 		// reportUnfollowed's terms: it is a fact about the assembly rather than a
 		// rider on what that assembly decided (#1312). It says nothing of the
 		// rejection, and the line below says nothing of it.
-		reportUnfollowedHints(stderr, instance, assemblyRejected, report)
+		skipped := reportUnfollowedHints(stderr, instance, assemblyRejected, report)
 		// A set that stops compiling only once THIS instance's hints are folded
 		// in is a fault of the instance, not of the -schema set the invocation
 		// named: exitSchema would send a script to a schema set that compiles.
@@ -441,23 +447,23 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 		// against a hint is charged at the hinted document itself (parser.HintAt),
 		// so the line keeps its location: that is the file the reader must edit.
 		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: ignoring its schema location hints, which do not compose with the -schema set: %s\n", instance, violationLine(err))
-		return vn.base, replay, exitOK
+		return vn.base, replay, skipCode(vn.strict, skipped)
 	}
 	// Before the assessment reads a byte, so that the shortfall stands above the
 	// report it explains, exactly as runValidate places the -schema set's.
-	reportUnfollowedHints(stderr, instance, assemblyCompiled, report)
+	skipped := reportUnfollowedHints(stderr, instance, assemblyCompiled, report)
 	v, err := validate.New(augmented, vn.backend, validate.WithLogger(vn.log))
 	if err != nil {
 		return nil, nil, subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
-	return v, replay, exitOK
+	return v, replay, skipCode(vn.strict, skipped)
 }
 
 // reportUnfollowedHints names on stderr, one line per hint, every schema
 // location hint of instance whose location resolved to no document — §4.3.2
 // clause 3's "failure may cause less than complete ·assessment· outcomes",
 // which src-import makes legal to skip and which nothing else in this run
-// reports (#1251).
+// reports (#1251), and reports whether it named any.
 //
 // It reads parser.AssemblyReport.UnfollowedRoots, which holds exactly the
 // HintAt roots that named no document, each by the location it was built with —
@@ -466,12 +472,14 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 // is an Unfollowed entry instead, which runValidate already named off the
 // -schema set's own assembly (#1260): so no shortfall is named twice, and none
 // under a hint that resolved (#1346).
-func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, report *parser.AssemblyReport) {
-	for _, r := range report.UnfollowedRoots() {
+func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, report *parser.AssemblyReport) bool {
+	roots := report.UnfollowedRoots()
+	for _, r := range roots {
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
 		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: the schema location hint %s resolved to no document%s\n", instance, r.Location(), shortfallClause(compiled))
 	}
+	return len(roots) > 0
 }
 
 // assessmentLines renders one assessment's report, in document order — every

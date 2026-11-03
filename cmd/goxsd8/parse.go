@@ -34,6 +34,7 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(io.Discard)
 	quiet := flags.Bool("q", false, "suppress the summary")
 	verbose := flags.Bool("v", false, "log the parser's assembly at debug level to stderr")
+	strict := flags.Bool(strictFlag, false, strictFlagUsage)
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return subcommandUsageError(stderr, "parse", fmt.Sprintf(helpNotAFlagValueFmt, "parse"))
@@ -65,28 +66,26 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 
 	code := exitOK
 	for _, location := range locations {
-		code = worse(code, parseOne(location, *quiet, log, stdout, stderr))
+		code = worse(code, parseOne(location, *quiet, *strict, log, stdout, stderr))
 	}
 	return code
 }
 
 // parseOne compiles one schema argument and reports its exit code. It never
 // stops the run: every argument is compiled and reported, so one broken schema
-// does not hide the next argument's verdict.
-func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.Writer) int {
-	schema, code := compileArgument("parse", location, log, stderr)
-	if schema == nil {
+// does not hide the next argument's verdict. A schema that compiled prints its
+// summary whatever code compileArgument charged it, which is skipCode's.
+func parseOne(location string, quiet, strict bool, log *slog.Logger, stdout, stderr io.Writer) int {
+	schema, code := compileArgument("parse", location, strict, log, stderr)
+	if schema == nil || quiet {
 		return code
-	}
-	if quiet {
-		return exitOK
 	}
 	if _, err := io.WriteString(stdout, summarize(location, schema)); err != nil {
 		// The summary the user asked for never arrived; that is an IO fault,
 		// not a verdict about the schema.
 		return subcommandFault(stderr, fmt.Sprintf("goxsd8: parse: writing the summary for %s: %v", location, err))
 	}
-	return exitOK
+	return code
 }
 
 // compileArgument compiles one schema argument as its own root document, the
@@ -95,8 +94,11 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 // rejection, whose first error it prints on stderr. verb is the subcommand the
 // diagnoses are charged to. Every directive the assembly reached whose
 // schemaLocation resolved to no document is named on stderr either way, ahead
-// of the error on the rejected path.
-func compileArgument(verb, location string, log *slog.Logger, stderr io.Writer) (*xsd.Schema, int) {
+// of the error on the rejected path. A schema that compiled comes back with
+// skipCode's answer over those lines: exitOK, or exitUndecided where strict is
+// set and a line was named. On the rejected path strict changes nothing,
+// exitInvalid outranking exitUndecided.
+func compileArgument(verb, location string, strict bool, log *slog.Logger, stderr io.Writer) (*xsd.Schema, int) {
 	root, err := rootLocation(location)
 	if err != nil {
 		return nil, subcommandFault(stderr, fmt.Sprintf("goxsd8: %s: %v", verb, err))
@@ -135,8 +137,7 @@ func compileArgument(verb, location string, log *slog.Logger, stderr io.Writer) 
 	// summary is parse's informational output, and a directive the assembly
 	// behind it could not follow is a diagnosis, which doc.go forbids -q to
 	// silence.
-	reportUnfollowed(stderr, verb, assemblyCompiled, report)
-	return schema, exitOK
+	return schema, skipCode(strict, reportUnfollowed(stderr, verb, assemblyCompiled, report))
 }
 
 // rootLocation opens location to prove it is a readable file and returns its
@@ -196,9 +197,9 @@ const (
 
 // reportUnfollowed names on stderr, one line per directive at its own
 // position, every ·inter-schema-document reference· the assembly reached whose
-// schemaLocation resolved to no document. verb is the subcommand the diagnosis
-// is charged to, and compiled says whether that assembly went on to yield a
-// schema.
+// schemaLocation resolved to no document, and reports whether it named any.
+// verb is the subcommand the diagnosis is charged to, and compiled says whether
+// that assembly went on to yield a schema.
 //
 // BOTH outcomes are reported (#1312). The shortfall is a fact about the
 // assembly, which parser.AssemblyReport carries "as far as assembly got even
@@ -208,14 +209,15 @@ const (
 // stopping, which is all the report holds — one that failed on its root
 // document holds none and prints nothing.
 //
-// The line carries no rule ID and moves no exit code, because this is not a
-// violation: src-include clause 2.4 (§4.2.3) and src-import (§4.2.6.2) both
-// make an unresolved schemaLocation legal to skip, and src-override (§4.2.5)
-// clause 1 is vacuously satisfied by the same failure, so rendering it through
-// violationLine's "<loc>: [<rule>] <message>" would publish a non-error as a
-// spec charge (STYLE E2). What it buys is that a summary, or an assessment,
-// answered off a SHORT assembly is distinguishable from one answered off a
-// complete one — the fact nothing but -v carried before (#1260).
+// The line carries no rule ID, and moves no exit code unless -strict was given
+// (skipCode), because this is not a violation: src-include clause 2.4 (§4.2.3)
+// and src-import (§4.2.6.2) both make an unresolved schemaLocation legal to
+// skip, and src-override (§4.2.5) clause 1 is vacuously satisfied by the same
+// failure, so rendering it through violationLine's "<loc>: [<rule>] <message>"
+// would publish a non-error as a spec charge (STYLE E2). What it buys is that
+// a summary, or an assessment, answered off a SHORT assembly is
+// distinguishable from one answered off a complete one — the fact nothing but
+// -v carried before (#1260).
 //
 // Only parser.UnfollowedLocationUnresolved is named. A bare <import>
 // (parser.UnfollowedNoLocation) names no document to have failed to reach:
@@ -226,7 +228,8 @@ const (
 // document that resolved but could not be read (parser.UnfollowedUnreadable) —
 // do reach here now that the error path reports too, and stay unnamed: each
 // arrives with the error that charges it, which says more than this line could.
-func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *parser.AssemblyReport) {
+func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *parser.AssemblyReport) bool {
+	named := false
 	for _, u := range report.Unfollowed() {
 		if u.Reason != parser.UnfollowedLocationUnresolved {
 			continue
@@ -234,7 +237,36 @@ func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *pars
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
 		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: this schemaLocation resolved to no document%s\n", verb, u.At, shortfallClause(compiled))
+		named = true
 	}
+	return named
+}
+
+// The -strict flag parse, validate and gen each define, named once for the
+// three flag sets. The usage string is never printed: each flag set's output
+// is discarded, usage (main.go) being the contract.
+const (
+	strictFlag      = "strict"
+	strictFlagUsage = "exit 4 when a schemaLocation is named resolving to no document"
+)
+
+// skipCode is the one encoding of -strict's policy: the exit code a run is
+// charged for having named on stderr a schemaLocation that resolved to no
+// document — reportUnfollowed's line on parse, validate and gen, and
+// reportUnfollowedHints' on validate. named is what that reporter returned. It
+// is exitUndecided where strict is set and a line was named, and exitOK
+// otherwise.
+//
+// The charge is this CLI's policy and no spec verdict: src-include clause 2.4
+// and src-import (§4.2.6.2) make the skip legal, §4.2.6.2 admitting a stricter
+// profile, and src-override (§4.2.5) states nothing either way. exitUndecided
+// is the code because its meaning in usage's table, nothing proven wrong and
+// something not done, is the skip's: a document the schema named was not read.
+func skipCode(strict, named bool) int {
+	if strict && named {
+		return exitUndecided
+	}
+	return exitOK
 }
 
 // shortfallClause is what a line naming an unfollowed schemaLocation says about

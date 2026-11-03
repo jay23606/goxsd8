@@ -973,6 +973,61 @@ func TestValidateNamesAMissingHintedDocument(t *testing.T) {
 	}
 }
 
+// TestValidateStrictChargesASkip pins -strict on validate (#1845), for both
+// lines that name a schemaLocation resolving to no document. The -schema set's
+// directive line charges the run 4, beside every instance's own outcome, a 1
+// outranking it. An instance's hint line charges that instance 4, on both
+// assembly outcomes of its hints: composing, and rejected by a mis-paired
+// sibling hint, where the instance falls back to the -schema set alone. Every
+// row without a line is charged nothing, -no-hints reading no hint to name.
+func TestValidateStrictChargesASkip(t *testing.T) {
+	dir := t.TempDir()
+	valid, err := os.ReadFile(validInstance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// validInstance with hints on its document element, so that the -schema
+	// set alone decides it clean whatever its hints compose to.
+	instance := func(name, pairs string) string {
+		body := strings.Replace(string(valid), `createdBy="ada"`, `createdBy="ada" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="`+pairs+`"`, 1)
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	if err := os.WriteFile(filepath.Join(dir, "actual.xsd"), []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:actual"><xs:element name="note" type="xs:string"/></xs:schema>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	composing := instance("composing.xml", "urn:gone nosuch.xsd")
+	rejected := instance("rejected.xml", "urn:gone nosuch.xsd urn:wrong actual.xsd")
+
+	for _, c := range []struct {
+		name       string
+		args       []string
+		want       int
+		wantStderr string // a substring every row's stderr carries, "" for none
+	}{
+		{"set directive", []string{"-strict", "-schema", shortSchema, shortValidInstance}, exitUndecided, "this schemaLocation resolved to no document"},
+		{"set directive beside an invalid instance", []string{"-strict", "-schema", shortSchema, shortValidInstance, shortInvalidInstance}, exitInvalid, "this schemaLocation resolved to no document"},
+		{"set directive, default", []string{"-schema", shortSchema, shortValidInstance}, exitOK, "this schemaLocation resolved to no document"},
+		{"hint, composing", []string{"-strict", "-schema", orderSchema, composing}, exitUndecided, "resolved to no document, which is legal and skipped"},
+		{"hint, composing, beside a clean instance", []string{"-strict", "-schema", orderSchema, validInstance, composing}, exitUndecided, "the schema location hint"},
+		{"hint, rejected", []string{"-strict", "-schema", orderSchema, rejected}, exitUndecided, "ignoring its schema location hints"},
+		{"hint, rejected, default", []string{"-schema", orderSchema, rejected}, exitOK, "the schema location hint"},
+		{"hint, no-hints", []string{"-strict", "-no-hints", "-schema", orderSchema, composing}, exitOK, ""},
+		{"no skip", []string{"-strict", "-schema", orderSchema, validInstance}, exitOK, ""},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(append([]string{"validate"}, c.args...), &stdout, &stderr); code != c.want {
+			t.Errorf("%s: validate %q = %d, want %d (stdout %q, stderr %q)", c.name, c.args, code, c.want, stdout.String(), stderr.String())
+		}
+		if c.wantStderr == "" && stderr.Len() != 0 || !strings.Contains(stderr.String(), c.wantStderr) {
+			t.Errorf("%s: stderr = %q, want %q", c.name, stderr.String(), c.wantStderr)
+		}
+	}
+}
+
 // TestValidateSchemaDirectiveIsNotReportedAsAHint pins that the two shortfall
 // reporters stay disjoint on one invocation (#1346): a -schema document's OWN
 // unresolved directive is named exactly once, by runValidate's reportUnfollowed

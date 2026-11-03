@@ -37,6 +37,8 @@ Usage (contract; subcommands land with their milestones):
               assessment ran to its end, charging no violation and
               leaving no check undecided; that is not proven invalid,
               which is not proven valid. gen: every pair generated.
+              Under -strict, in each of the three, no schemaLocation
+              was named resolving to no document either.
   1     3     parse and gen: a schema rejected, an I/O fault reading a
               document it references included. validate: an instance
               invalid, not well-formed XML, its walk stopped by a fault,
@@ -66,7 +68,13 @@ Usage (contract; subcommands land with their milestones):
               gen: a construct the generator declines, a generator
               limitation and not a schema fault, so nothing is written.
               Nothing was proven wrong and something was not done: not
-              a pass either.
+              a pass either. And under -strict, in parse, validate and
+              gen alike: a schemaLocation named on stderr resolving to
+              no document, a directive's or an instance's hint's. That
+              4 is this CLI's policy, not a spec verdict: nothing was
+              proven wrong and a document was not read. It ranks as
+              any 4 does, so a rejection's 1 or a fault's 2 answers
+              over it, and validate's 3 answers alone.
 
   Precedence, by that rank: 2 over 1 over 4 over 0, with validate's 3
   answering alone, before any instance is opened.
@@ -91,7 +99,7 @@ Usage (contract; subcommands land with their milestones):
   lines repeat wherever the same command line runs, and a schema's
   lines carry the running host's own path.
 
-  goxsd8 parse [-q] [-v] <schema.xsd>...
+  goxsd8 parse [-q] [-v] [-strict] <schema.xsd>...
       Compile each schema argument and print its summary on stdout:
       the argument as it was spelled, then a block of lines indented
       two spaces and spelled "<label>: <value>". A namespace: line
@@ -127,10 +135,12 @@ Usage (contract; subcommands land with their milestones):
       like a rejection, though nothing about the schema was decided.
       An <xs:include>, <xs:import>, <xs:override> or empty
       <xs:redefine> whose schemaLocation resolves to no document is
-      named on stderr at its own position, with no rule ID and no
-      change of exit code: the skip is legal, so the summary above is
-      printed off a schema short of whatever that document declares.
-      -q does not silence it. Such a directive of a REJECTED schema
+      named on stderr at its own position, with no rule ID and,
+      without -strict, no change of exit code: the skip is legal, so
+      the summary above is printed off a schema short of whatever
+      that document declares. -q does not silence it. Under -strict
+      the summary is printed all the same and the argument is
+      charged 4. Such a directive of a REJECTED schema
       is named the same way, for the directives assembly reached
       before it stopped, in a line saying the assembly was rejected
       rather than compiled and saying nothing about whether the
@@ -139,7 +149,7 @@ Usage (contract; subcommands land with their milestones):
       the directive on stderr too, before printing the fault.
       A bare <xs:import>, which names no document, is not reported.
 
-  goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>...
+  goxsd8 validate [-q] [-v] [-strict] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>...
       For example: goxsd8 validate -schema order.xsd order.xml order.json
       Assess instances against the compiled set; every schema needs
       its own -schema, and every positional argument is an instance.
@@ -150,7 +160,11 @@ Usage (contract; subcommands land with their milestones):
       stderr the same way, once for the set, before any instance is
       assessed — and when the set does not compile, for whichever
       documents the assembly reached, so one document's rejection
-      does not silence another's shortfall.
+      does not silence another's shortfall. Under -strict that
+      line charges the run 4 and every instance is still assessed,
+      and an XML instance's xsi:schemaLocation hint (below) that
+      resolves to no document, named on stderr against that
+      instance, charges that instance 4 likewise.
       Source format by extension (.xml, .json, .ber) or forced with
       -format xml|json|ber, the extension and the token both matched
       case-sensitively (a.XML names no format, as -format XML names
@@ -249,8 +263,8 @@ Usage (contract; subcommands land with their milestones):
       reading a schema document, exit 2 covers only a -schema
       argument that cannot be read. The fault is not the legal skip
       of a schemaLocation resolving to no document, which moves no
-      exit code, though the faulting run names the directive on
-      stderr too, before printing the fault.
+      exit code without -strict, though the faulting run names the
+      directive on stderr too, before printing the fault.
       A declined check is one of these kinds:
         - assertions: an <xs:assert> {test}, or an assertions
           facet's, left unevaluated;
@@ -291,7 +305,7 @@ Usage (contract; subcommands land with their milestones):
       then the line of the fault that stopped its walk if one did,
       then its undecided checks.
 
-  goxsd8 gen [-q] [-v] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]...
+  goxsd8 gen [-q] [-v] [-strict] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]...
       For example: goxsd8 gen -schema order.xsd -out ./gen/order
       Generate Go types, one package per -schema/-out pair: the file
       xsd_gen.go in the -out directory, which is created with its
@@ -311,7 +325,9 @@ Usage (contract; subcommands land with their milestones):
       path relative to the -out directory, climbing with ../ out of
       it. A rejected -schema prints its first error on stderr as
       parse's does, the no-rule-to-cite lines and the
-      unresolved-directive lines included.
+      unresolved-directive lines included. Under -strict an
+      unresolved-directive line of a compiled -schema is a failure
+      to compile charged 4, so nothing is written.
       Pairs whose -out lies under the same nearest go.mod share a
       document whose generated types agree, the declarations each
       would emit for it being the same text: the earliest such
@@ -349,25 +365,28 @@ Usage (contract; subcommands land with their milestones):
       writes nothing on stdout.
 
 Flags common to all subcommands: -q (quiet), -v (debug logging via
-slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec). They
-qualify a subcommand and follow its name — goxsd8 parse -q a.xsd, not
-goxsd8 -q parse a.xsd. -q suppresses a subcommand's informational
-output, which is parse's summary, and never a diagnosis: neither the
-error lines above nor validate's violations and undecided checks are
-silenced by it.
+slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec),
+-strict (exit 4, by the exit-code table's 4 row, when the run names a
+schemaLocation resolving to no document; off, such a line moves no
+exit code). They qualify a subcommand and follow its name — goxsd8
+parse -q a.xsd, not goxsd8 -q parse a.xsd. -q suppresses a
+subcommand's informational output, which is parse's summary, and
+never a diagnosis: neither the error lines above nor validate's
+violations and undecided checks are silenced by it.
 
 Implemented today: the help path, parse, validate and gen. With no
 arguments, or with -h, -help or --help in any argument position, goxsd8
 prints this usage to stdout and exits 0, the whole of it even after a
 subcommand name, because a per-subcommand copy could drift from this one.
-goxsd8 parse compiles its arguments as above and honours -q and -v;
-goxsd8 validate assesses XML and JSON instances and goxsd8 gen generates
-as above, and both honour -v, -q silencing nothing there because neither
-writes informational output. GOXSD_DEBUG scopes -v for none of them.
-Every other invocation exits 2, reporting on stderr that the name is not
-one of the three, that a help flag is spelled with a value, as
--help=<value>, that a flag stands before the subcommand it qualifies, or
-that the first argument is a flag and no subcommand was given.
+goxsd8 parse compiles its arguments as above and honours -q, -v and
+-strict; goxsd8 validate assesses XML and JSON instances and goxsd8 gen
+generates as above, and both honour -v and -strict, -q silencing nothing
+there because neither writes informational output. GOXSD_DEBUG scopes
+-v for none of them. Every other invocation exits 2, reporting on
+stderr that the name is not one of the three, that a help flag is
+spelled with a value, as -help=<value>, that a flag stands before the
+subcommand it qualifies, or that the first argument is a flag and no
+subcommand was given.
 `
 
 // synopsisIndent is the indent of a subcommand's synopsis line in usage. The
@@ -405,7 +424,8 @@ func synopsis(name string) string {
 // The exit codes the CLI answers with: a clean run, a rejected document, an
 // argument list or a file this process could not work with at all, a schema set
 // that does not compile (validate alone), and an instance the assessment
-// declined to decide or a schema the generator declined (validate and gen).
+// declined to decide, a schema the generator declined (validate and gen) or,
+// under -strict, a schemaLocation named resolving to no document (skipCode).
 //
 // Which fault each code names is per subcommand and stated in doc.go: parse and
 // gen charge exitInvalid for the schema they were asked to compile, where

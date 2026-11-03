@@ -510,6 +510,38 @@ func TestParseQuietDoesNotSuppressAnUnresolvedDirective(t *testing.T) {
 	}
 }
 
+// TestParseStrictChargesASkip pins -strict on parse (#1845): an argument whose
+// directive is named resolving to no document is charged 4, its summary still
+// printed and -q still silencing only the summary; an argument with no such
+// line is charged nothing; and a rejection's 1 outranks the 4 of the argument
+// beside it.
+func TestParseStrictChargesASkip(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		args       []string
+		want       int
+		wantStdout string // a substring, or "" for an empty stdout
+		wantStderr string // a substring, or "" for an empty stderr
+	}{
+		{"include", []string{"-strict", "testdata/unresolved-include.xsd"}, exitUndecided, "  elements: 1\n", "this schemaLocation resolved to no document"},
+		{"empty redefine", []string{"-strict", "testdata/unresolved-empty-redefine.xsd"}, exitUndecided, "  elements: 1\n", "this schemaLocation resolved to no document"},
+		{"quiet", []string{"-strict", "-q", "testdata/unresolved-include.xsd"}, exitUndecided, "", "this schemaLocation resolved to no document"},
+		{"no skip", []string{"-strict", "testdata/order.xsd"}, exitOK, orderSummary, ""},
+		{"beside a rejection", []string{"-strict", shortSchema, shortBrokenSchema}, exitInvalid, "  elements: 1\n", brokenRule},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(append([]string{"parse"}, c.args...), &stdout, &stderr); code != c.want {
+			t.Errorf("%s: parse %q = %d, want %d (stderr %q)", c.name, c.args, code, c.want, stderr.String())
+		}
+		if c.wantStdout == "" && stdout.Len() != 0 || !strings.Contains(stdout.String(), c.wantStdout) {
+			t.Errorf("%s: stdout = %q, want %q", c.name, stdout.String(), c.wantStdout)
+		}
+		if c.wantStderr == "" && stderr.Len() != 0 || !strings.Contains(stderr.String(), c.wantStderr) {
+			t.Errorf("%s: stderr = %q, want %q", c.name, stderr.String(), c.wantStderr)
+		}
+	}
+}
+
 // TestParseSaysNothingOfABareImport pins the other side of the line #1260
 // draws: an <xs:import> with no schemaLocation names no document to have
 // failed to reach — §4.2.6.2 makes it the spelling for "references into this

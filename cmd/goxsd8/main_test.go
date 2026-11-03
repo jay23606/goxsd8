@@ -140,9 +140,9 @@ func TestRunDispatch(t *testing.T) {
 // when usage loses or changes the synopsis line: an expectation read through
 // synopsis would follow usage wherever it went (#3110).
 const (
-	parseUsageLine    = "usage: goxsd8 parse [-q] [-v] <schema.xsd>..."
-	validateUsageLine = "usage: goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>..."
-	genUsageLine      = "usage: goxsd8 gen [-q] [-v] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]..."
+	parseUsageLine    = "usage: goxsd8 parse [-q] [-v] [-strict] <schema.xsd>..."
+	validateUsageLine = "usage: goxsd8 validate [-q] [-v] [-strict] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>..."
+	genUsageLine      = "usage: goxsd8 gen [-q] [-v] [-strict] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]..."
 
 	// genShapeTail is what follows a gen diagnosis of the command line's
 	// shape on stderr, short of the final newline.

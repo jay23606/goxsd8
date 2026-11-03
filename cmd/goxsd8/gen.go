@@ -58,6 +58,7 @@ func runGen(args []string, stderr io.Writer) int {
 		})
 	}
 	verbose := flags.Bool("v", false, "log the parser's assembly at debug level to stderr")
+	strict := flags.Bool(strictFlag, false, strictFlagUsage)
 	// -q is defined because the contract makes it common to every subcommand,
 	// and is read by nothing: gen writes no informational output.
 	_ = flags.Bool("q", false, "accepted; gen has no informational output to suppress")
@@ -87,7 +88,8 @@ func runGen(args []string, stderr io.Writer) int {
 
 	// Every -out is checked before any -schema is compiled, and every pair is
 	// compiled and reported before Generate is called, as usage's gen block
-	// states.
+	// states. A pair -strict charges for a skip stops generation as a rejected
+	// one does: its code is not exitOK.
 	targets := make([]codegen.Target, len(pairs))
 	for i, p := range pairs {
 		targets[i] = codegen.Target{
@@ -101,7 +103,7 @@ func runGen(args []string, stderr io.Writer) int {
 		code = worse(code, subcommandFault(stderr, "goxsd8: gen: "+err.Error()))
 	}
 	for i, p := range pairs {
-		schema, c := compileArgument("gen", p.schema, log, stderr)
+		schema, c := compileArgument("gen", p.schema, *strict, log, stderr)
 		code = worse(code, c)
 		targets[i].Schema = schema
 	}

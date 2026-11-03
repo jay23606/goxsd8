@@ -297,6 +297,32 @@ func TestGenNamesAnUnresolvedDirective(t *testing.T) {
 	generatedFile(t, out)
 }
 
+// TestGenStrictChargesASkip pins -strict on gen (#1845): a -schema whose
+// directive is named resolving to no document fails to compile with exit 4 and
+// nothing is written for any pair, the clean one beside it included; a -schema
+// with no such line generates.
+func TestGenStrictChargesASkip(t *testing.T) {
+	mod := moduleTempDir(t)
+	short, flat := filepath.Join(mod, "short"), filepath.Join(mod, "flat")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"gen", "-strict", "-schema", flatFixture, "-out", flat, "-schema", shortSchema, "-out", short}, &stdout, &stderr)
+	if code != exitUndecided {
+		t.Fatalf("gen -strict = %d, want %d (stderr %q)", code, exitUndecided, stderr.String())
+	}
+	want := "goxsd8: gen: " + absFixture(t, shortSchema) + ":10:3: this schemaLocation resolved to no document"
+	if !strings.HasPrefix(stderr.String(), want) {
+		t.Errorf("gen -strict stderr = %q, want it to open %q", stderr.String(), want)
+	}
+	assertAbsent(t, filepath.Join(short, "xsd_gen.go"))
+	assertAbsent(t, filepath.Join(flat, "xsd_gen.go"))
+
+	stderr.Reset()
+	if code := run([]string{"gen", "-strict", "-schema", flatFixture, "-out", flat}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("gen -strict, no skip = %d, want %d (stderr %q)", code, exitOK, stderr.String())
+	}
+	generatedFile(t, flat)
+}
+
 // TestGenVerboseLogs pins -v: the parser's assembly is logged at debug level
 // on stderr, and the run still generates.
 func TestGenVerboseLogs(t *testing.T) {
