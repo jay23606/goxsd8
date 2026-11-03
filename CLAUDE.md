@@ -95,6 +95,7 @@ go tool suiteindex -paths <query> | go tool casejoin join <lane>   # that census
 go tool casejoin ids <fixture-path>   # every case ID naming that document, withheld ones included
 go tool lanepartition -log run.log <lane> < gapissues.json   # banked fails clustered, largest first, vs open issues
 go tool gencensus [-paths]            # M9's measure: suite documents codegen emits, first declines by construct
+go tool decodecensus                  # M10's measure: instance cases codec decodes, first declines by construct
 ```
 
 `wipsurvey` and `gapaudit` read their issue list from **stdin** in `gh issue

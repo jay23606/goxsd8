@@ -1,9 +1,9 @@
 // Package suiteroot names the W3C suite checkout the corpus-reading tools
 // default to, and renders the corpus-absent notice they print when it is not
 // there. It is the one home of both for `go tool gencensus`, `go tool
-// suiteindex`, `go tool casejoin` and `go tool lanepartition` (STYLE T4);
-// lanepartition takes only the root, and fails on an absent catalog instead
-// of printing the notice.
+// decodecensus`, `go tool suiteindex`, `go tool casejoin` and `go tool
+// lanepartition` (STYLE T4); lanepartition takes only the root, and fails on
+// an absent catalog instead of printing the notice.
 //
 // [PrintAbsent] returns its write's error, and every caller passes that error
 // up to its own exit: a notice that did not reach its reader is a failure,
