@@ -400,9 +400,9 @@ the generated type, here `order.Order`; `go doc
 github.com/kud360/goxsd8/codec Decode` states every error it returns. Once
 `Generate` has written `gen/order`, a program in the same module with
 `schema` and `backend` as above decodes `order.xml` into it, importing
-`github.com/kud360/goxsd8/codec`, `github.com/kud360/goxsd8/xsderr` and the
-generated package, whose import path is the one `Target.Dir`'s doc derives
-for the `Dir` that `Generate` was given:
+`github.com/kud360/goxsd8/codec` and the generated package, whose import
+path is the one `Target.Dir`'s doc derives for the `Dir` that `Generate` was
+given:
 
 ```go
 data, err := os.ReadFile("order.xml")
@@ -412,15 +412,9 @@ if err != nil {
 // order.Order is the generated type for order.xml's document element.
 o, err := codec.Decode[order.Order](schema, backend, data, codec.WithURI("order.xml"))
 if err != nil {
-	// Every violation of a rejected instance, as Decode's item 3 reaches
-	// them.
-	if joined, ok := errors.Unwrap(err).(interface{ Unwrap() []error }); ok {
-		for _, e := range joined.Unwrap() {
-			var v *xsderr.Error
-			if errors.As(e, &v) {
-				fmt.Println(v.Loc, v.Rule)
-			}
-		}
+	// Every violation of a rejected instance, as Decode's item 3 reaches them.
+	for _, v := range codec.ViolationsOf(err) {
+		fmt.Println(v.Loc, v.Rule)
 	}
 	log.Fatal(err)
 }

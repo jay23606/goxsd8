@@ -2,7 +2,6 @@ package codec
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -16,8 +15,6 @@ import (
 // the two declines from codec's own parser/xmltree read, so each row fails
 // when the URI is dropped at the read it names.
 func TestDecodeURI(t *testing.T) {
-	const assertion = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
-		<xs:assert test="(for $x in s:a return string-length($x)) = 1"/></xs:complexType></xs:element>`
 	const nillable = `<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
 	const xsiType = `<xs:complexType name="rt"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
 		<xs:element name="r" type="s:rt"/>`
@@ -34,15 +31,13 @@ func TestDecodeURI(t *testing.T) {
 		}
 		return de.Loc().String(), true
 	}
-	// viaUndecided reads the Loc item 4's message opens with, the only place
-	// that error carries it.
+	// viaUndecided reads the Loc of the *UndecidedError err wraps.
 	viaUndecided := func(err error) (string, bool) {
-		rest, ok := strings.CutPrefix(err.Error(), "codec: ")
-		if !ok {
+		var ue *UndecidedError
+		if !errors.As(err, &ue) {
 			return "", false
 		}
-		loc, _, ok := strings.Cut(rest, ": the validator left ")
-		return loc, ok
+		return ue.Unevaluated().Loc().String(), true
 	}
 	rows := []struct {
 		name  string
@@ -54,7 +49,7 @@ func TestDecodeURI(t *testing.T) {
 		{"violation, the validator's read", shapesSchema, instanceOf(` req="r"`, "<s:one>x</s:one>"), viaLocOf, "1:1"},
 		{"source fault in the walk, the validator's read", shapesSchema, []byte(`<s:r xmlns:s="urn:s" req="r"><s:one>x</s:one>`), viaLocOf, "1:1"},
 		{"source fault after the walk, the validator's read", shapesSchema, []byte(`<s:r xmlns:s="urn:s" req="r"><s:one>x</s:one><s:tok>t</s:tok></s:r><bad`), viaLocOf, "1:72"},
-		{"undecided, the validator's read", assertion, instanceOf("", "<s:a>x</s:a>"), viaUndecided, "1:1"},
+		{"undecided, the validator's read", undecidedSchema, instanceOf("", "<s:a>x</s:a>"), viaUndecided, "1:1"},
 		{"document element decline, codec's read", nillable, instanceOf("", "<s:a>x</s:a>"), viaDecline, "1:1"},
 		{"child xsi:type decline, codec's read", xsiType, instanceOf("", `<s:a xsi:type="xs:token"> x  y </s:a>`), viaDecline, "1:120"},
 	}

@@ -263,8 +263,7 @@ func TestDecodeAbstractRoot(t *testing.T) {
 // (cvc-assertion), and Decode returns an error naming that rule and the
 // instance Loc, wrapping errors.ErrUnsupported, which is no *DeclineError.
 func TestDecodeUndecided(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
-		<xs:assert test="(for $x in s:a return string-length($x)) = 1"/></xs:complexType></xs:element>`)
+	schema := schemaOf(t, undecidedSchema)
 	got, err := Decode[struct{ A string }](schema, strict.New(), instanceOf("", "<s:a>x</s:a>"))
 	if got != nil || err == nil {
 		t.Fatalf("Decode = (%v, %v), want no value and an error", got, err)

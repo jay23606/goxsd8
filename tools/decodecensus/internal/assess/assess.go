@@ -112,8 +112,8 @@ const (
 	// declined: an error errors.As retrieves a *codec.DeclineError from,
 	// Decode's doc items 5 and 7.
 	declined
-	// undecided: an error wrapping errors.ErrUnsupported that holds no
-	// *codec.DeclineError, Decode's doc item 4.
+	// undecided: an error errors.As retrieves a *codec.UndecidedError from,
+	// Decode's doc item 4.
 	undecided
 	// rejected: an error errors.Is reports as codec.ErrTypeMismatch, Decode's
 	// doc item 6, on the type codegen emitted for the document element's
@@ -138,8 +138,7 @@ type outcome struct {
 // classify returns the bucket of err, a Decoder's result, and for a decline
 // its construct. own reports whether the Decoder's T is the type codegen
 // emitted for the document element's declaration: an ErrTypeMismatch on any
-// other T is no codec defect. A *codec.DeclineError wraps
-// errors.ErrUnsupported too, so it is tested first.
+// other T is no codec defect.
 func classify(err error, own bool) (bucket, codec.Construct) {
 	if err == nil {
 		return decoded, codec.Construct{}
@@ -154,7 +153,8 @@ func classify(err error, own bool) (bucket, codec.Construct) {
 		}
 		return rejected, codec.Construct{}
 	}
-	if errors.Is(err, errors.ErrUnsupported) {
+	var ue *codec.UndecidedError
+	if errors.As(err, &ue) {
 		return undecided, codec.Construct{}
 	}
 	return failedOther, codec.Construct{}

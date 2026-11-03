@@ -20,7 +20,6 @@ import (
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
-	"github.com/kud360/goxsd8/xsderr"
 )
 
 // TestReadmeFixtures holds each file of testdata/readme that README.md's CLI
@@ -211,15 +210,9 @@ func readmeDecode(schema *xsd.Schema, backend value.Backend) {
 	// order.Order is the generated type for order.xml's document element.
 	o, err := codec.Decode[order.Order](schema, backend, data, codec.WithURI("order.xml"))
 	if err != nil {
-		// Every violation of a rejected instance, as Decode's item 3 reaches
-		// them.
-		if joined, ok := errors.Unwrap(err).(interface{ Unwrap() []error }); ok {
-			for _, e := range joined.Unwrap() {
-				var v *xsderr.Error
-				if errors.As(e, &v) {
-					fmt.Println(v.Loc, v.Rule)
-				}
-			}
+		// Every violation of a rejected instance, as Decode's item 3 reaches them.
+		for _, v := range codec.ViolationsOf(err) {
+			fmt.Println(v.Loc, v.Rule)
 		}
 		log.Fatal(err)
 	}

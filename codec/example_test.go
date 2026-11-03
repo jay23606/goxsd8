@@ -1,7 +1,6 @@
 package codec_test
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"github.com/kud360/goxsd8/codec/testdata/readme/order"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
-	"github.com/kud360/goxsd8/xsderr"
 )
 
 // ExampleDecode parses README's order.xsd, decodes README's order.xml into
@@ -39,15 +37,8 @@ func ExampleDecode() {
 </o:order>`)
 	_, err = codec.Decode[order.Order](schema, strict.New(), invalid, codec.WithURI("order.xml"))
 	// Every violation, as Decode's item 3 reaches them.
-	joined, ok := errors.Unwrap(err).(interface{ Unwrap() []error })
-	if !ok {
-		log.Fatal(err)
-	}
-	for _, e := range joined.Unwrap() {
-		var v *xsderr.Error
-		if errors.As(e, &v) {
-			fmt.Println(v.Loc, v.Rule)
-		}
+	for _, v := range codec.ViolationsOf(err) {
+		fmt.Println(v.Loc, v.Rule)
 	}
 	// Output:
 	// [a b] x

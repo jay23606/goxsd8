@@ -15,6 +15,11 @@
 //	type Construct struct{ ... }
 //	func (c Construct) String() string
 //	var ErrTypeMismatch error
+//	func ViolationsOf(err error) []*xsderr.Error
+//	type UndecidedError struct{ ... }
+//	func (e *UndecidedError) Unevaluated() validate.Unevaluated
+//	func (e *UndecidedError) Error() string
+//	func (e *UndecidedError) Unwrap() error
 //
 // [Decode] decodes a valid XML instance into the struct package codegen
 // emits for its document element's declaration, and [Decode]'s doc states

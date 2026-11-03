@@ -3,8 +3,6 @@ package assess
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,22 +14,28 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// fixtureSchema declares a, in the slice codec decodes, and c, whose choice
-// content codec declines.
+// fixtureSchema declares a, in the slice codec decodes, c, whose choice
+// content codec declines, and u, a's shape with an assertion whose for
+// expression the XPath subset declines, so validate leaves it undecided
+// (cvc-assertion).
 const fixtureSchema = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="c"><xs:complexType><xs:choice><xs:element name="d" type="xs:string"/></xs:choice></xs:complexType></xs:element>
+  <xs:element name="u"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
+    <xs:assert test="(for $x in b return string-length($x)) = 1"/></xs:complexType></xs:element>
 </xs:schema>
 `
 
 // The fixture's instances: valid.xml and choice.xml are valid, invalid.xml
-// lacks a's required child b, so validate charges it.
+// lacks a's required child b, so validate charges it, and undecided.xml is
+// Undecided.
 var fixtureFiles = map[string]string{
-	"s.xsd":       fixtureSchema,
-	"valid.xml":   `<a><b>x</b></a>`,
-	"invalid.xml": `<a/>`,
-	"choice.xml":  `<c><d>x</d></c>`,
+	"s.xsd":         fixtureSchema,
+	"valid.xml":     `<a><b>x</b></a>`,
+	"invalid.xml":   `<a/>`,
+	"choice.xml":    `<c><d>x</d></c>`,
+	"undecided.xml": `<u><b>x</b></u>`,
 }
 
 // a is the struct codegen emits for element a: Decode compares its fields
@@ -72,12 +76,6 @@ func drive(t *testing.T, decoders []Decoder, cases ...Case) Summary {
 	return sum
 }
 
-// unsupported is a Decoder returning the undecided error Decode's doc item 4
-// states: errors.ErrUnsupported, wrapped, and no *codec.DeclineError.
-func unsupported(*xsd.Schema, value.Backend, []byte, ...codec.Option) error {
-	return fmt.Errorf("stub: the validator left a rule undecided: %w", errors.ErrUnsupported)
-}
-
 // accepting is a Decoder returning no error whatever the instance, as a
 // codec that decodes an instance validate does not accept would.
 func accepting(*xsd.Schema, value.Backend, []byte, ...codec.Option) error { return nil }
@@ -100,7 +98,7 @@ func TestDriveCountsEachBucket(t *testing.T) {
 		{"decoded", own, Case{"valid.xml", 0}, Summary{Decoded: 1}},
 		{"declined", []Decoder{DecoderFor[a]}, Case{"choice.xml", 0},
 			Summary{Declines: []Tally{{Construct: "choice content", Count: 1}}}},
-		{"undecided", []Decoder{unsupported}, Case{"valid.xml", 0}, Summary{Undecided: 1}},
+		{"undecided", own, Case{"undecided.xml", 0}, Summary{Undecided: 1}},
 		{"rejected", []Decoder{DecoderFor[mismatched]}, Case{"valid.xml", 0}, Summary{Rejected: 1}},
 		{"failed other", own, Case{"invalid.xml", 0}, Summary{FailedOther: 1}},
 		{"placeholder mismatch", nil, Case{"valid.xml", -1}, Summary{FailedOther: 1, PlaceholderMismatch: 1}},

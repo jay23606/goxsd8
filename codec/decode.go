@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/kud360/goxsd8/internal/goname"
 	"github.com/kud360/goxsd8/parser/xmltree"
@@ -12,6 +13,7 @@ import (
 	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // ErrTypeMismatch is the error [Decode] wraps when T's fields are not those
@@ -75,13 +77,12 @@ var (
 //  3. A validate.Charged Result: an error wrapping every violation, each an
 //     *xsderr.Error, in the order Result.Violations lists them. errors.As to
 //     an *xsderr.Error, and xsderr.RuleOf, reach the first violation alone.
-//     To reach every one, call errors.Unwrap on the error once and assert the
-//     result to interface{ Unwrap() []error }: each element of its Unwrap is
-//     a violation's *xsderr.Error. Decode never succeeds where validate does
-//     not accept.
-//  4. A validate.Undecided Result: an error naming the rule and instance Loc
-//     of the first validate.Unevaluated and wrapping errors.ErrUnsupported.
-//     It is no *DeclineError: errors.As tells the two apart.
+//     [ViolationsOf] returns every one. Decode never succeeds where validate
+//     does not accept.
+//  4. A validate.Undecided Result: an [*UndecidedError] whose Unevaluated is
+//     the first validate.Unevaluated. It wraps errors.ErrUnsupported, as a
+//     *DeclineError does, so errors.Is does not tell the two apart; errors.As
+//     does.
 //  5. A construct of the document element's declaration or type outside the
 //     slice: a *DeclineError at the document element's instance Loc, whose
 //     [DeclineError.Construct] is that construct's. Each is found in this
@@ -144,18 +145,64 @@ func verdict(res *validate.Result) error {
 	case validate.NotProvenInvalid:
 		return nil
 	case validate.Charged:
-		violations := res.Violations()
-		errs := make([]error, len(violations))
-		for i, v := range violations {
-			errs[i] = v
-		}
-		return fmt.Errorf("codec: the instance is invalid against the schema: %w", errors.Join(errs...))
+		return &chargedError{violations: res.Violations()}
 	case validate.Undecided:
-		u := res.Unevaluated()[0]
-		return fmt.Errorf("codec: %s: the validator left %s undecided, so the instance is not proven valid: %w", u.Loc(), u.Rule(), errors.ErrUnsupported)
+		return &UndecidedError{u: res.Unevaluated()[0]}
 	}
 	return fmt.Errorf("codec: the validator returned Standing %d, which is no arm", res.Standing())
 }
+
+// ViolationsOf returns every violation of the charged error [Decode]
+// returns for a validate.Charged Result (Decode's doc, item 3), in the
+// order Result.Violations lists them, however many layers wrap that error.
+// It returns nil for every other error, a nil err included. The slice is
+// fresh on each call: mutating it does not affect err.
+func ViolationsOf(err error) []*xsderr.Error {
+	var ce *chargedError
+	if !errors.As(err, &ce) {
+		return nil
+	}
+	return slices.Clone(ce.violations)
+}
+
+// chargedError is the error Decode's doc states in item 3; violations is the
+// Result's, never empty.
+type chargedError struct{ violations []*xsderr.Error }
+
+// Error opens with codec's statement of the charge and then gives each
+// violation's text, one per line.
+func (e *chargedError) Error() string {
+	return "codec: the instance is invalid against the schema: " + errors.Join(e.Unwrap()...).Error()
+}
+
+// Unwrap returns the violations, each as an error, for the errors.As and
+// xsderr.RuleOf reads Decode's doc states in item 3.
+func (e *chargedError) Unwrap() []error {
+	errs := make([]error, len(e.violations))
+	for i, v := range e.violations {
+		errs[i] = v
+	}
+	return errs
+}
+
+// An UndecidedError is the error [Decode] returns for a validate.Undecided
+// Result (Decode's doc, item 4): the validator reached a check it did not
+// perform, so the instance is not proven valid. It wraps
+// errors.ErrUnsupported, as a [*DeclineError] does; errors.As to each type
+// tells the two apart.
+type UndecidedError struct{ u validate.Unevaluated }
+
+// Unevaluated returns the first of the Result's validate.Unevaluated checks,
+// in document order: its rule, its instance Loc and its message.
+func (e *UndecidedError) Unevaluated() validate.Unevaluated { return e.u }
+
+// Error names the Unevaluated's instance Loc and rule.
+func (e *UndecidedError) Error() string {
+	return fmt.Sprintf("codec: %s: the validator left %s undecided, so the instance is not proven valid: %v", e.u.Loc(), e.u.Rule(), errors.ErrUnsupported)
+}
+
+// Unwrap returns errors.ErrUnsupported.
+func (e *UndecidedError) Unwrap() error { return errors.ErrUnsupported }
 
 // documentElement returns the start tag of r's document element.
 func documentElement(r *xmltree.Reader) (*xmltree.StartElement, error) {
