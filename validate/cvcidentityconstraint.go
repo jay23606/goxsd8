@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/kud360/goxsd8/icpath"
@@ -279,6 +280,19 @@ type icKeyMember struct {
 // icKeySequence is the ·key-sequence· of one ·target node· (§3.11.4 clause 3),
 // in {fields} order.
 type icKeySequence []icKeyMember
+
+// rendered is s as a message states it: each member's lexical as read, quoted
+// on %q's terms so that a member holding a quote or a comma stays one member,
+// in {fields} order and parenthesized. It is the lexical and never the ·actual
+// value· the comparison reads, so two sequences that render differently can
+// still be equal, which is why a duplicate charge renders both.
+func (s icKeySequence) rendered() string {
+	parts := make([]string, 0, len(s))
+	for _, m := range s {
+		parts = append(parts, strconv.Quote(m.lexical))
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
+}
 
 // identityCheck opens the identity-constraint state of one element: the cursors
 // its parent's live paths reach it with, and the frames its own ·governing
@@ -869,16 +883,16 @@ func (f *icFrame) duplicates(w *walk, host Element, q []*icTarget) {
 			if !decided && !undecided[j] {
 				undecided[j] = true
 				w.decline("assessing identity constraint", q[j].e.Name(), q[j].e.Loc(), ruleCvcIdentityConstraint, strings.TrimPrefix(f.duplicateClause(), "clause "),
-					"element %s, a ·target node· of the %s %s declared on %s, was not compared with the one at %s: a member pair of their ·key-sequences· could not be compared in one value space, so cvc-identity-constraint %s is undecided",
-					q[j].e.Name(), f.ic.Category(), f.ic.Name(), host.Name(), q[i].e.Loc(), f.duplicateClause())
+					"element %s, a ·target node· of the %s %s declared on %s, has the ·key-sequence· %s, which was not compared with the ·key-sequence· %s of the one at %s: a member pair of the two could not be compared in one value space, so cvc-identity-constraint %s is undecided",
+					q[j].e.Name(), f.ic.Category(), f.ic.Name(), host.Name(), seqs[j].rendered(), seqs[i].rendered(), q[i].e.Loc(), f.duplicateClause())
 			}
 			if !decided || !same {
 				continue
 			}
 			charged[j] = true
 			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcIdentityConstraint, q[j].e.Loc(),
-				"element %s, a ·target node· of the %s %s declared on %s, has a ·key-sequence· equal or identical to the one at %s, but cvc-identity-constraint %s forbids two members of the ·qualified node set· to share one",
-				q[j].e.Name(), f.ic.Category(), f.ic.Name(), host.Name(), q[i].e.Loc(), f.duplicateClause()))
+				"element %s, a ·target node· of the %s %s declared on %s, has the ·key-sequence· %s, equal or identical to the ·key-sequence· %s of the one at %s, but cvc-identity-constraint %s forbids two members of the ·qualified node set· to share one",
+				q[j].e.Name(), f.ic.Category(), f.ic.Name(), host.Name(), seqs[j].rendered(), seqs[i].rendered(), q[i].e.Loc(), f.duplicateClause()))
 		}
 	}
 }
@@ -968,21 +982,22 @@ func (c *icCheck) keyrefs(w *walk) {
 			continue
 		}
 		for _, t := range q {
+			seq := t.sequence()
 			if found {
-				same, decided := b.lookup(w, t.sequence())
+				same, decided := b.lookup(w, seq)
 				if same {
 					continue
 				}
 				if !decided {
 					w.decline("assessing identity constraint", t.e.Name(), t.e.Loc(), ruleCvcIdentityConstraint, "4.3",
-						"element %s, a ·target node· of the keyref %s declared on %s, was not resolved against the node table of its {referenced key} %s: a member pair could not be compared in one value space, or it matched only an entry the table's conflict resolution could not settle, so cvc-identity-constraint clause 4.3 is undecided for it",
-						t.e.Name(), f.ic.Name(), c.e.Name(), ref)
+						"element %s, a ·target node· of the keyref %s declared on %s, has the ·key-sequence· %s, which was not resolved against the node table of its {referenced key} %s: a member pair could not be compared in one value space, or it matched only an entry the table's conflict resolution could not settle, so cvc-identity-constraint clause 4.3 is undecided for it",
+						t.e.Name(), f.ic.Name(), c.e.Name(), seq.rendered(), ref)
 					continue
 				}
 			}
 			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcIdentityConstraint, t.e.Loc(),
-				"element %s, a ·target node· of the keyref %s declared on %s, has a ·key-sequence· matching no entry in the node table of its {referenced key} %s, which holds only the sub-tree rooted at %s, but cvc-identity-constraint clause 4.3 requires one to match",
-				t.e.Name(), f.ic.Name(), c.e.Name(), ref, c.e.Name()))
+				"element %s, a ·target node· of the keyref %s declared on %s, has the ·key-sequence· %s, matching no entry in the node table of its {referenced key} %s, which holds only the sub-tree rooted at %s, but cvc-identity-constraint clause 4.3 requires one to match",
+				t.e.Name(), f.ic.Name(), c.e.Name(), seq.rendered(), ref, c.e.Name()))
 		}
 	}
 }

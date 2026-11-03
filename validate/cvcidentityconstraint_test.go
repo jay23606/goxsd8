@@ -786,9 +786,10 @@ func TestUnionKeyMemberComparesByItsValidatingType(t *testing.T) {
 func icWantClause41(t *testing.T, got []*xsderr.Error, later, earlier int) {
 	t.Helper()
 	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, later))
-	prefix := loc(later, 1).String() + ": [cvc-identity-constraint] element item, a ·target node· of the unique U declared on root, has a ·key-sequence· equal or identical to the one at " + loc(earlier, 1).String() + ","
-	if !strings.HasPrefix(got[0].Error(), prefix) || !strings.Contains(got[0].Error(), "clause 4.1 ") {
-		t.Errorf("Violations() = %v, want a clause 4.1 charge opening %q", got, prefix)
+	prefix := loc(later, 1).String() + ": [cvc-identity-constraint] element item, a ·target node· of the unique U declared on root, has the ·key-sequence· "
+	tail := " of the one at " + loc(earlier, 1).String() + ", but cvc-identity-constraint clause 4.1 "
+	if !strings.HasPrefix(got[0].Error(), prefix) || !strings.Contains(got[0].Error(), tail) {
+		t.Errorf("Violations() = %v, want a clause 4.1 charge opening %q and holding %q", got, prefix, tail)
 	}
 }
 
@@ -1219,4 +1220,79 @@ func TestTwoSpecialFieldNodesAreChargedUnderClause3(t *testing.T) {
 			icWantClause3Count(t, got, tc.field, loc(3, 2))
 		})
 	}
+}
+
+// The duplicate charge states both ·key-sequences· it compared, in {fields}
+// order, each member's lexical as read: the later "07" and the earlier "7" are
+// one xs:integer, so the pair is charged although the two render differently.
+func TestDuplicateChargeStatesBothKeySequences(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "@id", "@k")
+	schema := icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil)
+	item := func(line int, id, k string) *testElement {
+		return icItem("", line, xsd.QName{Local: "id"}, xsd.QName{Local: "k"})(id, k)
+	}
+
+	got := icAssess(t, schema, icRoot(item(2, "alpha", "7"), item(3, "alpha", "07")))
+	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 3))
+	want := loc(3, 1).String() + `: [cvc-identity-constraint] element item, a ·target node· of the key K declared on root, has the ·key-sequence· ("alpha", "07"), equal or identical to the ·key-sequence· ("alpha", "7") of the one at ` + loc(2, 1).String() + `, but cvc-identity-constraint clause 4.2.2 forbids two members of the ·qualified node set· to share one`
+	if got[0].Error() != want {
+		t.Errorf("Violations()[0] = %q, want %q", got[0].Error(), want)
+	}
+}
+
+// The unmatched-keyref charge states the keyref member's ·key-sequence·, and a
+// member holding the quote or the separator the rendering is built from stays
+// one quoted member.
+func TestKeyrefChargeStatesItsKeySequence(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, "item", nil, "", "@id")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "ref", nil, "K", "@r")
+	schema := icSchema(t, "", false, []xsd.IdentityConstraint{key, keyref}, nil)
+
+	for _, tc := range []struct{ r, rendered string }{
+		{r: "beta", rendered: `("beta")`},
+		{r: `a", "b`, rendered: `("a\", \"b")`},
+		{r: "a, b", rendered: `("a, b")`},
+	} {
+		ref := icElem(xsd.QName{Local: "ref"}, 3, []Attribute{icAttr(xsd.QName{Local: "r"}, tc.r, 3)})
+		got := icAssess(t, schema, icRoot(icIDed(2, "alpha"), ref))
+		icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 3))
+		want := loc(3, 1).String() + `: [cvc-identity-constraint] element ref, a ·target node· of the keyref R declared on root, has the ·key-sequence· ` + tc.rendered + `, matching no entry in the node table of its {referenced key} K, which holds only the sub-tree rooted at root, but cvc-identity-constraint clause 4.3 requires one to match`
+		if got[0].Error() != want {
+			t.Errorf("r=%q: Violations()[0] = %q, want %q", tc.r, got[0].Error(), want)
+		}
+	}
+}
+
+// One member holding the separator and the quote renders apart from the two
+// members it would split into if either went unescaped.
+func TestKeySequenceRenderingIsUnambiguous(t *testing.T) {
+	for _, tc := range []struct {
+		seq  icKeySequence
+		want string
+	}{
+		{icKeySequence{{lexical: `a", "b`}}, `("a\", \"b")`},
+		{icKeySequence{{lexical: "a, b"}}, `("a, b")`},
+		{icKeySequence{{lexical: "a"}, {lexical: "b"}}, `("a", "b")`},
+	} {
+		if got := tc.seq.rendered(); got != tc.want {
+			t.Errorf("rendered() = %s, want %s", got, tc.want)
+		}
+	}
+}
+
+// The declines of the same two comparisons state the same ·key-sequences·: a
+// key's undecided duplicate both of them, a keyref's undecided lookup its own.
+func TestUndecidedKeySequenceDeclinesStateTheirKeySequences(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "@id")
+	_, undecided := assessRecordedWith(t, opaqueStrings(), icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil),
+		icRoot(icIDed(2, "alpha"), icIDed(3, "omega")))
+	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1),
+		msg: `has the ·key-sequence· ("omega"), which was not compared with the ·key-sequence· ("alpha") of the one at ` + loc(2, 1).String() + ":"})
+
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@id")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "ref", nil, "U", "@r")
+	_, undecided = assessRecordedWith(t, opaqueStrings(), icSchema(t, "", false, []xsd.IdentityConstraint{unique, keyref}, nil),
+		icRoot(icIDed(2, "alpha"), icElem(xsd.QName{Local: "ref"}, 3, []Attribute{icAttr(xsd.QName{Local: "r"}, "omega", 3)})))
+	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1),
+		msg: `has the ·key-sequence· ("omega"), which was not resolved against the node table of its {referenced key} U:`})
 }
