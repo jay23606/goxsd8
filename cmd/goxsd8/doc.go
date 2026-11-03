@@ -562,14 +562,14 @@
 //
 // A decimal element holding "12,50" prints:
 //
-//	order.xml:3:3: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): [cvc-datatype-valid] decimal: "12,50" is not in the lexical space (decimal-lexical-representation, §3.3.3.1)
+//	order.xml:1:1: [cvc-type] element amount's value "12,50" is not a valid {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires: [cvc-datatype-valid] "12,50" is not in the lexical space of decimal, which cvc-datatype-valid clause 2.1 requires it to be in
 //
 // <rule> is the rule CHARGED, and for the content of an element or attribute
-// that is never cvc-datatype-valid: the charge is cvc-type (clause 3.1.3),
-// cvc-attribute (clause 3) or cvc-complex-type (clause 1.2), each of which
-// delegates through String Valid (§3.16.4) to Datatype Valid and carries that
-// verdict as a WRAPPED cause — rendered into the message, as above, and
-// reachable as an *xsderr.Error of its own through errors.As and
+// that is never cvc-datatype-valid: the charge is cvc-type clause 3.1.3,
+// cvc-attribute clause 3 or cvc-complex-type clause 1.2, each of which
+// delegates through cvc-simple-type (String Valid) to cvc-datatype-valid and
+// carries that verdict as a WRAPPED cause — rendered into the message, as
+// above, and reachable as an *xsderr.Error of its own through errors.As and
 // xsderr.RuleOf. Key a dispatcher on the outer rule.
 package main
 
