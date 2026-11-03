@@ -160,7 +160,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 			// An argument that cannot be read is a usage/IO fault, never a
 			// verdict about a schema — rootLocation's own reasoning, and
 			// parse's contract for the same argument shape.
-			return subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: %v", err))
+			return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 		}
 		roots = append(roots, parser.RootAt(path))
 	}
@@ -191,7 +191,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	reportUnfollowed(stderr, "validate", assemblyCompiled, report)
 	v, err := validate.New(base, backend, validate.WithLogger(log))
 	if err != nil {
-		return subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: %v", err))
+		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 
 	job := validation{roots: roots, base: v, backend: backend, forced: forced, hints: !*noHints, log: log}
@@ -229,7 +229,7 @@ type validation struct {
 // one assesses a single instance argument and reports its exit code.
 func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 	if err := refuseDirectory(instance); err != nil {
-		return subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: %v", err))
+		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 	format, err := formatOf(instance, vn.forced)
 	if err != nil {
@@ -239,11 +239,11 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		// A token the contract reserves and no milestone has built:
 		// validate/bersrc carries a doc.go and no Validate, so the honest
 		// answer is the usage code and this diagnosis, never a silent pass.
-		return subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: %s: -format %s is reserved by the contract and not yet implemented; only %s and %s instances are assessed today", instance, format, formatXML, formatJSON))
+		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %s: -format %s is reserved by the contract and not yet implemented; only %s and %s instances are assessed today", instance, format, formatXML, formatJSON))
 	}
 	opened, closeSrc, err := openInstance(instance)
 	if err != nil {
-		return subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: %v", err))
+		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 	defer closeSrc()
 
@@ -417,7 +417,7 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 	}
 	base, err := filepath.Abs(instance)
 	if err != nil {
-		return nil, nil, subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: resolving %s: %v", instance, err))
+		return nil, nil, subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: resolving %s: %v", instance, err))
 	}
 	found, replay := instanceHints(instance, base, src)
 	if len(found) == 0 {
@@ -448,7 +448,7 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 	reportUnfollowedHints(stderr, instance, assemblyCompiled, report)
 	v, err := validate.New(augmented, vn.backend, validate.WithLogger(vn.log))
 	if err != nil {
-		return nil, nil, subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: %v", err))
+		return nil, nil, subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 	return v, replay, exitOK
 }
@@ -569,7 +569,7 @@ func reportLines(stdout, stderr io.Writer, instance string, lines []string, code
 		return code
 	}
 	if _, err := io.WriteString(stdout, strings.Join(lines, "\n")+"\n"); err != nil {
-		return subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: writing the report of %s: %v", instance, err))
+		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: writing the report of %s: %v", instance, err))
 	}
 	return code
 }

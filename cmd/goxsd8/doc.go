@@ -18,9 +18,14 @@
 //	            is open.
 //	2     4     usage, or an I/O fault on an argument or on stdout, gen's
 //	            refusal of an -out included: never a verdict about a
-//	            schema or an instance. Each such line a subcommand prints
-//	            is followed by usage: and that subcommand's synopsis line
-//	            below, then by the line pointing to this help.
+//	            schema or an instance. A line a subcommand prints about
+//	            the command line's shape (an unknown or misplaced flag, a
+//	            missing argument, a bad flag value, an instance whose
+//	            name gives no format) is followed by usage: and that
+//	            subcommand's synopsis line below, then by the line
+//	            pointing to this help. Every other line a subcommand
+//	            charges 2 (an I/O fault, gen's refusal of an -out, an
+//	            instance in the ber format) is printed alone.
 //	3     none  validate only: the -schema set does not compile, an I/O
 //	            fault reading a document it references included. Unranked:
 //	            it answers before any instance is opened, so no instance's

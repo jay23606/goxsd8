@@ -135,26 +135,34 @@ func TestRunDispatch(t *testing.T) {
 	}
 }
 
-// The usage: lines a subcommand's exit-2 diagnosis prints, held as literals so
-// that a test comparing stderr against them fails when usage loses or changes
-// the synopsis line: an expectation read through synopsis would follow usage
-// wherever it went (#3110).
+// The usage: lines a subcommand's diagnosis of the command line's shape prints
+// (#3333), held as literals so that a test comparing stderr against them fails
+// when usage loses or changes the synopsis line: an expectation read through
+// synopsis would follow usage wherever it went (#3110).
 const (
 	parseUsageLine    = "usage: goxsd8 parse [-q] [-v] <schema.xsd>..."
 	validateUsageLine = "usage: goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>..."
 	genUsageLine      = "usage: goxsd8 gen [-q] [-v] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]..."
+
+	// genShapeTail is what follows a gen diagnosis of the command line's
+	// shape on stderr, short of the final newline.
+	genShapeTail = "\n" + genUsageLine + "\n" + helpPointer
 )
 
-// TestSubcommandDiagnosisPrintsSynopsis pins #3110: a diagnosis charged inside
-// a subcommand prints three lines on stderr, the diagnosis, usage: and that
-// subcommand's synopsis line, then helpPointer. dispatchCases pins the
-// diagnoses charged before a subcommand is known, which print no synopsis.
+// TestSubcommandDiagnosisPrintsSynopsis pins #3110: a diagnosis of the command
+// line's shape charged inside a subcommand prints three lines on stderr, the
+// diagnosis, usage: and that subcommand's synopsis line, then helpPointer.
+// dispatchCases pins the diagnoses charged before a subcommand is known, which
+// print no synopsis; TestArgumentFaultPrintsOneLine pins the faults the shape
+// did not cause, which print neither (#3333).
 func TestSubcommandDiagnosisPrintsSynopsis(t *testing.T) {
 	for _, c := range []struct {
 		args []string
 		want string
 	}{
 		{[]string{"validate", "x.xml"}, "goxsd8: validate: no schema given\n" + validateUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"validate", "testdata/order-valid.xml", "-schema", "testdata/order.xsd"},
+			fmt.Sprintf(flagAfterPositionalFmt, "validate", "-schema") + "\n" + validateUsageLine + "\n" + helpPointer + "\n"},
 		{[]string{"gen", "-schema"}, "goxsd8: gen: flag needs an argument: -schema\n" + genUsageLine + "\n" + helpPointer + "\n"},
 	} {
 		var stdout, stderr bytes.Buffer
@@ -170,16 +178,17 @@ func TestSubcommandDiagnosisPrintsSynopsis(t *testing.T) {
 	}
 }
 
-// TestStdoutFaultPrintsSynopsis pins the I/O-fault arm of #3110: a failed
-// write of parse's summary or of validate's report is charged exit 2 inside
-// the subcommand, so its line carries the synopsis too.
-func TestStdoutFaultPrintsSynopsis(t *testing.T) {
+// TestStdoutFaultPrintsOneLine pins the stdout arm of #3333: a failed write of
+// parse's summary or of validate's report is charged exit 2 inside the
+// subcommand, and its line stands alone, with no synopsis or helpPointer under
+// it.
+func TestStdoutFaultPrintsOneLine(t *testing.T) {
 	for _, c := range []struct {
 		args []string
 		want string
 	}{
-		{[]string{"parse", "testdata/order.xsd"}, "goxsd8: parse: writing the summary for testdata/order.xsd: closed pipe\n" + parseUsageLine + "\n" + helpPointer + "\n"},
-		{[]string{"validate", "-schema", "testdata/order.xsd", "testdata/order-invalid.xml"}, "goxsd8: validate: writing the report of testdata/order-invalid.xml: closed pipe\n" + validateUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"parse", "testdata/order.xsd"}, "goxsd8: parse: writing the summary for testdata/order.xsd: closed pipe\n"},
+		{[]string{"validate", "-schema", "testdata/order.xsd", "testdata/order-invalid.xml"}, "goxsd8: validate: writing the report of testdata/order-invalid.xml: closed pipe\n"},
 	} {
 		var stderr bytes.Buffer
 		if code := run(c.args, errWriter{}, &stderr); code != exitUsage {
@@ -188,6 +197,43 @@ func TestStdoutFaultPrintsSynopsis(t *testing.T) {
 		if stderr.String() != c.want {
 			t.Errorf("run(%q) stderr = %q, want %q", c.args, stderr.String(), c.want)
 		}
+	}
+}
+
+// TestArgumentFaultPrintsOneLine pins #3333: an instance that cannot be opened
+// is charged exit 2 with its one diagnosis line and no synopsis or
+// helpPointer, so with a second instance after it, the second's report
+// follows the line directly. The run with one writer as both stdout and
+// stderr is what makes "directly" observable; order-invalid.xml's report is
+// read from a run of its own rather than restated.
+func TestArgumentFaultPrintsOneLine(t *testing.T) {
+	const fault = "goxsd8: validate: open testdata/nosuch.xml: no such file or directory\n"
+	var stdout, stderr bytes.Buffer
+	args := []string{"validate", "-schema", "testdata/order.xsd", "testdata/nosuch.xml"}
+	if code := run(args, &stdout, &stderr); code != exitUsage {
+		t.Errorf("run(%q) = %d, want %d", args, code, exitUsage)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("run(%q) stdout = %q, want empty", args, stdout.String())
+	}
+	if stderr.String() != fault {
+		t.Errorf("run(%q) stderr = %q, want %q", args, stderr.String(), fault)
+	}
+
+	var report, reportErr bytes.Buffer
+	if code := run([]string{"validate", "-schema", "testdata/order.xsd", "testdata/order-invalid.xml"}, &report, &reportErr); code != exitInvalid || report.Len() == 0 || reportErr.Len() != 0 {
+		t.Fatalf("order-invalid.xml alone = %d with report %q and stderr %q, want %d, a report and no stderr", code, report.String(), reportErr.String(), exitInvalid)
+	}
+	var both bytes.Buffer
+	args = []string{"validate", "-schema", "testdata/order.xsd", "testdata/nosuch.xml", "testdata/order-invalid.xml"}
+	if code := run(args, &both, &both); code != exitUsage {
+		t.Errorf("run(%q) = %d, want %d", args, code, exitUsage)
+	}
+	if want := fault + report.String(); both.String() != want {
+		t.Errorf("run(%q) output = %q, want %q", args, both.String(), want)
+	}
+	if strings.Contains(both.String(), "usage: ") || strings.Contains(both.String(), helpPointer) {
+		t.Errorf("run(%q) output = %q, want no usage: line and no helpPointer", args, both.String())
 	}
 }
 

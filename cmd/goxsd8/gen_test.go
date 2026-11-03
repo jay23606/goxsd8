@@ -311,10 +311,11 @@ func TestGenVerboseLogs(t *testing.T) {
 	generatedFile(t, out)
 }
 
-// TestGenUsageAndIOFaults pins exit 2: each row's stderr is exactly its line,
-// genUsageLine and helpPointer, and nothing is written at the paths it names. Every row
-// runs in a fresh working directory, so the -out . row cannot write into the
-// package.
+// TestGenUsageAndIOFaults pins exit 2: each row's stderr is exactly its want,
+// and nothing is written at the paths it names. A diagnosis of the command
+// line's shape ends in genShapeTail; an unreadable -schema, a refused -out and
+// a write fault are their one line alone (#3333). Every row runs in a fresh
+// working directory, so the -out . row cannot write into the package.
 func TestGenUsageAndIOFaults(t *testing.T) {
 	flat := absFixture(t, flatFixture)
 	type row struct {
@@ -326,32 +327,32 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 	rows := func(tmp string) []row {
 		at := func(p string) string { return filepath.Join(tmp, p) }
 		return []row{
-			{"no pair", []string{}, "goxsd8: gen: no -schema/-out pair given", nil},
+			{"no pair", []string{}, "goxsd8: gen: no -schema/-out pair given" + genShapeTail, nil},
 			{"-schema without -out", []string{"-schema", flat},
-				"goxsd8: gen: -schema " + flat + " stands without its -out", nil},
+				"goxsd8: gen: -schema " + flat + " stands without its -out" + genShapeTail, nil},
 			{"-schema followed by -schema", []string{"-schema", flat, "-schema", flat, "-out", at("d")},
-				"goxsd8: gen: -schema " + flat + " stands without its -out", []string{at("d")}},
+				"goxsd8: gen: -schema " + flat + " stands without its -out" + genShapeTail, []string{at("d")}},
 			{"-out without -schema", []string{"-out", at("d")},
-				"goxsd8: gen: -out " + at("d") + " stands without a -schema before it", []string{at("d")}},
+				"goxsd8: gen: -out " + at("d") + " stands without a -schema before it" + genShapeTail, []string{at("d")}},
 			{"second -out", []string{"-schema", flat, "-out", at("d"), "-out", at("e")},
-				"goxsd8: gen: -out " + at("e") + " stands without a -schema before it", []string{at("d"), at("e")}},
+				"goxsd8: gen: -out " + at("e") + " stands without a -schema before it" + genShapeTail, []string{at("d"), at("e")}},
 			{"unreadable -schema", []string{"-schema", "nosuch.xsd", "-out", at("d")},
 				"goxsd8: gen: open nosuch.xsd: no such file or directory", []string{at("d")}},
 			{"-backend", []string{"-backend", "strict", "-schema", flat, "-out", at("d")},
-				"goxsd8: gen: flag provided but not defined: -backend", []string{at("d")}},
+				"goxsd8: gen: flag provided but not defined: -backend" + genShapeTail, []string{at("d")}},
 			{"positional argument", []string{"-schema", flat, "-out", at("d"), "extra.xsd"},
-				"goxsd8: gen: extra.xsd: gen takes no positional argument, only -schema/-out pairs", []string{at("d")}},
+				"goxsd8: gen: extra.xsd: gen takes no positional argument, only -schema/-out pairs" + genShapeTail, []string{at("d")}},
 			{"flag after a positional", []string{"extra.xsd", "-out", at("d")},
-				fmt.Sprintf(flagAfterPositionalFmt, "gen", "-out"), []string{at("d")}},
+				fmt.Sprintf(flagAfterPositionalFmt, "gen", "-out") + genShapeTail, []string{at("d")}},
 			// A -- the flag package consumed ends gen's options, so the
 			// flag-shaped token after it is a positional; a -- that is
 			// -out's value ends nothing, and the token after the
 			// positional x is misplaced (#3332).
 			{"flag-shaped operand after --", []string{"-schema", flat, "-out", at("d"), "--", "-weird.xml"},
-				"goxsd8: gen: -weird.xml: gen takes no positional argument, only -schema/-out pairs", []string{at("d")}},
+				"goxsd8: gen: -weird.xml: gen takes no positional argument, only -schema/-out pairs" + genShapeTail, []string{at("d")}},
 			{"-- as -out's value", []string{"-schema", flat, "-out", "--", "x", "-weird.xml"},
-				fmt.Sprintf(flagAfterPositionalFmt, "gen", "-weird.xml"), []string{at("--")}},
-			{"valued help", []string{"-help=true"}, fmt.Sprintf(helpNotAFlagValueFmt, "gen"), nil},
+				fmt.Sprintf(flagAfterPositionalFmt, "gen", "-weird.xml") + genShapeTail, []string{at("--")}},
+			{"valued help", []string{"-help=true"}, fmt.Sprintf(helpNotAFlagValueFmt, "gen") + genShapeTail, nil},
 			{"package not an identifier", []string{"-schema", flat, "-out", at("my-pkg")},
 				"goxsd8: gen: -schema " + flat + " -out " + at("my-pkg") + `: the package name "my-pkg" is not a Go identifier`,
 				[]string{at("my-pkg")}},
@@ -415,7 +416,7 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 			if stdout.Len() != 0 {
 				t.Errorf("gen %q stdout = %q, want empty", r.args, stdout.String())
 			}
-			if want := r.want + "\n" + genUsageLine + "\n" + helpPointer + "\n"; stderr.String() != want {
+			if want := r.want + "\n"; stderr.String() != want {
 				t.Errorf("gen %q stderr = %q, want %q", r.args, stderr.String(), want)
 			}
 			for _, p := range r.absent {
@@ -435,7 +436,8 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 // module: an -out with no go.mod at or above it, one whose nearest go.mod
 // declares no module, and an -out whose import path repeats an earlier
 // pair's, from a second module of the same path. Each prints one stderr line
-// naming the pair, and nothing is written.
+// naming the pair, with no synopsis or helpPointer under it (#3333), and
+// nothing is written.
 func TestGenModuleRefusals(t *testing.T) {
 	flat := absFixture(t, flatFixture)
 	tmp := t.TempDir()
@@ -473,7 +475,7 @@ func TestGenModuleRefusals(t *testing.T) {
 			if code := run(append([]string{"gen"}, tt.args...), &stdout, &stderr); code != exitUsage {
 				t.Errorf("gen %q = %d, want %d", tt.args, code, exitUsage)
 			}
-			if want := tt.want + "\n" + genUsageLine + "\n" + helpPointer + "\n"; stderr.String() != want {
+			if want := tt.want + "\n"; stderr.String() != want {
 				t.Errorf("gen %q stderr = %q, want %q", tt.args, stderr.String(), want)
 			}
 			for _, out := range []string{"free/gen", "nomodule/gen", "one/gen", "two/gen"} {
@@ -555,10 +557,11 @@ func TestGenDeclines(t *testing.T) {
 	}
 }
 
-// TestReportGenerateOSFaultNotDecline pins exit 2 with genUsageLine and
-// helpPointer for an element of Generate's error that answers errors.Is(_,
-// errors.ErrUnsupported) but holds no *codegen.DeclineError: a phase-2 OS
-// fault whose errno is ENOTSUP, wrapped with %w as Generate wraps it (#3090).
+// TestReportGenerateOSFaultNotDecline pins exit 2 with the line alone, no
+// synopsis or helpPointer under it (#3333), for an element of Generate's
+// error that answers errors.Is(_, errors.ErrUnsupported) but holds no
+// *codegen.DeclineError: a phase-2 OS fault whose errno is ENOTSUP, wrapped
+// with %w as Generate wraps it (#3090).
 func TestReportGenerateOSFaultNotDecline(t *testing.T) {
 	fault := fmt.Errorf("target 0: writing x/xsd_gen.go: %w", syscall.ENOTSUP)
 	if !errors.Is(fault, errors.ErrUnsupported) {
@@ -568,22 +571,22 @@ func TestReportGenerateOSFaultNotDecline(t *testing.T) {
 	if code := reportGenerate(errors.Join(fault), &stderr); code != exitUsage {
 		t.Errorf("reportGenerate = %d, want %d", code, exitUsage)
 	}
-	if want := "goxsd8: gen: " + fault.Error() + "\n" + genUsageLine + "\n" + helpPointer + "\n"; stderr.String() != want {
+	if want := "goxsd8: gen: " + fault.Error() + "\n"; stderr.String() != want {
 		t.Errorf("reportGenerate stderr = %q, want %q", stderr.String(), want)
 	}
 }
 
 // TestGenRefusalsOutrankEveryPair pins exit 2 for every refused -out, whatever
 // any pair compiles or declines, its own pair's decline included: each refusal
-// prints its line, genUsageLine and helpPointer, in argument order, before any line a
-// -schema's compilation prints, and nothing is written. Every row runs in a
-// fresh working directory holding dec.xsd, a schema the generator declines,
-// and its -out paths are relative to it.
+// prints its one line, with no synopsis or helpPointer under it, in argument
+// order, before any line a -schema's compilation prints, and nothing is
+// written. Every row runs in a fresh working directory holding dec.xsd, a
+// schema the generator declines, and its -out paths are relative to it.
 func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 	flat := absFixture(t, flatFixture)
 	broken := absFixture(t, "testdata/broken.xsd")
 	refusal := func(schema, out, msg string) string {
-		return "goxsd8: gen: -schema " + schema + " -out " + out + ": " + msg + "\n" + genUsageLine + "\n" + helpPointer + "\n"
+		return "goxsd8: gen: -schema " + schema + " -out " + out + ": " + msg + "\n"
 	}
 	notIdentifier := `the package name "my-pkg" is not a Go identifier`
 	rows := []struct {

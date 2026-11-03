@@ -98,7 +98,7 @@ func runGen(args []string, stderr io.Writer) int {
 	}
 	code := exitOK
 	for _, err := range codegen.CheckTargets(targets) {
-		code = worse(code, subcommandUsageError(stderr, "gen", "goxsd8: gen: "+err.Error()))
+		code = worse(code, subcommandFault(stderr, "goxsd8: gen: "+err.Error()))
 	}
 	for i, p := range pairs {
 		schema, c := compileArgument("gen", p.schema, log, stderr)
@@ -116,9 +116,9 @@ func runGen(args []string, stderr io.Writer) int {
 
 // reportGenerate prints err, one failure codegen.Generate returns, on its own
 // line on stderr and returns the exit code it charges. A failure holding a
-// *codegen.DeclineError, which errors.As retrieves, charges exit 4 with no
-// synopsis or helpPointer under it; any other failure charges exit 2 as
-// subcommandUsageError prints it. errors.Is(err, errors.ErrUnsupported) does
+// *codegen.DeclineError, which errors.As retrieves, charges exit 4; any other
+// failure charges exit 2 as subcommandFault prints it. Neither has a synopsis
+// or helpPointer under it. errors.Is(err, errors.ErrUnsupported) does
 // not route: it also answers true for an OS fault whose syscall.Errno is
 // ENOSYS, ENOTSUP or EOPNOTSUPP, which Generate wraps with %w and which is no
 // decline (#3090).
@@ -126,7 +126,7 @@ func reportGenerate(err error, stderr io.Writer) int {
 	line := "goxsd8: gen: " + err.Error()
 	var de *codegen.DeclineError
 	if !errors.As(err, &de) {
-		return subcommandUsageError(stderr, "gen", line)
+		return subcommandFault(stderr, line)
 	}
 	// A failed stderr write cannot change the outcome: the exit code is
 	// settled either way, and stderr is the only channel this line has.

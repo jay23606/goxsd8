@@ -597,23 +597,28 @@ func TestParseMultipleSchemas(t *testing.T) {
 
 // TestParseUsageErrors pins the exit-2 half of the split this issue owns: a
 // fault in the command line or in reading a file is never a verdict about a
-// schema. Each answer is distinct, lands on stderr with parseUsageLine and
-// helpPointer under it, and leaves stdout empty.
+// schema. Each answer is distinct, lands on stderr, and leaves stdout empty; a
+// diagnosis of the command line's shape has parseUsageLine and helpPointer
+// under it, and an unreadable file's line stands alone (#3333).
 func TestParseUsageErrors(t *testing.T) {
 	dir := t.TempDir()
 	cases := []struct {
 		name string
 		args []string
 		want string
+		// shape marks a diagnosis of the command line's shape, which
+		// parseUsageLine and helpPointer follow; any other row's line stands
+		// alone (#3333).
+		shape bool
 	}{
-		{"no schema", []string{"parse"}, "goxsd8: parse: no schema given"},
-		{"missing file", []string{"parse", "testdata/nosuch.xsd"}, "no such file or directory"},
-		{"a directory", []string{"parse", dir}, "is a directory"},
-		{"undefined flag", []string{"parse", "-bogus", "testdata/order.xsd"}, "flag provided but not defined: -bogus"},
+		{"no schema", []string{"parse"}, "goxsd8: parse: no schema given", true},
+		{"missing file", []string{"parse", "testdata/nosuch.xsd"}, "no such file or directory", false},
+		{"a directory", []string{"parse", dir}, "is a directory", false},
+		{"undefined flag", []string{"parse", "-bogus", "testdata/order.xsd"}, "flag provided but not defined: -bogus", true},
 		// -help=true is not one of the three help spellings, at any position
 		// (doc.go's argument vocabulary); after a subcommand it is a flag
 		// whose value that subcommand does not accept.
-		{"help as a flag value", []string{"parse", "-help=true"}, fmt.Sprintf(helpNotAFlagValueFmt, "parse")},
+		{"help as a flag value", []string{"parse", "-help=true"}, fmt.Sprintf(helpNotAFlagValueFmt, "parse"), true},
 	}
 	seen := make(map[string]string)
 	for _, c := range cases {
@@ -627,8 +632,11 @@ func TestParseUsageErrors(t *testing.T) {
 		if !strings.Contains(stderr.String(), c.want) {
 			t.Errorf("%s: stderr = %q, want it to contain %q", c.name, stderr.String(), c.want)
 		}
-		if !strings.HasSuffix(stderr.String(), "\n"+parseUsageLine+"\n"+helpPointer+"\n") {
-			t.Errorf("%s: stderr = %q, want parseUsageLine and helpPointer under it", c.name, stderr.String())
+		if synopsis := strings.HasSuffix(stderr.String(), "\n"+parseUsageLine+"\n"+helpPointer+"\n"); synopsis != c.shape {
+			t.Errorf("%s: stderr = %q, synopsis and helpPointer under it = %t, want %t", c.name, stderr.String(), synopsis, c.shape)
+		}
+		if !c.shape && strings.Count(stderr.String(), "\n") != 1 {
+			t.Errorf("%s: stderr = %q, want one line", c.name, stderr.String())
 		}
 		if prior, dup := seen[stderr.String()]; dup {
 			t.Errorf("%s answers exactly what %s answers: %q", c.name, prior, stderr.String())

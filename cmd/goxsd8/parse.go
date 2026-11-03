@@ -84,7 +84,7 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 	if _, err := io.WriteString(stdout, summarize(location, schema)); err != nil {
 		// The summary the user asked for never arrived; that is an IO fault,
 		// not a verdict about the schema.
-		return subcommandUsageError(stderr, "parse", fmt.Sprintf("goxsd8: parse: writing the summary for %s: %v", location, err))
+		return subcommandFault(stderr, fmt.Sprintf("goxsd8: parse: writing the summary for %s: %v", location, err))
 	}
 	return exitOK
 }
@@ -99,7 +99,7 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 func compileArgument(verb, location string, log *slog.Logger, stderr io.Writer) (*xsd.Schema, int) {
 	root, err := rootLocation(location)
 	if err != nil {
-		return nil, subcommandUsageError(stderr, verb, fmt.Sprintf("goxsd8: %s: %v", verb, err))
+		return nil, subcommandFault(stderr, fmt.Sprintf("goxsd8: %s: %v", verb, err))
 	}
 	// The resolver is rooted at the filesystem root and the document is named
 	// by its absolute path, so that an argument spelled absolutely or through
@@ -268,14 +268,31 @@ func usageError(stderr io.Writer, msg string) int {
 	return exitUsage
 }
 
-// subcommandUsageError reports a usage or IO fault charged inside the
-// subcommand name: the message, then usage: and name's synopsis line, then the
-// remedy, on stderr, and exit 2 (#3110). Every exit-2 line a subcommand prints
-// comes through here, so the synopsis repeats wherever the remedy does.
+// subcommandUsageError reports a diagnosis of the command line's shape charged
+// inside the subcommand name — an unknown or misplaced flag, a missing
+// argument, a bad flag value. It prints the message, then usage: and name's
+// synopsis line, then the remedy, on stderr, and returns exit 2 (#3110). Every
+// other exit-2 line a subcommand prints goes through subcommandFault instead
+// (#3333).
 func subcommandUsageError(stderr io.Writer, name, msg string) int {
 	// A failed stderr write cannot change the outcome — the exit code is 2
 	// either way, and stderr is the only channel left to report it on.
 	_, _ = fmt.Fprintf(stderr, "%s\nusage: %s\n%s\n", msg, synopsis(name), helpPointer)
+	return exitUsage
+}
+
+// subcommandFault reports an exit-2 fault charged inside a subcommand that the
+// command line's shape did not cause — an I/O fault on an argument or on
+// stdout, gen's refusal of an -out or a non-decline failure of Generate, a
+// capability the build lacks. It prints the message alone, on stderr, and
+// returns exit 2 (#3333). No synopsis or remedy follows it: retyping the
+// command line does not cure it, and an argument's fault stops no run but its
+// own, so a synopsis would land between the reports of the arguments around
+// it.
+func subcommandFault(stderr io.Writer, msg string) int {
+	// A failed stderr write cannot change the outcome, for the reason
+	// subcommandUsageError states.
+	_, _ = fmt.Fprintln(stderr, msg)
 	return exitUsage
 }
 

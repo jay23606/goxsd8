@@ -1069,17 +1069,23 @@ func TestValidateHintsResolveAgainstTheInstance(t *testing.T) {
 // three tokens are matched case-sensitively, an unrecognized one is a usage
 // error LISTING the valid values, an instance whose extension names none of
 // them is the same error rather than a guess, and ber, whose adapter is still
-// a doc.go stub, fails cleanly instead of passing silently.
+// a doc.go stub, fails cleanly instead of passing silently: a capability the
+// build lacks, not a fault in the command line, so its line stands alone with
+// no synopsis under it (#3333).
 func TestValidateFormatVocabulary(t *testing.T) {
 	cases := []struct {
 		name string
 		args []string
 		want string
+		// shape marks a diagnosis of the command line's shape, which
+		// validateUsageLine and helpPointer follow; any other row's line stands
+		// alone (#3333).
+		shape bool
 	}{
-		{"unrecognized token", []string{"-format", "yaml"}, `-format "yaml" is not a source format; the values are xml, json, ber`},
-		{"wrong case", []string{"-format", "XML"}, `-format "XML" is not a source format`},
-		{"forced ber is reserved", []string{"-format", "ber"}, "-format ber is reserved by the contract and not yet implemented"},
-		{"extension is the default", []string{}, "the extension \".txt\" names no source format; pass -format xml, json, ber"},
+		{"unrecognized token", []string{"-format", "yaml"}, `-format "yaml" is not a source format; the values are xml, json, ber`, true},
+		{"wrong case", []string{"-format", "XML"}, `-format "XML" is not a source format`, true},
+		{"forced ber is reserved", []string{"-format", "ber"}, "-format ber is reserved by the contract and not yet implemented", false},
+		{"extension is the default", []string{}, "the extension \".txt\" names no source format; pass -format xml, json, ber", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -1095,8 +1101,11 @@ func TestValidateFormatVocabulary(t *testing.T) {
 			if !strings.Contains(stderr.String(), c.want) {
 				t.Errorf("stderr = %q, want it to contain %q", stderr.String(), c.want)
 			}
-			if !strings.HasSuffix(stderr.String(), "\n"+validateUsageLine+"\n"+helpPointer+"\n") {
-				t.Errorf("stderr = %q, want it to end with validateUsageLine and helpPointer", stderr.String())
+			if synopsis := strings.HasSuffix(stderr.String(), "\n"+validateUsageLine+"\n"+helpPointer+"\n"); synopsis != c.shape {
+				t.Errorf("stderr = %q, synopsis and helpPointer under it = %t, want %t", stderr.String(), synopsis, c.shape)
+			}
+			if !c.shape && strings.Count(stderr.String(), "\n") != 1 {
+				t.Errorf("stderr = %q, want one line", stderr.String())
 			}
 		})
 	}
@@ -1604,7 +1613,9 @@ func TestValidateSchemaFlagIsRepeatable(t *testing.T) {
 
 // TestValidateUsageErrors covers the usage/IO code's whole surface for this
 // subcommand: each diagnosis reaches stderr, stdout stays empty, and no two of
-// them collapse into one line.
+// them collapse into one line. A diagnosis of the command line's shape has
+// validateUsageLine and helpPointer under it; an argument that cannot be read
+// is its one line alone (#3333).
 func TestValidateUsageErrors(t *testing.T) {
 	dir := t.TempDir()
 	xmlDir := filepath.Join(dir, "d.xml")
@@ -1623,36 +1634,40 @@ func TestValidateUsageErrors(t *testing.T) {
 		name string
 		args []string
 		want string
+		// shape marks a diagnosis of the command line's shape, which
+		// validateUsageLine and helpPointer follow; any other row's line stands
+		// alone (#3333).
+		shape bool
 	}{
-		{"no schema", []string{"validate", validInstance}, "goxsd8: validate: no schema given"},
+		{"no schema", []string{"validate", validInstance}, "goxsd8: validate: no schema given", true},
 		// The schema named after the instance (#1290). The seen map below is
 		// what this row is for: this answer was byte-identical to the row above
 		// it, so a user who named a schema was told they had not.
-		{"schema after the instance", []string{"validate", validInstance, "-schema", orderSchema}, fmt.Sprintf(flagAfterPositionalFmt, "validate", "-schema")},
-		{"no instance", []string{"validate", "-schema", orderSchema}, "goxsd8: validate: no instance given"},
-		{"dangling -schema", []string{"validate", "-schema"}, "flag needs an argument: -schema"},
-		{"undefined flag", []string{"validate", "-out", dir, "-schema", orderSchema, validInstance}, "flag provided but not defined: -out"},
-		{"missing schema", []string{"validate", "-schema", "testdata/nosuch.xsd", validInstance}, "no such file or directory"},
-		{"schema is a directory", []string{"validate", "-schema", dir, validInstance}, "is a directory"},
-		{"schema from stdin", []string{"validate", "-schema", "-", validInstance}, "standard input is not a schema location"},
-		{"missing instance", []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, "no such file or directory"},
+		{"schema after the instance", []string{"validate", validInstance, "-schema", orderSchema}, fmt.Sprintf(flagAfterPositionalFmt, "validate", "-schema"), true},
+		{"no instance", []string{"validate", "-schema", orderSchema}, "goxsd8: validate: no instance given", true},
+		{"dangling -schema", []string{"validate", "-schema"}, "flag needs an argument: -schema", true},
+		{"undefined flag", []string{"validate", "-out", dir, "-schema", orderSchema, validInstance}, "flag provided but not defined: -out", true},
+		{"missing schema", []string{"validate", "-schema", "testdata/nosuch.xsd", validInstance}, "no such file or directory", false},
+		{"schema is a directory", []string{"validate", "-schema", dir, validInstance}, "is a directory", false},
+		{"schema from stdin", []string{"validate", "-schema", "-", validInstance}, "standard input is not a schema location", true},
+		{"missing instance", []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, "no such file or directory", false},
 		// - names no source format, and xml and json are both assessed, so
 		// standard input needs -format (#2403).
-		{"stdin without -format", []string{"validate", "-schema", orderSchema, "-"}, "goxsd8: validate: -: standard input has no extension to name a source format; pass -format xml, json, ber"},
+		{"stdin without -format", []string{"validate", "-schema", orderSchema, "-"}, "goxsd8: validate: -: standard input has no extension to name a source format; pass -format xml, json, ber", true},
 		// A directory instance is charged as a directory before formatOf reads
 		// its extension, whatever its name and whatever -format forced (#2403):
 		// "." and the extension-less directory answered with the extension
 		// message without the check, and the .xml-named and forced ones with an
 		// exit-1 [xml-wf] read failure.
-		{"instance is .", []string{"validate", "-schema", orderSchema, "."}, "goxsd8: validate: open .: is a directory"},
-		{"instance is a directory", []string{"validate", "-schema", orderSchema, plainDir}, "goxsd8: validate: open " + plainDir + ": is a directory"},
-		{"instance is a directory named .xml", []string{"validate", "-schema", orderSchema, xmlDir}, "goxsd8: validate: open " + xmlDir + ": is a directory"},
-		{"instance is a directory under -format", []string{"validate", "-format", "xml", "-schema", orderSchema, forcedDir}, "goxsd8: validate: open " + forcedDir + ": is a directory"},
-		{"instance is a link to a directory", []string{"validate", "-schema", orderSchema, linkDir}, "goxsd8: validate: open " + linkDir + ": is a directory"},
+		{"instance is .", []string{"validate", "-schema", orderSchema, "."}, "goxsd8: validate: open .: is a directory", false},
+		{"instance is a directory", []string{"validate", "-schema", orderSchema, plainDir}, "goxsd8: validate: open " + plainDir + ": is a directory", false},
+		{"instance is a directory named .xml", []string{"validate", "-schema", orderSchema, xmlDir}, "goxsd8: validate: open " + xmlDir + ": is a directory", false},
+		{"instance is a directory under -format", []string{"validate", "-format", "xml", "-schema", orderSchema, forcedDir}, "goxsd8: validate: open " + forcedDir + ": is a directory", false},
+		{"instance is a link to a directory", []string{"validate", "-schema", orderSchema, linkDir}, "goxsd8: validate: open " + linkDir + ": is a directory", false},
 		// -help=true is not one of the three help spellings, at any position
 		// (doc.go's argument vocabulary); after a subcommand it is a flag whose
 		// value that subcommand does not accept.
-		{"help as a flag value", []string{"validate", "-help=true"}, fmt.Sprintf(helpNotAFlagValueFmt, "validate")},
+		{"help as a flag value", []string{"validate", "-help=true"}, fmt.Sprintf(helpNotAFlagValueFmt, "validate"), true},
 	}
 	seen := make(map[string]string)
 	for _, c := range cases {
@@ -1666,8 +1681,11 @@ func TestValidateUsageErrors(t *testing.T) {
 		if !strings.Contains(stderr.String(), c.want) {
 			t.Errorf("%s: stderr = %q, want it to contain %q", c.name, stderr.String(), c.want)
 		}
-		if !strings.HasSuffix(stderr.String(), "\n"+validateUsageLine+"\n"+helpPointer+"\n") {
-			t.Errorf("%s: stderr = %q, want it to end with validateUsageLine and the remedy line", c.name, stderr.String())
+		if synopsis := strings.HasSuffix(stderr.String(), "\n"+validateUsageLine+"\n"+helpPointer+"\n"); synopsis != c.shape {
+			t.Errorf("%s: stderr = %q, synopsis and helpPointer under it = %t, want %t", c.name, stderr.String(), synopsis, c.shape)
+		}
+		if !c.shape && strings.Count(stderr.String(), "\n") != 1 {
+			t.Errorf("%s: stderr = %q, want one line", c.name, stderr.String())
 		}
 		if other, ok := seen[stderr.String()]; ok {
 			t.Errorf("%s and %s produce the same diagnosis %q", c.name, other, stderr.String())
