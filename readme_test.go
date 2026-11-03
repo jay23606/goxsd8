@@ -6,15 +6,21 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/codec"
+	"github.com/kud360/goxsd8/codec/testdata/readme/order"
 	"github.com/kud360/goxsd8/codegen"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // TestReadmeFixtures holds each file of testdata/readme that README.md's CLI
@@ -28,7 +34,8 @@ import (
 // It holds README's code-generation snippet to readmeCodegen's body, which
 // compiles with this file, and the xsd_gen.go README shows to the file that
 // running readmeCodegen writes for order.xsd, both byte for byte as a fence's
-// body.
+// body. It holds README's decode snippet to readmeDecode's body the same way,
+// and runs it on order.xml.
 func TestReadmeFixtures(t *testing.T) {
 	readme, err := os.ReadFile("README.md")
 	if err != nil {
@@ -59,6 +66,13 @@ func TestReadmeFixtures(t *testing.T) {
 	if want := "```go\n" + snippet + "```\n"; !strings.Contains(string(readme), want) {
 		t.Errorf("README.md does not show readmeCodegen's body as\n%s", want)
 	}
+	snippet, err = funcBody("readme_test.go", "readmeDecode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "```go\n" + snippet + "```\n"; !strings.Contains(string(readme), want) {
+		t.Errorf("README.md does not show readmeDecode's body as\n%s", want)
+	}
 
 	// The program parses order.xsd with testdata/readme as its working
 	// directory, so its Loc reads order.xsd:3:3.
@@ -72,6 +86,10 @@ func TestReadmeFixtures(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/app\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Chdir(root)
 	readmeCodegen(schema)
 	gen, err := os.ReadFile(filepath.Join("gen", "order", "xsd_gen.go"))
@@ -81,6 +99,12 @@ func TestReadmeFixtures(t *testing.T) {
 	if want := "```go\n" + string(gen) + "```\n"; !strings.Contains(string(readme), want) {
 		t.Errorf("README.md does not show the xsd_gen.go Generate writes for testdata/readme/order.xsd as\n%s", want)
 	}
+
+	// The program reads order.xml from its working directory; package order
+	// is the golden copy of the file readmeCodegen writes, which
+	// codec.TestDecodeReadmeOrder holds to codegen's output.
+	t.Chdir(filepath.Join(wd, "testdata", "readme"))
+	readmeDecode(schema, strict.New())
 }
 
 // TestReadmeSharedDocument holds README's two-target gen example: note.xsd,
@@ -173,6 +197,33 @@ func readmeCodegen(schema *xsd.Schema) {
 		}
 		os.Exit(1)
 	}
+}
+
+// readmeDecode is README's decode snippet: README shows its body byte for
+// byte, each line less one leading tab. schema and backend stand for the
+// program's variables of those names, and package order for the package
+// readmeCodegen writes.
+func readmeDecode(schema *xsd.Schema, backend value.Backend) {
+	data, err := os.ReadFile("order.xml")
+	if err != nil {
+		log.Fatal(err)
+	}
+	// order.Order is the generated type for order.xml's document element.
+	o, err := codec.Decode[order.Order](schema, backend, data, codec.WithURI("order.xml"))
+	if err != nil {
+		// Every violation of a rejected instance, as Decode's item 3 reaches
+		// them.
+		if joined, ok := errors.Unwrap(err).(interface{ Unwrap() []error }); ok {
+			for _, e := range joined.Unwrap() {
+				var v *xsderr.Error
+				if errors.As(e, &v) {
+					fmt.Println(v.Loc, v.Rule)
+				}
+			}
+		}
+		log.Fatal(err)
+	}
+	fmt.Println(o.Item, *o.Kind) // [a b] x
 }
 
 // funcBody returns the statements of the function name declares in file, the

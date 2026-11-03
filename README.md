@@ -395,6 +395,38 @@ its headers name each document by its path relative to the `-out` directory,
 climbing with `../` out of it, as `goxsd8 -help` states: the CLI section's
 `gen` run writes `declared at ../../order.xsd:3:3`.
 
+`codec.Decode` validates an instance against the schema and decodes it into
+the generated type, here `order.Order`; `go doc
+github.com/kud360/goxsd8/codec Decode` states every error it returns. Once
+`Generate` has written `gen/order`, a program in the same module with
+`schema` and `backend` as above decodes `order.xml` into it, importing
+`github.com/kud360/goxsd8/codec`, `github.com/kud360/goxsd8/xsderr` and the
+generated package, whose import path is the one `Target.Dir`'s doc derives
+for the `Dir` that `Generate` was given:
+
+```go
+data, err := os.ReadFile("order.xml")
+if err != nil {
+	log.Fatal(err)
+}
+// order.Order is the generated type for order.xml's document element.
+o, err := codec.Decode[order.Order](schema, backend, data, codec.WithURI("order.xml"))
+if err != nil {
+	// Every violation of a rejected instance, as Decode's item 3 reaches
+	// them.
+	if joined, ok := errors.Unwrap(err).(interface{ Unwrap() []error }); ok {
+		for _, e := range joined.Unwrap() {
+			var v *xsderr.Error
+			if errors.As(e, &v) {
+				fmt.Println(v.Loc, v.Rule)
+			}
+		}
+	}
+	log.Fatal(err)
+}
+fmt.Println(o.Item, *o.Kind) // [a b] x
+```
+
 Two targets can compose one document. `ship.xsd` and `bill.xsd` each import
 `note.xsd`:
 
@@ -458,6 +490,7 @@ directly: `validate/jsonsrc/example_test.go` (`ExampleValidate`),
 `builtin/example_test.go` (`ExampleSeed`, `ExampleSeed_missingPrimitive`),
 `builtin/strict/example_test.go` (`ExampleNew`),
 `codegen/example_test.go` (`ExampleGenerate`),
+`codec/example_test.go` (`ExampleDecode`),
 `loader/example_test.go` (`Example_chain`), `xsd/example_test.go`
 (`Example_termOrRefDiscrimination`, `Example_buildFinalizeQuery`,
 `Example_schemaEnumeration`, `Example_contentModelTraversal`,
