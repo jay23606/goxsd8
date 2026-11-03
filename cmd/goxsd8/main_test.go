@@ -22,8 +22,9 @@ import (
 // helpCases reach the help path: usage on stdout, nothing on stderr, exit 0.
 // Everything after the four bare spellings pins a decision usage or doc.go's
 // argument vocabulary states rather than an accident — a help flag before its
-// subcommand, a help flag alongside an unrecognized one, -- with no
-// end-of-options meaning, a help flag after a name outside the vocabulary
+// subcommand, a help flag alongside an unrecognized one, -- given no
+// end-of-options meaning by the help scan, even where it ends a subcommand's
+// options, a help flag after a name outside the vocabulary
 // altogether, and `parse -h`, `validate -h` and `gen -h`: those three own the
 // flag.FlagSets in the binary, so they are the rows where a subcommand's own
 // flag parsing could take -h away from the help path.
@@ -36,6 +37,7 @@ var helpCases = [][]string{
 	{"-help", "validate"},
 	{"-xyz", "-help"},
 	{"--", "-help"},
+	{"validate", "-schema", "s.xsd", "--", "-help"},
 	{"frobnicate", "-h"},
 	{"parse", "-h"},
 	{"validate", "-h"},

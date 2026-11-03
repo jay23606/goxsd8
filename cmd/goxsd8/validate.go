@@ -120,7 +120,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	// line that carries the argument in the wrong place: in `validate a.xml
 	// -schema a.xsd` the -schema the flag set never saw is the fault to report,
 	// not the schema the user did name (#1290).
-	if arg, ok := flagShapedIn(instances); ok {
+	if arg, ok := flagShapedIn(flags, args); ok {
 		return subcommandUsageError(stderr, "validate", fmt.Sprintf(flagAfterPositionalFmt, "validate", arg))
 	}
 	if len(schemas) == 0 {
@@ -632,7 +632,8 @@ func forcedFormat(token string) (sourceFormat, error) {
 // json are both assessed, and either reading of standard input could be meant
 // (#2403). Any other argument whose extension names no source format is the
 // same usage error rather than a guess, so that no input is ever read in a
-// format nothing in the invocation asked for.
+// format nothing in the invocation asked for. The extension is matched
+// case-sensitively, as the contract states: a.XML names no source format.
 func formatOf(instance string, forced sourceFormat) (sourceFormat, error) {
 	if forced != "" {
 		return forced, nil

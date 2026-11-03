@@ -343,6 +343,14 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 				"goxsd8: gen: extra.xsd: gen takes no positional argument, only -schema/-out pairs", []string{at("d")}},
 			{"flag after a positional", []string{"extra.xsd", "-out", at("d")},
 				fmt.Sprintf(flagAfterPositionalFmt, "gen", "-out"), []string{at("d")}},
+			// A -- the flag package consumed ends gen's options, so the
+			// flag-shaped token after it is a positional; a -- that is
+			// -out's value ends nothing, and the token after the
+			// positional x is misplaced (#3332).
+			{"flag-shaped operand after --", []string{"-schema", flat, "-out", at("d"), "--", "-weird.xml"},
+				"goxsd8: gen: -weird.xml: gen takes no positional argument, only -schema/-out pairs", []string{at("d")}},
+			{"-- as -out's value", []string{"-schema", flat, "-out", "--", "x", "-weird.xml"},
+				fmt.Sprintf(flagAfterPositionalFmt, "gen", "-weird.xml"), []string{at("--")}},
 			{"valued help", []string{"-help=true"}, fmt.Sprintf(helpNotAFlagValueFmt, "gen"), nil},
 			{"package not an identifier", []string{"-schema", flat, "-out", at("my-pkg")},
 				"goxsd8: gen: -schema " + flat + " -out " + at("my-pkg") + `: the package name "my-pkg" is not a Go identifier`,

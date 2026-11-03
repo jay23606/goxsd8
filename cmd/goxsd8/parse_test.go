@@ -838,6 +838,61 @@ func TestParseFlagAfterPositional(t *testing.T) {
 	}
 }
 
+// TestParseEndOfOptions pins doc.go's reading of -- for parse (#3332): one
+// the flag package consumed before the first schema argument ends parse's
+// options, so every later argument is a schema location, a second
+// flag-shaped one and a valued help spelling included, while a -- after a
+// schema argument is still the misplaced flag-shaped token it is. The files
+// named like flags exist, so a row reading them as paths compiles them.
+func TestParseEndOfOptions(t *testing.T) {
+	body, err := os.ReadFile("testdata/order.xsd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for _, name := range []string{"-weird.xsd", "-q", "-help=true", "order.xsd"} {
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(dir)
+	rows := []struct {
+		name string
+		args []string
+		code int
+		// first is stdout's first line on exit 0, the whole of stderr
+		// otherwise.
+		first string
+	}{
+		{"operand after --", []string{"--", "-weird.xsd"}, exitOK, "-weird.xsd"},
+		{"two flag-shaped operands after --", []string{"--", "-weird.xsd", "-q"}, exitOK, "-weird.xsd"},
+		{"valued help after --", []string{"--", "-help=true"}, exitOK, "-help=true"},
+		{"-- after a positional", []string{"order.xsd", "--"}, exitUsage,
+			fmt.Sprintf(flagAfterPositionalFmt, "parse", "--") + "\n" + parseUsageLine + "\n" + helpPointer + "\n"},
+	}
+	for _, r := range rows {
+		t.Run(r.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := run(append([]string{"parse"}, r.args...), &stdout, &stderr)
+			if code != r.code {
+				t.Fatalf("parse %q = %d, want %d (stdout %q, stderr %q)", r.args, code, r.code, stdout.String(), stderr.String())
+			}
+			if r.code != exitOK {
+				if stderr.String() != r.first {
+					t.Errorf("stderr = %q, want %q", stderr.String(), r.first)
+				}
+				return
+			}
+			if first, _, _ := strings.Cut(stdout.String(), "\n"); first != r.first {
+				t.Errorf("stdout's first line = %q, want %q", first, r.first)
+			}
+			if strings.Count(stdout.String(), "components:") != len(r.args)-1 {
+				t.Errorf("stdout = %q, want one summary per argument after --", stdout.String())
+			}
+		})
+	}
+}
+
 // TestParseFileNamedLikeAFlag pins the escape hatch the diagnosis above leaves
 // open, the one doc.go names beside ./- : a schema document whose file name
 // begins with - is compiled when a path reaches it, so the misplacement rule

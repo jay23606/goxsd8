@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -146,12 +147,14 @@ Usage (contract; subcommands land with their milestones):
       documents the assembly reached, so one document's rejection
       does not silence another's shortfall.
       Source format by extension (.xml, .json, .ber) or forced with
-      -format xml|json|ber, matched case-sensitively and applying to
-      every instance of the invocation (there is no per-instance
-      spelling); an unrecognized token, and an instance whose
-      extension names none of the three, are usage errors listing the
-      values. xml and json are assessed today; ber is reserved, and
-      an instance in it exits 2 saying so. - has no extension and
+      -format xml|json|ber, the extension and the token both matched
+      case-sensitively (a.XML names no format, as -format XML names
+      none), and -format applying to every instance of the
+      invocation (there is no per-instance spelling); an
+      unrecognized token, and an instance whose extension names none
+      of the three, are usage errors listing the values. xml and
+      json are assessed today; ber is reserved, and an instance in
+      it exits 2 saying so. - has no extension and
       needs -format, as in goxsd8 validate -format xml -schema
       s.xsd - < i.xml; without one it exits 2 saying so. An instance
       argument naming a directory exits 2 saying it is a directory.
@@ -583,18 +586,54 @@ func valuedHelpFlag(arg string) bool {
 }
 
 // flagShapedIn returns the first of a subcommand's positional arguments that
-// is spelled like a flag. flag.FlagSet.Parse stopped at the first positional,
-// so such a token was never read as a flag and is a misplacement rather than a
-// path (doc.go's argument vocabulary).
+// is spelled like a flag, once flags.Parse(args) has succeeded. Where
+// flag.FlagSet.Parse stopped at the first positional, such a token was never
+// read as a flag and is a misplacement rather than a path (doc.go's argument
+// vocabulary). Where it stopped at a -- it consumed as the end of options,
+// every positional is a path, -weird.xml and -q included, and none is
+// returned (#3332).
 //
 // The exact spelling - is standard input, an instance argument in its own
 // right; a file genuinely named -q is reached as ./-q, the escape hatch the
 // -schema - refusal already publishes for a file named -.
-func flagShapedIn(args []string) (string, bool) {
-	for _, a := range args {
+func flagShapedIn(flags *flag.FlagSet, args []string) (string, bool) {
+	if endedOptions(flags, args) {
+		return "", false
+	}
+	for _, a := range flags.Args() {
 		if strings.HasPrefix(a, "-") && a != stdinArg {
 			return a, true
 		}
 	}
 	return "", false
+}
+
+// endedOptions reports whether flags.Parse(args), which succeeded, consumed a
+// -- as the end of options. It reads the tokens Parse consumed, because the
+// operands flags.Args() returns are the same for a -- that is a flag's
+// value: validate -schema -- a.xml -q leaves [a.xml -q] as
+// validate -schema s.xsd -- a.xml -q does, and only the second -- ends
+// options.
+//
+// It walks the tokens the flag package consumed as that package does: a
+// flag spelled with = or naming a boolean flag is one token, any other flag
+// takes the next token as its value, whatever that token is spelled. A -- met
+// where a flag stands is the terminator, and is necessarily the last token
+// consumed. Every name it looks up is one Parse accepted, so Lookup finds it.
+func endedOptions(flags *flag.FlagSet, args []string) bool {
+	consumed := args[:len(args)-flags.NArg()]
+	for i := 0; i < len(consumed); i++ {
+		if consumed[i] == "--" {
+			return true
+		}
+		name := strings.TrimPrefix(strings.TrimPrefix(consumed[i], "-"), "-")
+		if strings.Contains(name, "=") {
+			continue
+		}
+		if b, ok := flags.Lookup(name).Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {
+			continue
+		}
+		i++
+	}
+	return false
 }

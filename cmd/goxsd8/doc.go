@@ -121,12 +121,14 @@
 //	    documents the assembly reached, so one document's rejection
 //	    does not silence another's shortfall.
 //	    Source format by extension (.xml, .json, .ber) or forced with
-//	    -format xml|json|ber, matched case-sensitively and applying to
-//	    every instance of the invocation (there is no per-instance
-//	    spelling); an unrecognized token, and an instance whose
-//	    extension names none of the three, are usage errors listing the
-//	    values. xml and json are assessed today; ber is reserved, and
-//	    an instance in it exits 2 saying so. - has no extension and
+//	    -format xml|json|ber, the extension and the token both matched
+//	    case-sensitively (a.XML names no format, as -format XML names
+//	    none), and -format applying to every instance of the
+//	    invocation (there is no per-instance spelling); an
+//	    unrecognized token, and an instance whose extension names none
+//	    of the three, are usage errors listing the values. xml and
+//	    json are assessed today; ber is reserved, and an instance in
+//	    it exits 2 saying so. - has no extension and
 //	    needs -format, as in goxsd8 validate -format xml -schema
 //	    s.xsd - < i.xml; without one it exits 2 saying so. An instance
 //	    argument naming a directory exits 2 saying it is a directory.
@@ -347,17 +349,23 @@
 //
 // The help flag is spelled -h, -help or --help, and those three bare tokens
 // are the whole vocabulary. The flag-package forms -help=true and -h=1 are not
-// help requests wherever they stand: before a subcommand one is a flag where a
-// name belongs, and after one it is a flag whose value the subcommand does not
-// accept. Both answers are usage errors naming the three spellings, and
-// neither reports the flag as one to move: no argument position accepts a
-// valued help spelling, so there is nowhere to move it to.
+// help requests wherever they stand, and where that is decides the answer.
+// Before a subcommand one is a flag where a name belongs, and among a
+// subcommand's flags it is a flag whose value the subcommand does not accept:
+// both are usage errors naming the three spellings, and neither reports the
+// flag as one to move, since no argument position accepts a valued help
+// spelling. After a subcommand's first positional it is a misplaced
+// flag-shaped token, the exit-2 diagnosis stated below, which names none of
+// the spellings. After a -- that ended a subcommand's options it is a
+// positional like any other there: a path to parse and validate, and to gen
+// the positional it takes none of.
 //
 // The usage above owns where a help flag is read and why help is unscoped.
 // No argument beside a help flag is examined, so goxsd8 -xyz -help prints
-// the usage and exits 0 as well. That scan is positional-blind, which is
-// also why -- carries no end-of-options meaning: goxsd8 -- -help is a help
-// request.
+// the usage and exits 0 as well. That scan is positional-blind and gives --
+// no end-of-options meaning: goxsd8 -- -help and goxsd8 validate -schema s.xsd
+// -- -help are help requests, exit 0, so an argument spelled -h, -help or
+// --help is reached as ./-help even after --.
 //
 // Everything else is positional. The subcommand name comes first and the
 // common flags are its own, following it: goxsd8 parse -q a.xsd, never
@@ -371,6 +379,14 @@
 // spelling - is never a misplaced flag — it is validate's standard-input
 // instance argument — and a positional genuinely named -q is spelled ./-q, as
 // a file named - is.
+//
+// A -- standing in a flag's place, before a subcommand's first positional, is
+// read by the flag package as the end of that subcommand's options: every
+// argument after it is a positional, flag-shaped or not, so goxsd8 validate
+// -schema s.xsd -- -weird.xml -q.xml assesses the files -weird.xml and
+// -q.xml. A -- standing as a flag's value, as in validate -schema -- a.xml,
+// is that value and ends nothing, and a -- after a positional is itself a
+// misplaced flag-shaped token, exit 2.
 //
 // A schema argument is a filesystem path, resolved to an absolute one before
 // the document is read, so an argument spelled absolutely or through "../"

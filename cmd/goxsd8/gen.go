@@ -66,7 +66,7 @@ func runGen(args []string, stderr io.Writer) int {
 		}
 		return subcommandUsageError(stderr, "gen", fmt.Sprintf("goxsd8: gen: %v", err))
 	}
-	if arg, ok := flagShapedIn(flags.Args()); ok {
+	if arg, ok := flagShapedIn(flags, args); ok {
 		return subcommandUsageError(stderr, "gen", fmt.Sprintf(flagAfterPositionalFmt, "gen", arg))
 	}
 	if len(flags.Args()) > 0 {

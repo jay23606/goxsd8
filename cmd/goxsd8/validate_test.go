@@ -1768,6 +1768,74 @@ func TestValidateFlagAfterPositional(t *testing.T) {
 	}
 }
 
+// TestValidateEndOfOptions pins doc.go's reading of -- for validate (#3332):
+// one the flag package consumed before the first instance argument ends
+// validate's options, so every later argument is an instance, a second
+// flag-shaped one included. A -- that is -schema's value ends nothing, so a
+// flag-shaped token after the first instance is still misplaced, and so is a
+// -- standing after an instance. The files named like flags are valid
+// instances, so a row reading them as paths exits 0.
+func TestValidateEndOfOptions(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []struct{ name, from string }{
+		{"order.xsd", orderSchema}, {"a.xml", validInstance}, {"-weird.xml", validInstance}, {"-q.xml", validInstance},
+	} {
+		name := f.name
+		body, err := os.ReadFile(f.from)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(dir)
+	misplaced := func(arg string) string {
+		return fmt.Sprintf(flagAfterPositionalFmt, "validate", arg) + "\n" + validateUsageLine + "\n" + helpPointer + "\n"
+	}
+	rows := []struct {
+		name   string
+		args   []string
+		code   int
+		stderr string
+	}{
+		{"operand after --", []string{"-schema", "order.xsd", "--", "-weird.xml"}, exitOK, ""},
+		{"two flag-shaped operands after --", []string{"-schema", "order.xsd", "--", "-weird.xml", "-q.xml"}, exitOK, ""},
+		{"-- after a boolean flag", []string{"-schema", "order.xsd", "-no-hints", "--", "-weird.xml"}, exitOK, ""},
+		{"-- after a flag spelled with =", []string{"-schema=order.xsd", "--", "-weird.xml"}, exitOK, ""},
+		{"-- as -schema's value", []string{"-schema", "--", "a.xml", "-weird.xml"}, exitUsage, misplaced("-weird.xml")},
+		{"-- after a positional", []string{"-schema", "order.xsd", "a.xml", "--", "-weird.xml"}, exitUsage, misplaced("--")},
+	}
+	for _, r := range rows {
+		t.Run(r.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := run(append([]string{"validate"}, r.args...), &stdout, &stderr); code != r.code {
+				t.Errorf("validate %q = %d, want %d", r.args, code, r.code)
+			}
+			if stdout.Len() != 0 {
+				t.Errorf("stdout = %q, want empty", stdout.String())
+			}
+			if stderr.String() != r.stderr {
+				t.Errorf("stderr = %q, want %q", stderr.String(), r.stderr)
+			}
+		})
+	}
+}
+
+// TestValidateExtensionCaseSensitive pins usage's claim that the extension is
+// matched case-sensitively, as -format's token is: a.XML names no source
+// format and is the usage error listing the values (#1318).
+func TestValidateExtensionCaseSensitive(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"validate", "-schema", orderSchema, "a.XML"}, &stdout, &stderr); code != exitUsage {
+		t.Fatalf("code = %d, want %d (stderr %q)", code, exitUsage, stderr.String())
+	}
+	want := `goxsd8: validate: a.XML: the extension ".XML" names no source format; pass -format xml, json, ber` + "\n"
+	if !strings.HasPrefix(stderr.String(), want) {
+		t.Errorf("stderr = %q, want it to begin %q", stderr.String(), want)
+	}
+}
+
 // TestValidateMalformedInstanceIsAVerdict pins where a source fault lands: an
 // instance the reader cannot finish was not shown valid, so the fault is
 // rendered beside the violations on stdout and charged the invalid code — it

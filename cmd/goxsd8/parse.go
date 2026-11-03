@@ -45,7 +45,7 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 	// argument was never read as a flag, and compiling the arguments around it
 	// would print a summary the misplaced flag may have asked to suppress
 	// (#1290).
-	if arg, ok := flagShapedIn(locations); ok {
+	if arg, ok := flagShapedIn(flags, args); ok {
 		return subcommandUsageError(stderr, "parse", fmt.Sprintf(flagAfterPositionalFmt, "parse", arg))
 	}
 	if len(locations) == 0 {
