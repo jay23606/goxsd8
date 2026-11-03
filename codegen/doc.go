@@ -673,15 +673,16 @@
 //     with no type attribute and no <simpleType> child (§3.2.2.1
 //     dcl.att.global, §3.2.2.2 dcl.att.local), gives a special type's string,
 //     an atomic Go type, a slice, or a union's sealed interface, as an
-//     element's does; {required} true gives that type, false a pointer to it
-//     (*[]T for a list), but the bare interface for a union, nil meaning
-//     absent from the post-schema-validation infoset, which supplies an
-//     attribute whose use has an effective value constraint (below).
+//     element's does. {required} true gives that type, and so does an
+//     effective value constraint (below) on a use whose declaration is not a
+//     built-in xsi: one; any other use gives a pointer to it (*[]T for a
+//     list), but the bare interface for a union, nil meaning absent from the
+//     post-schema-validation infoset.
 //   - The use's effective value constraint (§3.5.4 key-evc), default or fixed,
 //     whether the use or a global declaration it references carries it, is
-//     accepted and changes neither the field's Go type nor its name. The field
-//     holds the attribute of the post-schema-validation infoset, so for an
-//     optional use whose declaration is not a built-in xsi: one, an absent
+//     accepted and changes the field's Go type as above, not its name. The
+//     field holds the attribute of the post-schema-validation infoset, so for
+//     an optional use whose declaration is not a built-in xsi: one, an absent
 //     attribute's field holds the constraint's value (§3.4.4.2 key-dflt-att,
 //     §3.4.5.1 sic-attrDefault). Enforcing a fixed value is the validator's.
 //   - An {attribute wildcard} of a type emitted as a struct, its own, one an

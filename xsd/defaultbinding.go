@@ -221,12 +221,13 @@ func (s *Schema) ownedAttributeDeclaration(u AttributeUse) (AttributeDeclaration
 // [Schema.ResolvedAttributeDeclaration], and so does the precondition: u must be
 // a use of s, on the terms that method states.
 //
-// Two callers read it, and BOTH read the term by that name: finalize's
+// Every caller reads the term by that name: finalize's
 // checkAttributeValueConstraintSubsumes, where loc-testSubP (§3.4.6.4) clause 5.2
-// invokes it, and the instance validator's cvc-complex-type (§3.4.4.2) clause 4,
-// which validates the {lexical form} of a ·defaulted attribute·'s effective value
-// constraint — a use qualifying as one by the ·defaulted attribute· definition's
-// own clause 3, "U's ·effective value constraint· is not ·absent·" (#766).
+// invokes it, and each reader of a ·defaulted attribute·, a use qualifying as one
+// by that definition's own clause 3, "U's ·effective value constraint· is not
+// ·absent·", among them the instance validator's cvc-complex-type (§3.4.4.2)
+// clause 4, which validates the {lexical form} of its effective value constraint
+// (#766).
 //
 // It is NOT what cvc-au (§3.5.4) or cvc-attribute (§3.2.4.1) clause 4 read. cvc-au
 // tests U.{value constraint} and clause 4 tests D.{value constraint}; routing

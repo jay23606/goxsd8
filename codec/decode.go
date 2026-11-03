@@ -54,8 +54,9 @@ var (
 // constraint (§3.5.4 key-evc; §3.4.4.2 key-dflt-att, §3.4.5.1
 // sic-attrDefault), and for an element with neither element nor character
 // children whose declaration has a {value constraint} (§3.3.4.3 cvc-elt clause
-// 5.1, §3.3.5.4 sic-eltType). So an optional attribute use with an effective
-// value constraint never decodes to a nil *string; a whitespace-only element
+// 5.1, §3.3.5.4 sic-eltType). So the field of an optional attribute use with an
+// effective value constraint is a string, as codegen emits it, holding the
+// supplied value when the attribute is absent; a whitespace-only element
 // has a character child and holds its own value; and an element absent from
 // the instance supplies nothing, its field nil or not appended to.
 //
@@ -401,7 +402,9 @@ func (b *binding) localElement(el xsd.ElementDeclaration, occurs xsd.Occurs) (fi
 }
 
 // attributeUse returns the field, its name unset, of attribute use u, or the
-// construct Decode declines it for and the subject naming it.
+// construct Decode declines it for and the subject naming it. The field's
+// shape is codegen's, as the package doc's "# What decodes" states, and needs
+// no xsi: test here: an xsi: use declines before its shape is picked.
 func (b *binding) attributeUse(u xsd.AttributeUse) (field, construct, string, error) {
 	decl, ok := b.schema.ResolvedAttributeDeclaration(u)
 	if !ok {
@@ -420,10 +423,11 @@ func (b *binding) attributeUse(u xsd.AttributeUse) (field, construct, string, er
 		return field{}, d, subject, err
 	}
 	f := field{shape: shapeOptional, st: st}
-	if u.Required() {
+	vc, has := b.schema.EffectiveValueConstraint(u)
+	if u.Required() || has {
 		f.shape = shapeOne
 	}
-	if vc, has := b.schema.EffectiveValueConstraint(u); has {
+	if has {
 		f.supplied, err = b.supply(st, vc, subject)
 	}
 	return f, 0, subject, err

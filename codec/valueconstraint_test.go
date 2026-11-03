@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -93,16 +94,13 @@ func TestDecodeElementValueConstraint(t *testing.T) {
 }
 
 // TestDecodeAttributeValueConstraint pins Decode's doc on an attribute use
-// with an effective value constraint, default or fixed (key-dflt-att): the
-// attribute present, present and empty, and absent, the constraint the use's
-// own or its declaration's (§3.5.4 key-evc).
+// with an effective value constraint, default or fixed (key-dflt-att), whose
+// field is a string: the attribute present, present and empty, and absent,
+// the constraint the use's own or its declaration's (§3.5.4 key-evc), and a
+// *string field ErrTypeMismatch (item 6).
 func TestDecodeAttributeValueConstraint(t *testing.T) {
-	str := func(s string) *string { return &s }
 	const a = `<s:a>x</s:a>`
-	type opt struct {
-		A string
-		B *string
-	}
+	type val struct{ A, B string }
 	uses := func(attrs string) string {
 		return root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>` + attrs)
 	}
@@ -112,31 +110,43 @@ func TestDecodeAttributeValueConstraint(t *testing.T) {
 		run  func(t *testing.T)
 	}{
 		{"default, present", func(t *testing.T) {
-			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" default="d"/>`), ` b="v"`, a, opt{A: "x", B: str("v")})
+			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" default="d"/>`), ` b="v"`, a, val{A: "x", B: "v"})
 		}},
 		{"default, present and empty", func(t *testing.T) {
-			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" default="d"/>`), ` b=""`, a, opt{A: "x", B: str("")})
+			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" default="d"/>`), ` b=""`, a, val{A: "x", B: ""})
 		}},
 		{"default, absent", func(t *testing.T) {
-			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" default="d"/>`), "", a, opt{A: "x", B: str("d")})
+			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" default="d"/>`), "", a, val{A: "x", B: "d"})
 		}},
 		{"fixed, present", func(t *testing.T) {
-			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" fixed="f"/>`), ` b="f"`, a, opt{A: "x", B: str("f")})
+			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" fixed="f"/>`), ` b="f"`, a, val{A: "x", B: "f"})
 		}},
 		{"fixed, absent", func(t *testing.T) {
-			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" fixed="f"/>`), "", a, opt{A: "x", B: str("f")})
+			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" fixed="f"/>`), "", a, val{A: "x", B: "f"})
 		}},
 		{"required and fixed, present", func(t *testing.T) {
-			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" use="required" fixed="f"/>`), ` b="f"`, a, struct{ A, B string }{A: "x", B: "f"})
+			decodesTo(t, uses(`<xs:attribute name="b" type="xs:string" use="required" fixed="f"/>`), ` b="f"`, a, val{A: "x", B: "f"})
 		}},
 		{"the declaration's default, absent", func(t *testing.T) {
-			decodesTo(t, global+uses(`<xs:attribute ref="s:b"/>`), "", a, opt{A: "x", B: str("g")})
+			decodesTo(t, global+uses(`<xs:attribute ref="s:b"/>`), "", a, val{A: "x", B: "g"})
 		}},
 		{"the use's own default over the declaration's, absent", func(t *testing.T) {
-			decodesTo(t, global+uses(`<xs:attribute ref="s:b" default="u"/>`), "", a, opt{A: "x", B: str("u")})
+			decodesTo(t, global+uses(`<xs:attribute ref="s:b" default="u"/>`), "", a, val{A: "x", B: "u"})
 		}},
 		{"default normalized by the type's whiteSpace, absent", func(t *testing.T) {
-			decodesTo(t, uses(`<xs:attribute name="b" type="xs:token" default="  x  y "/>`), "", a, opt{A: "x", B: str("x y")})
+			decodesTo(t, uses(`<xs:attribute name="b" type="xs:token" default="  x  y "/>`), "", a, val{A: "x", B: "x y"})
+		}},
+		{"default, the field a *string", func(t *testing.T) {
+			type opt struct {
+				A string
+				B *string
+			}
+			schema := schemaOf(t, uses(`<xs:attribute name="b" type="xs:string" default="d"/>`))
+			got, err := Decode[opt](schema, strict.New(), instanceOf("", a))
+			const want = "codec: T is not the struct codegen emits for the document element: field 1 of codec.opt is B *string where codegen emits B string"
+			if got != nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
+				t.Errorf("Decode = (%v, %v), want no value and %q", got, err, want)
+			}
 		}},
 	}
 	for _, row := range rows {

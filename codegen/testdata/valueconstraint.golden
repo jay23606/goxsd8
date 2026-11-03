@@ -4,24 +4,26 @@ package valueconstraint
 
 import "math/big"
 
-// Greeting is generated from element greeting declared at testdata/valueconstraint.xsd:13:3.
+// Greeting is generated from element greeting declared at testdata/valueconstraint.xsd:18:3.
 type Greeting string
 
-// Version is generated from element version declared at testdata/valueconstraint.xsd:14:3.
+// Version is generated from element version declared at testdata/valueconstraint.xsd:19:3.
 type Version int32
 
-// Record is generated from element record declared at testdata/valueconstraint.xsd:20:3.
+// Record is generated from element record declared at testdata/valueconstraint.xsd:25:3.
 type Record struct {
-	Status   string
-	Kind     string
-	Count    *int32
-	Total    Amount
-	Lang     *string
-	Revision int32
-	Currency *string
+	Status                    string
+	Kind                      string
+	Count                     *int32
+	Total                     Amount
+	Lang                      string
+	Note                      string
+	Revision                  int32
+	Currency                  string
+	NoNamespaceSchemaLocation *string
 }
 
-// Amount is generated from complex type amount declared at testdata/valueconstraint.xsd:15:3.
+// Amount is generated from complex type amount declared at testdata/valueconstraint.xsd:20:3.
 type Amount struct {
 	Value big.Rat
 }
