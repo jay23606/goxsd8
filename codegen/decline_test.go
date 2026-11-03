@@ -270,7 +270,7 @@ func TestGenerateDeclines(t *testing.T) {
 // of which is an *xsderr.Error or holds a misused format verb, the first
 // wrapping errors.ErrUnsupported and holding a *DeclineError that has
 // Construct kind and a text holding detail, a Loc on line 2 of s.xsd and the
-// limitation's wording, and writes nothing.
+// refusal's wording, and writes nothing.
 func assertFirstDecline(t *testing.T, schema *xsd.Schema, kind construct, detail string) {
 	t.Helper()
 	out := filepath.Join(moduleTempDir(t), "out")
@@ -298,7 +298,7 @@ func assertFirstDecline(t *testing.T, schema *xsd.Schema, kind construct, detail
 	if !strings.HasPrefix(err.Error(), "codegen: target 0: ") {
 		t.Errorf("error %q does not open with %q", err, "codegen: target 0: ")
 	}
-	for _, want := range []string{detail, " at s.xsd:2:", "a generator limitation, not a schema fault"} {
+	for _, want := range []string{detail, " at s.xsd:2:", "a generator refusal, not a schema fault"} {
 		if !strings.Contains(de.Error(), want) {
 			t.Errorf("first decline %q does not contain %q", de, want)
 		}
@@ -399,7 +399,7 @@ func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 	}
 	seq := func(particle string) string { return `<xs:sequence>` + particle + `</xs:sequence>` }
 	decline := func(subject, col string) string {
-		return "codegen: target 0: attribute amount of " + subject + " with {type definition} money, whose {primitive type definition} is money at s.xsd:2:" + col + " is not supported by codegen, a generator limitation, not a schema fault"
+		return "codegen: target 0: attribute amount of " + subject + " with {type definition} money, whose {primitive type definition} is money at s.xsd:2:" + col + " is not supported by codegen, a generator refusal, not a schema fault"
 	}
 	tests := []struct {
 		name, body string
@@ -457,7 +457,7 @@ func TestGenerateDeclinesSubstitutionMemberOnce(t *testing.T) {
 		member = `<xs:element name="m" substitutionGroup="h" type="money"/>`
 	)
 	decline := func(loc string) []string {
-		return []string{"codegen: target 0: element m with {type definition} money, whose {primitive type definition} is money at s.xsd:" + loc + " is not supported by codegen, a generator limitation, not a schema fault"}
+		return []string{"codegen: target 0: element m with {type definition} money, whose {primitive type definition} is money at s.xsd:" + loc + " is not supported by codegen, a generator refusal, not a schema fault"}
 	}
 	for _, tt := range []struct {
 		name, head string

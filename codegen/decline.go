@@ -36,7 +36,7 @@ func (e *DeclineError) Loc() xsderr.Loc { return e.loc }
 
 // Error names the construct and the Loc; it does not name the target.
 func (e *DeclineError) Error() string {
-	return e.detail + " at " + e.loc.String() + " is not supported by codegen, a generator limitation, not a schema fault"
+	return e.detail + " at " + e.loc.String() + " is not supported by codegen, a generator refusal, not a schema fault"
 }
 
 // Unwrap returns errors.ErrUnsupported.

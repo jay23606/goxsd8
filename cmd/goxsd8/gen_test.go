@@ -529,7 +529,7 @@ func TestGenDeclines(t *testing.T) {
 	const (
 		valueCycle = `<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`
 		cycle      = "local element x reaching complex type c again through elements that each occur exactly once at "
-		tail       = " is not supported by codegen, a generator limitation, not a schema fault\n"
+		tail       = " is not supported by codegen, a generator refusal, not a schema fault\n"
 	)
 	reaching := func(name string) string {
 		return "<element ref> particle to element " + name + " reaching element " + name + " again through elements that each occur exactly once at "

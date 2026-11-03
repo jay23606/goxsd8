@@ -184,7 +184,7 @@ func (t Target) failed(i int, err error) *TargetError {
 // "codegen: " before it. A *TargetError's Index method returns N, and it
 // unwraps to the failure the opening precedes.
 //
-// A decline is a generator limitation, not a schema fault: it is a
+// A decline is a generator refusal, not a schema fault: it is a
 // *DeclineError, never an *xsderr.Error, and it wraps errors.ErrUnsupported,
 // so errors.Is(e, errors.ErrUnsupported) reports an element e that holds a
 // decline, and errors.As(e, &de) retrieves that element's *DeclineError. Its

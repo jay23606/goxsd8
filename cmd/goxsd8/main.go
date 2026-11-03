@@ -66,7 +66,7 @@ Usage (contract; subcommands land with their milestones):
               proven invalid and something was not decided: not a pass,
               so a gate that must fail closed treats 4 as a failure.
               gen: a construct the generator declines, a generator
-              limitation and not a schema fault, so nothing is written.
+              refusal and not a schema fault, so nothing is written.
               Nothing was proven wrong and something was not done: not
               a pass either. And under -strict, in parse, validate and
               gen alike: a schemaLocation named on stderr resolving to

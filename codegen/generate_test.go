@@ -16,7 +16,7 @@ const (
 	acceptedDoc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="xs:string"/></xs:schema>`
 	// declinedText is the error text of declinedSchema's one decline, after
 	// its target's opening.
-	declinedText = "element e with {type definition} money, whose {primitive type definition} is money at s.xsd:2:1 is not supported by codegen, a generator limitation, not a schema fault"
+	declinedText = "element e with {type definition} money, whose {primitive type definition} is money at s.xsd:2:1 is not supported by codegen, a generator refusal, not a schema fault"
 )
 
 // declinedSchema is a schema Generate declines once, through
@@ -540,7 +540,7 @@ func TestModuleDirective(t *testing.T) {
 // contributes nothing.
 func TestGenerateCollectsDeclines(t *testing.T) {
 	const (
-		tail      = " is not supported by codegen, a generator limitation, not a schema fault"
+		tail      = " is not supported by codegen, a generator refusal, not a schema fault"
 		primitive = " with {type definition} money, whose {primitive type definition} is money at s.xsd:"
 	)
 	uncovered := Construct{constructUncoveredPrimitive}
