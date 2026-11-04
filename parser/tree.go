@@ -24,12 +24,14 @@ type Node interface {
 // those of the underlying xmltree.StartElement, to which the accessors delegate
 // — the single canonical QName and scope implementation, never re-derived here.
 //
-// Name, Attr and Children are exported for a single consumer, this module's
-// own conformance harness, which walks raw schema documents. Loc is exported
-// because the Node interface carries it, not because anything calls it. No use
-// case outside this module is known, so pre-1.0 these names may be unexported
-// without a deprecation path — the ratchet and the gate are the only
-// compatibility promises (docs/PLAN.md, "v1.0 — the stability line").
+// Name, Attr, Children and Loc are exported for two consumers in this module:
+// its conformance harness, which walks raw schema documents, and the CLI
+// (cmd/goxsd8), which reads back by its Loc the directive element an
+// [UnfollowedDirective] locates, to name its kind and attributes. Loc is also
+// carried by the Node interface. No use case outside this module is known, so
+// pre-1.0 these names may be unexported without a deprecation path — the
+// ratchet and the gate are the only compatibility promises (docs/PLAN.md,
+// "v1.0 — the stability line").
 type Element struct {
 	src *xmltree.StartElement
 	// parent is the enclosing element, nil for the tree's root. The link is set

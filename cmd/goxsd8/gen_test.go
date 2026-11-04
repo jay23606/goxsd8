@@ -290,7 +290,7 @@ func TestGenNamesAnUnresolvedDirective(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("gen = %d, want %d (stderr %q)", code, exitOK, stderr.String())
 	}
-	want := "goxsd8: gen: " + abs + ":10:3: this schemaLocation resolved to no document"
+	want := "goxsd8: gen: " + abs + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document and was skipped`
 	if !strings.HasPrefix(stderr.String(), want) {
 		t.Errorf("gen stderr = %q, want it to open %q", stderr.String(), want)
 	}
@@ -309,7 +309,7 @@ func TestGenStrictChargesASkip(t *testing.T) {
 	if code != exitUndecided {
 		t.Fatalf("gen -strict = %d, want %d (stderr %q)", code, exitUndecided, stderr.String())
 	}
-	want := "goxsd8: gen: " + absFixture(t, shortSchema) + ":10:3: this schemaLocation resolved to no document"
+	want := "goxsd8: gen: " + absFixture(t, shortSchema) + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document and was skipped`
 	if !strings.HasPrefix(stderr.String(), want) {
 		t.Errorf("gen -strict stderr = %q, want it to open %q", stderr.String(), want)
 	}

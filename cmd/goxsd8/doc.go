@@ -109,18 +109,25 @@
 //	    like a rejection, though nothing about the schema was decided.
 //	    An <xs:include>, <xs:import>, <xs:override> or empty
 //	    <xs:redefine> whose schemaLocation resolves to no document is
-//	    named on stderr at its own position, with no rule ID and,
-//	    without -strict, no change of exit code: the skip is legal, so
-//	    the summary above is printed off a schema short of whatever
-//	    that document declares. -q does not silence it. Under -strict
-//	    the summary is printed all the same and the argument is
-//	    charged 4. Such a directive of a REJECTED schema
+//	    skipped and named on stderr at its own position, by its kind
+//	    and its schemaLocation value and an <xs:import> by its
+//	    namespace too, with no rule ID and, without -strict, no change
+//	    of exit code: no rule charges the skip — src-include and
+//	    src-import make it legal for an <xs:import> and for an
+//	    <xs:include> outside every <xs:override>'s target set, and the
+//	    spec states nothing either way for an <xs:override>, an empty
+//	    <xs:redefine>, or an <xs:include> inside such a target set,
+//	    which §F.2 rewrites into an <xs:override> — so the summary
+//	    above is printed off a schema short of whatever that document
+//	    declares. -q does not silence it.
+//	    Under -strict the summary is printed all the same and the
+//	    argument is charged 4. Such a directive of a REJECTED schema
 //	    is named the same way, for the directives assembly reached
 //	    before it stopped, in a line saying the assembly was rejected
 //	    rather than compiled and saying nothing about whether the
 //	    unread document had a part in that. The I/O fault above is not
-//	    the legal skip: it is charged 1, though the faulting run names
-//	    the directive on stderr too, before printing the fault.
+//	    that skip: it is charged 1, though the faulting run names the
+//	    directive on stderr too, before printing the fault.
 //	    A bare <xs:import>, which names no document, is not reported.
 //
 //	goxsd8 validate [-q] [-v] [-strict] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>...
@@ -235,9 +242,9 @@
 //	    <xs:redefine>, is charged 3: the schema set does not compile,
 //	    though nothing about the schema was decided. Of the I/O faults
 //	    reading a schema document, exit 2 covers only a -schema
-//	    argument that cannot be read. The fault is not the legal skip
-//	    of a schemaLocation resolving to no document, which moves no
-//	    exit code without -strict, though the faulting run names the
+//	    argument that cannot be read. The fault is not the skip of a
+//	    schemaLocation resolving to no document, which moves no exit
+//	    code without -strict, though the faulting run names the
 //	    directive on stderr too, before printing the fault.
 //	    A declined check is one of these kinds:
 //	      - assertions: an <xs:assert> {test}, or an assertions
@@ -420,9 +427,8 @@
 // subtree: a schema document may name any path the invoking user can read, so
 // an <xs:include schemaLocation="../../../etc/passwd"> is served like any
 // other. A directive whose schemaLocation resolves to no document is skipped
-// rather than rejected because src-include clause 2.4 and src-import make
-// that skip legal, which is why the usage block names it in a line and not as
-// an error.
+// rather than rejected, and the usage block names it in a line and not as an
+// error, for the reason that block gives: no rule charges the skip.
 //
 // validate composes its -schema documents into ONE schema set, each a root of
 // one parser.ParseSet assembly read in its own target namespace, and an XML

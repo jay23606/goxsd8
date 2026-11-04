@@ -688,7 +688,7 @@ func TestValidateNamesAnUnresolvedDirectiveOfARejectedSet(t *testing.T) {
 	}
 	// The <xs:include> the fixture carries on line 10, in the rejected
 	// assembly's wording.
-	note := "goxsd8: validate: " + abs + ":10:3: this schemaLocation resolved to no document; the rejected assembly is short of whatever that document declares\n"
+	note := "goxsd8: validate: " + abs + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document; the rejected assembly is short of whatever that document declares` + "\n"
 
 	var stdout, stderr bytes.Buffer
 	args := []string{"validate", "-no-hints", "-schema", shortSchema, "-schema", brokenSchema, shortValidInstance}
@@ -1008,9 +1008,9 @@ func TestValidateStrictChargesASkip(t *testing.T) {
 		want       int
 		wantStderr string // a substring every row's stderr carries, "" for none
 	}{
-		{"set directive", []string{"-strict", "-schema", shortSchema, shortValidInstance}, exitUndecided, "this schemaLocation resolved to no document"},
-		{"set directive beside an invalid instance", []string{"-strict", "-schema", shortSchema, shortValidInstance, shortInvalidInstance}, exitInvalid, "this schemaLocation resolved to no document"},
-		{"set directive, default", []string{"-schema", shortSchema, shortValidInstance}, exitOK, "this schemaLocation resolved to no document"},
+		{"set directive", []string{"-strict", "-schema", shortSchema, shortValidInstance}, exitUndecided, "resolved to no document and was skipped"},
+		{"set directive beside an invalid instance", []string{"-strict", "-schema", shortSchema, shortValidInstance, shortInvalidInstance}, exitInvalid, "resolved to no document and was skipped"},
+		{"set directive, default", []string{"-schema", shortSchema, shortValidInstance}, exitOK, "resolved to no document and was skipped"},
 		{"hint, composing", []string{"-strict", "-schema", orderSchema, composing}, exitUndecided, "resolved to no document, which is legal and skipped"},
 		{"hint, composing, beside a clean instance", []string{"-strict", "-schema", orderSchema, validInstance, composing}, exitUndecided, "the schema location hint"},
 		{"hint, rejected", []string{"-strict", "-schema", orderSchema, rejected}, exitUndecided, "ignoring its schema location hints"},
@@ -1050,7 +1050,7 @@ func TestValidateSchemaDirectiveIsNotReportedAsAHint(t *testing.T) {
 		`</xs:schema>`)
 	write("good.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/hinted"><xs:element name="note" type="xs:string"/></xs:schema>`)
 	instance := write("inst.xml", `<h:note xmlns:h="http://example.com/hinted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://example.com/hinted good.xsd">ok</h:note>`)
-	want := "goxsd8: validate: " + base + ":3:3: this schemaLocation resolved to no document, which is legal and skipped; the compiled schema is short of whatever that document declares\n"
+	want := "goxsd8: validate: " + base + `:3:3: this <include>'s schemaLocation "nosuch-nested.xsd" resolved to no document and was skipped; the compiled schema is short of whatever that document declares` + "\n"
 
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"validate", "-schema", base, instance}, &stdout, &stderr); code != exitOK {

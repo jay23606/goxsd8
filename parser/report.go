@@ -73,8 +73,9 @@ func (r *AssemblyReport) Documents() []AssembledDocument { return r.documents }
 //
 // A NON-EMPTY <xs:redefine> is the one directive for which an unresolved
 // location is also an error (src-redefine clause 1, §4.2.4): it is recorded here
-// too, and [ParseSet] returns the verdict alongside. An EMPTY one keeps
-// <include>'s non-error skip, since clause 1's antecedent does not fire for it.
+// too, and [ParseSet] returns the verdict alongside. An EMPTY one is recorded
+// with no verdict, since clause 1's antecedent does not fire for it, though no
+// rule calls its skip legal either.
 //
 // It records references the assembly ATTEMPTED and came back empty from, which
 // is narrower than "every reference the document set contains":

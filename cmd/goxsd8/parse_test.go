@@ -332,7 +332,7 @@ func TestParseNonSchemaRootCarriesNoRule(t *testing.T) {
 //
 // Exit 1, not 2 — the code the contract reserves for a schema verdict, though
 // nothing here was decided about the schema. #1419 ruled it stays 1, and the
-// contract now says so beside the legal skip it is not;
+// contract now says so beside the skip it is not;
 // TestValidateIOFaultOnReferencedDocumentIsASchemaFault pins validate's 3.
 //
 // The pin stops where the operating system's own words begin. Everything
@@ -365,7 +365,7 @@ func TestParseIOFaultOnReferencedDocumentCarriesNoRule(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("stderr = %q, want two lines: the unfollowed-directive shortfall, then the violation", stderr.String())
 	}
-	if !strings.Contains(lines[0], "this schemaLocation resolved to no document") {
+	if !strings.Contains(lines[0], `this <include>'s schemaLocation "notdir-include.xsd/inner.xsd" resolved to no document;`) {
 		t.Errorf("stderr line 1 = %q, want reportUnfollowed's shortfall line", lines[0])
 	}
 	line := lines[1]
@@ -385,51 +385,95 @@ func TestParseIOFaultOnReferencedDocumentCarriesNoRule(t *testing.T) {
 }
 
 // TestParseNamesAnUnresolvedDirective is #1260's acceptance: a schema argument
-// whose own directive names a document that is not there compiles — src-include
-// clause 2.4 makes the skip legal — so nothing about the summary or the exit
-// code moves, and the shortfall behind them is named on stderr rather than
-// reachable only behind -v.
+// whose own directive names a document that is not there compiles — no rule
+// charges the skip — so nothing about the summary or the exit code moves, and
+// the shortfall behind them is named on stderr rather than reachable only
+// behind -v.
 //
-// Both fixtures are the NON-ERROR class. An EMPTY <xs:redefine> keeps
-// <xs:include>'s skip, src-redefine clause 1 being antecedent on children other
-// than <annotation>; a NON-EMPTY one whose location does not resolve violates
-// that clause and is a rejected schema — the exit-1 path parseOne already had,
-// which this reporting leaves untouched.
+// Each row pins the whole line, which names the directive's kind and its
+// schemaLocation value as written, and an <import>'s namespace or its absence
+// (#2797). The <override> rows and the empty <redefine> row pin that the line
+// calls the skip skipped and never legal, for the reason reportUnfollowed's doc
+// gives. A NON-EMPTY <xs:redefine> whose location does not resolve
+// violates src-redefine clause 1 and is a rejected schema instead, on the
+// exit-1 path.
 func TestParseNamesAnUnresolvedDirective(t *testing.T) {
+	const (
+		open    = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/short">` + "\n"
+		present = "\n" + `<xs:element name="present" type="xs:int"/></xs:schema>`
+		// The tail every compiled directive line ends with.
+		tail = " resolved to no document and was skipped; the compiled schema is short of whatever that document declares\n"
+	)
+	dir := t.TempDir()
 	cases := []struct {
 		name    string
-		fixture string
+		fixture string // a testdata path, or "" for body written to a temporary file
+		body    string // the directive, on line 2 of the temporary file
+		at      string // the directive's line:column
+		subject string // what the line names the directive by
 	}{
-		{"include", "testdata/unresolved-include.xsd"},
-		{"empty redefine", "testdata/unresolved-empty-redefine.xsd"},
+		{"include", "testdata/unresolved-include.xsd", "", "10:3", `this <include>'s schemaLocation "nosuchdocument.xsd"`},
+		{"empty redefine", "testdata/unresolved-empty-redefine.xsd", "", "10:3", `this <redefine>'s schemaLocation "nosuchdocument.xsd"`},
+		{"import", "", `<xs:import namespace="urn:x" schemaLocation="typo.xsd"/>`, "2:1", `this <import>'s schemaLocation "typo.xsd", for namespace "urn:x",`},
+		{"import of no namespace", "", `<xs:import schemaLocation="typo.xsd"/>`, "2:1", `this <import>'s schemaLocation "typo.xsd", for no namespace,`},
+		{"empty override", "", `<xs:override schemaLocation="typo.xsd"/>`, "2:1", `this <override>'s schemaLocation "typo.xsd"`},
+		{"non-empty override", "", `<xs:override schemaLocation="typo.xsd"><xs:simpleType name="t"><xs:restriction base="xs:int"/></xs:simpleType></xs:override>`, "2:1", `this <override>'s schemaLocation "typo.xsd"`},
 	}
-	for _, c := range cases {
+	for i, c := range cases {
+		path := c.fixture
+		if path == "" {
+			path = filepath.Join(dir, fmt.Sprintf("row%d.xsd", i))
+			if err := os.WriteFile(path, []byte(open+c.body+present), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
 		var stdout, stderr bytes.Buffer
-		if code := run([]string{"parse", c.fixture}, &stdout, &stderr); code != exitOK {
-			t.Errorf("%s: parse = %d, want %d — an unresolved schemaLocation is not an error", c.name, code, exitOK)
+		if code := run([]string{"parse", path}, &stdout, &stderr); code != exitOK {
+			t.Errorf("%s: parse = %d, want %d — an unresolved schemaLocation is not an error (stderr %q)", c.name, code, exitOK, stderr.String())
 		}
 		if want := "  elements: 1\n"; !strings.Contains(stdout.String(), want) {
 			t.Errorf("%s: stdout =\n%s\nwant %q — the summary is unchanged", c.name, stdout.String(), want)
 		}
-		line := strings.TrimSuffix(stderr.String(), "\n")
-		if strings.Contains(line, "\n") {
-			t.Errorf("%s: stderr = %q, want one line — the fixture carries one directive", c.name, stderr.String())
-		}
-		abs, err := filepath.Abs(c.fixture)
+		abs, err := filepath.Abs(path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		// The directive's own position, which is the whole point of reporting
-		// it: an operator must be able to open the document and find the line.
-		// Both fixtures carry theirs on line 10.
-		if !strings.Contains(line, abs+":10:3:") {
-			t.Errorf("%s: stderr = %q, want the directive's location %q", c.name, line, abs+":10:3:")
+		// One line, at the directive's own position — the whole point of
+		// reporting it: an operator must be able to open the document and find
+		// the line — and with no rule ID in the brackets a charge is rendered
+		// with: no rule charges the skip, so a script keying on "[<rule>]" must
+		// not read it as one.
+		if want := "goxsd8: parse: " + abs + ":" + c.at + ": " + c.subject + tail; stderr.String() != want {
+			t.Errorf("%s: stderr = %q, want %q", c.name, stderr.String(), want)
 		}
-		// No rule ID, in the brackets a charge is rendered with: the skip is
-		// legal, so a script keying on "[<rule>]" must not read it as one.
-		if strings.Contains(line, "[") {
-			t.Errorf("%s: stderr = %q, want no rule brackets — this is not a violation", c.name, line)
+	}
+}
+
+// TestParseNamesADirectiveOfAnIncludedDocument pins describeDirective's read
+// beyond the root: a directive in a document the root <xs:include>s is found
+// in that document, the second of report.Documents(), and named by its own
+// kind and attributes.
+func TestParseNamesADirectiveOfAnIncludedDocument(t *testing.T) {
+	dir := t.TempDir()
+	root, inner := filepath.Join(dir, "root.xsd"), filepath.Join(dir, "inner.xsd")
+	files := []struct{ path, body string }{
+		{root, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/short">` + "\n" +
+			`<xs:include schemaLocation="inner.xsd"/><xs:element name="present" type="xs:int"/></xs:schema>`},
+		{inner, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` + "\n" +
+			`<xs:import namespace="urn:x" schemaLocation="typo.xsd"/></xs:schema>`},
+	}
+	for _, f := range files {
+		if err := os.WriteFile(f.path, []byte(f.body), 0o644); err != nil {
+			t.Fatal(err)
 		}
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"parse", "-q", root}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("parse = %d, want %d (stderr %q)", code, exitOK, stderr.String())
+	}
+	want := "goxsd8: parse: " + inner + `:2:1: this <import>'s schemaLocation "typo.xsd", for namespace "urn:x", resolved to no document and was skipped; the compiled schema is short of whatever that document declares` + "\n"
+	if stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
 	}
 }
 
@@ -450,7 +494,7 @@ func TestParseNamesAnUnresolvedDirectiveOfARejectedSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	note := "goxsd8: parse: " + abs + ":10:3: this schemaLocation resolved to no document; the rejected assembly is short of whatever that document declares\n"
+	note := "goxsd8: parse: " + abs + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document; the rejected assembly is short of whatever that document declares` + "\n"
 
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"parse", shortBrokenSchema}, &stdout, &stderr); code != exitInvalid {
@@ -483,7 +527,7 @@ func TestParseNamesAnUnresolvedDirectiveOfARejectedSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	compiledNote := "goxsd8: parse: " + shortAbs + ":10:3: this schemaLocation resolved to no document, which is legal and skipped; the compiled schema is short of whatever that document declares\n"
+	compiledNote := "goxsd8: parse: " + shortAbs + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document and was skipped; the compiled schema is short of whatever that document declares` + "\n"
 	if !strings.Contains(stderr.String(), compiledNote) {
 		t.Errorf("stderr =\n%s\nwant the compiling argument's own note %q", stderr.String(), compiledNote)
 	}
@@ -523,9 +567,9 @@ func TestParseStrictChargesASkip(t *testing.T) {
 		wantStdout string // a substring, or "" for an empty stdout
 		wantStderr string // a substring, or "" for an empty stderr
 	}{
-		{"include", []string{"-strict", "testdata/unresolved-include.xsd"}, exitUndecided, "  elements: 1\n", "this schemaLocation resolved to no document"},
-		{"empty redefine", []string{"-strict", "testdata/unresolved-empty-redefine.xsd"}, exitUndecided, "  elements: 1\n", "this schemaLocation resolved to no document"},
-		{"quiet", []string{"-strict", "-q", "testdata/unresolved-include.xsd"}, exitUndecided, "", "this schemaLocation resolved to no document"},
+		{"include", []string{"-strict", "testdata/unresolved-include.xsd"}, exitUndecided, "  elements: 1\n", "resolved to no document and was skipped"},
+		{"empty redefine", []string{"-strict", "testdata/unresolved-empty-redefine.xsd"}, exitUndecided, "  elements: 1\n", "resolved to no document and was skipped"},
+		{"quiet", []string{"-strict", "-q", "testdata/unresolved-include.xsd"}, exitUndecided, "", "resolved to no document and was skipped"},
 		{"no skip", []string{"-strict", "testdata/order.xsd"}, exitOK, orderSummary, ""},
 		{"beside a rejection", []string{"-strict", shortSchema, shortBrokenSchema}, exitInvalid, "  elements: 1\n", brokenRule},
 	} {

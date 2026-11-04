@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- An EMPTY <xs:redefine> whose schemaLocation is not there. src-redefine
      clause 1's "must successfully resolve" is antecedent on children other
-     than <annotation>, so an empty one keeps <xs:include>'s legal skip and is
-     reported like one — never as the hard error a NON-EMPTY <xs:redefine>
-     earns. The <xs:redefine> sits on line 10, which the tests cite. -->
+     than <annotation>, so no rule charges an empty one's skip, nor calls it
+     legal: it is reported as skipped, never as the hard error a NON-EMPTY
+     <xs:redefine> earns. The <xs:redefine> sits on line 10, which tests cite. -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="http://example.com/short">
 

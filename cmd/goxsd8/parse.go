@@ -178,8 +178,9 @@ func rootLocation(location string) (string, error) {
 // resolver error other than loader.ErrNotFound in plain assembly context and
 // each hop back returns it unwrapped, so it lands here with nothing charged
 // (parser/parse.go). A schemaLocation that merely resolves to no document is
-// the ErrNotFound arm instead — a legal skip under src-include clause 2.4,
-// reported by reportUnfollowed and never reaching this function.
+// the ErrNotFound arm instead — a skip, whichever directive it is, reported by
+// reportUnfollowed and never reaching this function; usage's parse paragraph
+// says for which directives a rule makes that skip legal.
 func violationLine(err error) string {
 	var e *xsderr.Error
 	if errors.As(err, &e) {
@@ -209,15 +210,21 @@ const (
 // stopping, which is all the report holds — one that failed on its root
 // document holds none and prints nothing.
 //
+// Each line names the directive's kind and its schemaLocation value as written,
+// and an <import>'s namespace or its absence (describeDirective), so an
+// operator can see which directive to correct (#2797).
+//
 // The line carries no rule ID, and moves no exit code unless -strict was given
-// (skipCode), because this is not a violation: src-include clause 2.4 (§4.2.3)
-// and src-import (§4.2.6.2) both make an unresolved schemaLocation legal to
-// skip, and src-override (§4.2.5) clause 1 is vacuously satisfied by the same
-// failure, so rendering it through violationLine's "<loc>: [<rule>] <message>"
-// would publish a non-error as a spec charge (STYLE E2). What it buys is that
-// a summary, or an assessment, answered off a SHORT assembly is
-// distinguishable from one answered off a complete one — the fact nothing but
-// -v carried before (#1260).
+// (skipCode), because no rule charges the skip — usage's parse paragraph says
+// which rules make it legal and for which directives the spec states nothing —
+// so rendering it through violationLine's "<loc>: [<rule>] <message>" would
+// publish a spec charge no rule makes (STYLE E2). The line says the directive
+// was skipped and never that the skip was legal, which that paragraph grants
+// only some of the directives the line names — not every <include> among them:
+// the line names each directive as written, the element the operator edits,
+// not as §F.2 rewrites it. What it buys is that a summary, or an assessment,
+// answered off a SHORT assembly is distinguishable from one answered off a
+// complete one — the fact nothing but -v carried before (#1260).
 //
 // Only parser.UnfollowedLocationUnresolved is named. A bare <import>
 // (parser.UnfollowedNoLocation) names no document to have failed to reach:
@@ -236,10 +243,65 @@ func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *pars
 		}
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: this schemaLocation resolved to no document%s\n", verb, u.At, shortfallClause(compiled))
+		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: %s resolved to no document%s\n", verb, u.At, describeDirective(report, u.At), shortfallClause(compiled, " and was skipped"))
 		named = true
 	}
 	return named
+}
+
+// describeDirective names the directive element at at as reportUnfollowed's
+// line subjects it: "this <kind>'s schemaLocation "<value>"", the value as the
+// attribute spells it rather than as resolved, followed for an <import> by
+// ", for namespace "<ns>"," or ", for no namespace,".
+//
+// It reads the element back out of report.Documents(), the documents the
+// assembly read: the one whose Doc.URI() is at.URI, and among its <schema>'s
+// children the element whose Loc() is at, which is how parser records an
+// UnfollowedDirective (parser/parse.go, unfollowedAt). It matches on Doc.URI()
+// and never on AssembledDocument.Location, the resolved location, which a
+// canonicalizing resolver can make differ from the URI an element's Loc
+// carries — loader.Dir respells a location's case on a case-insensitive
+// filesystem (#1314). A document read twice — a chameleon <include> beside an <import>,
+// or one discovery overridden — is two discoveries of one file; both hold the
+// same element at at, and the first is read.
+//
+// A directive's document is in Documents() on both outcomes, because parser's
+// discover appends a document to the discoveries before following any
+// directive in it (parser/parse.go). The fallback, "this directive's
+// schemaLocation", answers a report that breaks that.
+func describeDirective(report *parser.AssemblyReport, at xsderr.Loc) string {
+	el := directiveAt(report, at)
+	if el == nil {
+		return "this directive's schemaLocation"
+	}
+	location, _ := el.Attr("schemaLocation")
+	subject := fmt.Sprintf("this <%s>'s schemaLocation %q", el.Name().Local(), location)
+	if el.Name().Local() != "import" {
+		return subject
+	}
+	namespace, ok := el.Attr("namespace")
+	if !ok {
+		return subject + ", for no namespace,"
+	}
+	return fmt.Sprintf("%s, for namespace %q,", subject, namespace)
+}
+
+// directiveAt returns the top-level element of a document report read whose
+// Loc is at, or nil if report read no such element. describeDirective states
+// the match.
+func directiveAt(report *parser.AssemblyReport, at xsderr.Loc) *parser.Element {
+	for _, d := range report.Documents() {
+		if d.Doc.URI() != at.URI {
+			continue
+		}
+		for _, n := range d.Doc.Root().Children() {
+			el, ok := n.(*parser.Element)
+			if ok && el.Loc() == at {
+				return el
+			}
+		}
+	}
+	return nil
 }
 
 // The -strict flag parse, validate and gen each define, named once for the
@@ -257,11 +319,11 @@ const (
 // is exitUndecided where strict is set and a line was named, and exitOK
 // otherwise.
 //
-// The charge is this CLI's policy and no spec verdict: src-include clause 2.4
-// and src-import (§4.2.6.2) make the skip legal, §4.2.6.2 admitting a stricter
-// profile, and src-override (§4.2.5) states nothing either way. exitUndecided
-// is the code because its meaning in usage's table, nothing proven wrong and
-// something not done, is the skip's: a document the schema named was not read.
+// The charge is this CLI's policy and no spec verdict: no rule charges the skip
+// (reportUnfollowed and reportUnfollowedHints state why), §4.2.6.2 admitting a
+// stricter profile. exitUndecided is the code because its meaning in usage's
+// table, nothing proven wrong and something not done, is the skip's: a document
+// the schema named was not read.
 func skipCode(strict, named bool) int {
 	if strict && named {
 		return exitUndecided
@@ -275,16 +337,21 @@ func skipCode(strict, named bool) int {
 // and every caller reporting an unfollowed directive says it the same way
 // (STYLE D3).
 //
-// That the skip was LEGAL: parser.UnfollowedLocationUnresolved also records the
-// two unresolved locations that are faults — a non-empty <xs:redefine>'s
-// (src-redefine clause 1) and a resolver that failed rather than reported
-// absence — and each arrives with the verdict charging it, which a line calling
-// it legal would contradict. And that the shortfall is all that is wrong: on
-// the error path nothing in the report says whether the unread document had any
-// part in the rejection, so the line says nothing of it either.
-func shortfallClause(compiled bool) string {
+// skipped is what the caller can say of the skip itself, and is printed only
+// when compiled: reportUnfollowed passes " and was skipped", and
+// reportUnfollowedHints ", which is legal and skipped", src-import making a
+// hint's skip legal; reportUnfollowed's doc says why a directive's line claims
+// less. Neither holds on the rejected path, where
+// parser.UnfollowedLocationUnresolved also records the two unresolved locations
+// that are faults — a non-empty <xs:redefine>'s (src-redefine clause 1) and a
+// resolver that failed rather than reported absence — and each arrives with
+// the verdict charging it, which a line calling it legal, or merely skipped,
+// would contradict. Nor does the claim that the shortfall is all that is wrong:
+// on the error path nothing in the report says whether the unread document had
+// any part in the rejection, so the line says nothing of it either.
+func shortfallClause(compiled bool, skipped string) string {
 	if compiled {
-		return ", which is legal and skipped; the compiled schema is short of whatever that document declares"
+		return skipped + "; the compiled schema is short of whatever that document declares"
 	}
 	return "; the rejected assembly is short of whatever that document declares"
 }

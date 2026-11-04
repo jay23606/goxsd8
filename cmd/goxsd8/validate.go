@@ -477,7 +477,7 @@ func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, rep
 	for _, r := range roots {
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: the schema location hint %s resolved to no document%s\n", instance, r.Location(), shortfallClause(compiled))
+		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: the schema location hint %s resolved to no document%s\n", instance, r.Location(), shortfallClause(compiled, ", which is legal and skipped"))
 	}
 	return len(roots) > 0
 }
