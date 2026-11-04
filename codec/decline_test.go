@@ -45,7 +45,8 @@ func TestDecodeDeclines(t *testing.T) {
 		{"nillable local element with a fixed value", sequenceOf(`<xs:element name="a" type="xs:string" nillable="true" fixed="x"/>`), "", `<s:a>x</s:a>`, constructNillable, 1, 1},
 		{"document element of mixed content with a default", `<xs:element name="r" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`,
 			"", "", constructMixedContent, 1, 1},
-		{"simple root", `<xs:element name="r" type="xs:string"/>`, "", "x", constructSimpleRoot, 1, 1},
+		{"simple root of another primitive", `<xs:element name="r" type="xs:int"/>`, "", "1", constructOtherPrimitive, 1, 1},
+		{"simple root of a list type", `<xs:element name="r"><xs:simpleType><xs:list itemType="xs:string"/></xs:simpleType></xs:element>`, "", "x y", constructList, 1, 1},
 		{"empty content", root(``), "", "", constructEmptyContent, 1, 1},
 		{"simple content", root(`<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`), "", "x", constructSimpleContent, 1, 1},
 		{"mixed content", `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
@@ -125,6 +126,21 @@ func TestDecodeXsiTypeDeclines(t *testing.T) {
 			assertDecline(t, err, constructXsiType, row.line, row.col)
 		})
 	}
+}
+
+// TestDecodeSimpleRootXsiType pins the xsi:type decline on a document element
+// of simple type: under xsi:type="xs:token" an xs:string root's value
+// collapses, so it declines at its own Loc after the T check, which string
+// passes, and holds no value.
+func TestDecodeSimpleRootXsiType(t *testing.T) {
+	schema := schemaOf(t, `<xs:element name="r" type="xs:string"/>`)
+	data := instanceOf(` xsi:type="xs:token"`, ` x  y `)
+	mustAccept(t, schema, data)
+	got, err := Decode[string](schema, strict.New(), data)
+	if got != nil {
+		t.Fatalf("Decode = %q, want no value", *got)
+	}
+	assertDecline(t, err, constructXsiType, 1, 1)
 }
 
 // TestDecodeUndeclaredRootXsiType pins that a document element no top-level
@@ -216,11 +232,12 @@ func TestDeclineErrorText(t *testing.T) {
 }
 
 // TestDeclineErrorTextSimpleRoot pins the message of a decline of the
-// document element's type when that type is simple and built in.
+// document element's type when that type is simple and built in, xs:int, and
+// that it precedes the T check: T is string, which passes it.
 func TestDeclineErrorTextSimpleRoot(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="r" type="xs:string"/>`)
-	_, err := Decode[string](schema, strict.New(), instanceOf("", `x`))
-	const want = "?:1:1: codec does not decode a document element of simple type: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at ?; a decoder refusal, not a schema or instance fault"
+	schema := schemaOf(t, `<xs:element name="r" type="xs:int"/>`)
+	_, err := Decode[string](schema, strict.New(), instanceOf("", `1`))
+	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is neither xs:string nor xs:anyURI: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at ?; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}

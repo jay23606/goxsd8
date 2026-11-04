@@ -21,29 +21,32 @@
 //	func (e *UndecidedError) Error() string
 //	func (e *UndecidedError) Unwrap() error
 //
-// [Decode] decodes a valid XML instance into the struct package codegen
-// emits for its document element's declaration, and [Decode]'s doc states
-// what it returns in every other case. It reads the schema, not the struct:
+// [Decode] decodes a valid XML instance into the type package codegen emits
+// for its document element's declaration, and [Decode]'s doc states what it
+// returns in every other case. It reads the schema, not T:
 // codegen's structs carry no tags, so Decode derives each field's name, order
 // and Go type from the declaration by codegen's own rules and refuses a T
 // that differs. Package codec does not import codegen. Nothing encodes yet.
 //
 // # What decodes
 //
-// A document element decodes when its declaration, a top-level one, has no
-// {type table} and {nillable} false, and its {type definition} is a complex
-// type with element-only content and no {open content} or {attribute
-// wildcard}, whose {particle} is an inline sequence occurring exactly once.
-// Each particle of that sequence is a local element declaration with no
-// {type table} and {nillable} false, of a simple type that is atomic with
-// {primitive type definition} xs:string or xs:anyURI, no two particles
-// sharing an expanded name; each attribute use is outside the xsi namespace
-// and is typed the same way. So xs:normalizedString, xs:token, xs:language,
+// A simple type decodes when it is atomic with {primitive type definition}
+// xs:string or xs:anyURI. So xs:normalizedString, xs:token, xs:language,
 // xs:Name, xs:NCName, xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY, xs:anyURI and a
-// user restriction of any of them decode, each field a string, a *string or a
-// []string by its occurrence, an attribute's by its use's {required} and, as
-// [Decode]'s doc states, its effective value constraint (§3.5.4 key-evc). No
-// element in the instance carries xsi:type.
+// user restriction of any of them decode.
+//
+// A document element decodes when its declaration, a top-level one, has no
+// {type table} and {nillable} false, and its {type definition} is either a
+// simple type that decodes, its value T's own, or a complex type with
+// element-only content and no {open content} or {attribute wildcard}, whose
+// {particle} is an inline sequence occurring exactly once. Each particle of
+// that sequence is a local element declaration with no {type table} and
+// {nillable} false, of a simple type that decodes, no two particles sharing
+// an expanded name; each attribute use is outside the xsi namespace and is
+// typed the same way. Each field is a string, a *string or a []string by its
+// occurrence, an attribute's by its use's {required} and, as [Decode]'s doc
+// states, its effective value constraint (§3.5.4 key-evc). No element in the
+// instance carries xsi:type.
 //
 // Every other construct is a [*DeclineError], never a zero value: a choice,
 // an all group, a nested model group or <group ref>, a wildcard, an <element
@@ -63,8 +66,8 @@
 //     lose what the derived type governs: under xsi:type="xs:token" an
 //     xs:string element's value collapses. That refusal is permanent.
 //
-// A value constraint of an element or attribute use, default or fixed,
-// decodes; [Decode]'s doc states the value its field holds.
+// A value constraint of an element declaration or attribute use, default or
+// fixed, decodes; [Decode]'s doc states the value it supplies.
 //
 // Every error about the instance carries its instance Loc, under the URI
 // [WithURI] names: a violation's, an undecided check's, and a decline's,

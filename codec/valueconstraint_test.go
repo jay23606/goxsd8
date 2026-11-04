@@ -93,6 +93,36 @@ func TestDecodeElementValueConstraint(t *testing.T) {
 	}
 }
 
+// TestDecodeRootValueConstraint pins Decode's doc on a document element of
+// simple type whose declaration has a {value constraint}, default or fixed:
+// empty in the instance, it holds the supplied value, normalized under its
+// type (cvc-elt clause 5.1, 5.2.2.2.2); with characters, its own.
+func TestDecodeRootValueConstraint(t *testing.T) {
+	rows := []struct {
+		name, decl, content, want string
+	}{
+		{"default, empty", `<xs:element name="r" type="xs:string" default="d"/>`, "", "d"},
+		{"default, present", `<xs:element name="r" type="xs:string" default="d"/>`, "x", "x"},
+		{"fixed, empty", `<xs:element name="r" type="xs:string" fixed="f"/>`, "", "f"},
+		{"fixed normalized by the type's whiteSpace, empty", `<xs:element name="r" type="xs:token" fixed="  f   g "/>`, "", "f g"},
+		{"fixed, present", `<xs:element name="r" type="xs:token" fixed="f g"/>`, " f  g ", "f g"},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decl)
+			data := instanceOf("", row.content)
+			mustAccept(t, schema, data)
+			got, err := Decode[string](schema, strict.New(), data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if *got != row.want {
+				t.Errorf("Decode = %q, want %q", *got, row.want)
+			}
+		})
+	}
+}
+
 // TestDecodeAttributeValueConstraint pins Decode's doc on an attribute use
 // with an effective value constraint, default or fixed (key-dflt-att), whose
 // field is a string: the attribute present, present and empty, and absent,
@@ -143,7 +173,7 @@ func TestDecodeAttributeValueConstraint(t *testing.T) {
 			}
 			schema := schemaOf(t, uses(`<xs:attribute name="b" type="xs:string" default="d"/>`))
 			got, err := Decode[opt](schema, strict.New(), instanceOf("", a))
-			const want = "codec: T is not the struct codegen emits for the document element: field 1 of codec.opt is B *string where codegen emits B string"
+			const want = "codec: T is not the type codegen emits for the document element: field 1 of codec.opt is B *string where codegen emits B string"
 			if got != nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
 				t.Errorf("Decode = (%v, %v), want no value and %q", got, err, want)
 			}

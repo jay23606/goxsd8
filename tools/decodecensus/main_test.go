@@ -46,18 +46,18 @@ func schemaTest(doc string) string {
 }
 
 // censusSuite is the fixture suite. Group g's schema generates, and its
-// cases decode (a.xml, twice), decline with simple root (e.xml, twice) and
-// choice content (c.xml), and fail otherwise, charged (invalid.xml) and with
-// no declaration for the document element (u.xml), which decodes into the
-// placeholder; its case old is withheld. Group rec's schema assembles and
-// does not generate, group bad's does not assemble, and group none declares
-// no schemaTest.
+// cases decode (a.xml, twice, and f.xml, of simple type), decline with
+// another primitive (e.xml, twice) and choice content (c.xml), and fail
+// otherwise, charged (invalid.xml) and with no declaration for the document
+// element (u.xml), which decodes into the placeholder; its case old is
+// withheld. Group rec's schema assembles and does not generate, group bad's
+// does not assemble, and group none declares no schemaTest.
 var censusSuite = map[string]string{
 	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink"><testSetRef xlink:href="sets/s.testSet"/></testSuite>`,
 	"sets/s.testSet": `<testSet name="S" xmlns:xlink="http://www.w3.org/1999/xlink">
   <testGroup name="g">` + schemaTest("s.xsd") +
 		instanceTest("decoded", "a.xml", "") + instanceTest("decoded2", "a.xml", "") +
-		instanceTest("simple", "e.xml", "") + instanceTest("simple2", "e.xml", "") +
+		instanceTest("simple", "e.xml", "") + instanceTest("simple2", "e.xml", "") + instanceTest("simpledecoded", "f.xml", "") +
 		instanceTest("choice", "c.xml", "") + instanceTest("invalid", "invalid.xml", "") +
 		instanceTest("undeclared", "u.xml", "") + instanceTest("old", "a.xml", ` version="1.0"`) + `</testGroup>
   <testGroup name="rec">` + schemaTest("rec.xsd") + instanceTest("i", "a.xml", "") + `</testGroup>
@@ -67,7 +67,8 @@ var censusSuite = map[string]string{
 	"d/s.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="c"><xs:complexType><xs:choice><xs:element name="d" type="xs:string"/></xs:choice></xs:complexType></xs:element>
-  <xs:element name="e" type="xs:string"/>
+  <xs:element name="e" type="xs:int"/>
+  <xs:element name="f" type="xs:string"/>
 </xs:schema>`,
 	"d/rec.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>
@@ -75,7 +76,8 @@ var censusSuite = map[string]string{
 	"d/bad.xsd":       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="a" type="undeclared"/></xs:schema>`,
 	"d/a.xml":         `<a><b>x</b></a>`,
 	"d/c.xml":         `<c><d>x</d></c>`,
-	"d/e.xml":         `<e>x</e>`,
+	"d/e.xml":         `<e>1</e>`,
+	"d/f.xml":         `<f>x</f>`,
 	"d/invalid.xml":   `<a/>`,
 	"d/u.xml":         `<u/>`,
 	"d/notes.txt":     "not a document",
@@ -84,9 +86,9 @@ var censusSuite = map[string]string{
 
 // wantCounts is the report's head over censusSuite: every count, and its
 // construct lines.
-const wantCounts = `decodecensus: 10 instance case(s) under %ROOT%
-  schema generates: 7
-  decoded: 2
+const wantCounts = `decodecensus: 11 instance case(s) under %ROOT%
+  schema generates: 8
+  decoded: 3
   declined: 3
   undecided: 0
   rejected codegen's own struct: 0
@@ -94,7 +96,7 @@ const wantCounts = `decodecensus: 10 instance case(s) under %ROOT%
   decoded where validate rejects: 0
 
 === First decline, by construct: 2 construct(s) ===
-       2  a document element of simple type
+       2  an atomic simple type whose primitive is neither xs:string nor xs:anyURI
        1  choice content
 
 === Caveats ===

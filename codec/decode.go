@@ -16,10 +16,10 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// ErrTypeMismatch is the error [Decode] wraps when T's fields are not those
+// ErrTypeMismatch is the error [Decode] wraps when T does not match the type
 // codegen emits for the document element's declaration; Decode's doc, item 6,
 // states when.
-var ErrTypeMismatch = errors.New("codec: T is not the struct codegen emits for the document element")
+var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the document element")
 
 // The names of the primitives the slice decodes, read by identity.
 var (
@@ -27,40 +27,44 @@ var (
 	anyURIPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyURI"}
 )
 
-// Decode decodes the XML instance data into a new value of T, the struct
+// Decode decodes the XML instance data into a new value of T, the type
 // package codegen emits for the declaration of data's document element, and
 // returns it. A value is returned exactly when the error is nil.
 //
 // T is the caller's choice: nothing dispatches a document element to its
-// generated type. Item 6 below compares T's fields with those codegen emits
-// for the declaration in name, order and Go type alone, so a T whose fields
+// generated type, and item 6 below never compares T's own name. For a complex
+// {type definition} item 6 compares T's fields with those codegen emits for
+// the declaration in name, order and Go type alone, so a T whose fields
 // differ returns [ErrTypeMismatch] where item 6 is the first that applies,
 // but a T of the same shape, such as the struct codegen emits for another
 // top-level element of the same type, passes item 6 and decodes as the
-// declaration's own struct does, an error only where that one's is. A
-// caller decoding documents of several roots therefore reads the document
-// element's name itself, through parser/xmltree or encoding/xml, before
-// choosing T.
+// declaration's own struct does, an error only where that one's is. For a
+// simple one item 6 reads T's underlying type alone, so any T over string
+// passes it, such as the type codegen emits for another document element of
+// the same simple type. A caller decoding documents of several roots
+// therefore reads the document element's name itself, through parser/xmltree
+// or encoding/xml, before choosing T.
 //
 // The slice Decode covers is the package doc's "# What decodes". Decode
 // first assesses data against schema with package validate and decodes only
 // an instance whose Result has no source fault and stands
 // validate.NotProvenInvalid; it then reads data a second time with
-// parser/xmltree. Each decoded value is the item's ·normalized value·
-// (Structures §3.1.4 key-nv) under its declaration's simple type: the string
+// parser/xmltree. Each decoded value, a field's or, for a document element of
+// simple type, T's own, is the item's ·normalized value· (Structures §3.1.4
+// key-nv) under its declaration's simple type: the string
 // [value.ApplyWhiteSpace] returns for the item's characters, an attribute's as
 // XML 1.0 §3.3.3 normalized them, an element's the concatenation of its
-// character children. Where the post-schema-validation infoset supplies a
-// value it is that value, the {lexical form} of a value constraint under the
-// same normalization: for an absent attribute whose use has an effective value
-// constraint (§3.5.4 key-evc; §3.4.4.2 key-dflt-att, §3.4.5.1
-// sic-attrDefault), and for an element with neither element nor character
-// children whose declaration has a {value constraint} (§3.3.4.3 cvc-elt clause
-// 5.1, §3.3.5.4 sic-eltType). So the field of an optional attribute use with an
-// effective value constraint is a string, as codegen emits it, holding the
-// supplied value when the attribute is absent; a whitespace-only element
-// has a character child and holds its own value; and an element absent from
-// the instance supplies nothing, its field nil or not appended to.
+// character children. Where the post-schema-validation infoset supplies a value
+// it is that value, the {lexical form} of a value constraint under the same
+// normalization: for an absent attribute whose use has an effective value
+// constraint (§3.5.4 key-evc; §3.4.4.2 key-dflt-att, §3.4.5.1 sic-attrDefault),
+// and for an element with neither element nor character children whose
+// declaration has a {value constraint} (§3.3.4.3 cvc-elt clause 5.1, §3.3.5.4
+// sic-eltType). So the field of an optional attribute use with an effective
+// value constraint is a string, as codegen emits it, holding the supplied value
+// when the attribute is absent; a whitespace-only element has a character child
+// and holds its own value; and an element absent from the instance supplies
+// nothing, its field nil or not appended to.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's and a decline's — names the document
@@ -86,17 +90,20 @@ var (
 //  5. A construct of the document element's declaration or type outside the
 //     slice: a *DeclineError at the document element's instance Loc, whose
 //     [DeclineError.Construct] is that construct's. Each is found in this
-//     order: the declaration's {type table} and {nillable}, its {type
-//     definition} and that type's content, each particle of its content in
-//     order, each of its attribute uses in order, and its {attribute
-//     wildcard}.
-//  6. T is not a struct whose fields are exactly those codegen emits for the
-//     declaration, in name, order and Go type, as Decode derives them from
-//     the schema: an error errors.Is reports as [ErrTypeMismatch], no
-//     *DeclineError, so that a struct that does not match the schema is never
-//     filled. Decode never reads the fields from T, so for a struct codegen
-//     emitted from this schema the error is a defect of Decode's, and for any
-//     other T it is a T that does not match.
+//     order: the declaration's {type table} and {nillable}, then its {type
+//     definition}: a simple type's {variety} and {primitive type definition},
+//     after which nothing further is examined, or a complex type's content,
+//     each particle of its content in order, each of its attribute uses in
+//     order, and its {attribute wildcard}.
+//  6. T does not match the type codegen emits for the declaration, as Decode
+//     derives it from the schema: for a complex {type definition}, T is not a
+//     struct whose fields are exactly those codegen emits, in name, order and
+//     Go type; for a simple one, T's underlying type is not string. It is an
+//     error errors.Is reports as [ErrTypeMismatch], no *DeclineError, so that
+//     a T that does not match the schema is never filled. Decode never reads
+//     the fields from T, so for a type codegen emitted from this schema the
+//     error is a defect of Decode's, and for any other T it is a T that does
+//     not match.
 //  7. An element carrying xsi:type, the document element or a child: a
 //     *DeclineError at that element's instance Loc, the first in document
 //     order, whose [DeclineError.Construct] is xsi:type's. A document element
@@ -255,9 +262,18 @@ type field struct {
 	supplied *string
 }
 
-// binding is the struct codegen emits for one document element declaration,
-// as Decode reads it: its fields in codegen's order, each element particle's
-// first, then each attribute use's.
+// A binder is the type codegen emits for one document element declaration,
+// as Decode reads it: check holds T to it, item 6 of Decode's doc, and fill
+// sets a value of T from the document element. A *binding binds a complex
+// {type definition} and a *simpleRoot a simple one.
+type binder interface {
+	check(t reflect.Type) error
+	fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error
+}
+
+// binding is the struct codegen emits for one document element declaration
+// of complex type, as Decode reads it: its fields in codegen's order, each
+// element particle's first, then each attribute use's.
 type binding struct {
 	schema *xsd.Schema
 	fields []field
@@ -270,9 +286,9 @@ type binding struct {
 	attributes map[xsd.QName]int
 }
 
-// bind returns the binding of root's declaration, or the first decline
+// bind returns the binder of root's declaration, or the first decline
 // Decode's doc states for it, item 5, at root's instance Loc.
-func bind(schema *xsd.Schema, root *xmltree.StartElement) (*binding, error) {
+func bind(schema *xsd.Schema, root *xmltree.StartElement) (binder, error) {
 	loc := root.Loc()
 	name := expanded(root.Name())
 	decl, ok := schema.Element(name)
@@ -292,10 +308,12 @@ func bind(schema *xsd.Schema, root *xmltree.StartElement) (*binding, error) {
 		return nil, fmt.Errorf("codec: %s: the {type definition} of %s does not resolve", loc, declSubject(decl))
 	}
 	typeSubject := fmt.Sprintf("the {type definition} of %s, a type defined at %s", declSubject(decl), td.Loc())
-	ct, ok := td.(xsd.ComplexType)
-	if !ok {
-		return nil, decline(loc, constructSimpleRoot, typeSubject)
+	// TypeDefinition is a closed sum of the two, so the assertions are STYLE
+	// T2's sealed-sum exception.
+	if st, ok := td.(*xsd.SimpleType); ok {
+		return bindSimpleRoot(schema, decl, st, loc, typeSubject)
 	}
+	ct, _ := td.(xsd.ComplexType)
 	particles, d := contentParticles(ct)
 	if d != 0 {
 		return nil, decline(loc, d, typeSubject)
@@ -339,6 +357,27 @@ func bind(schema *xsd.Schema, root *xmltree.StartElement) (*binding, error) {
 		b.fields[i].name = names.Claim(local)
 	}
 	return b, nil
+}
+
+// bindSimpleRoot returns the simpleRoot of decl, a top-level element
+// declaration whose {type definition} is st, or the decline Decode's doc
+// states for st, item 5, at the instance Loc loc, subject naming st.
+func bindSimpleRoot(schema *xsd.Schema, decl xsd.ElementDeclaration, st *xsd.SimpleType, loc xsderr.Loc, subject string) (binder, error) {
+	d, err := simpleDecline(schema, st)
+	if err != nil {
+		return nil, err
+	}
+	if d != 0 {
+		return nil, decline(loc, d, subject)
+	}
+	s := &simpleRoot{schema: schema, st: st}
+	if vc, has := decl.ValueConstraint(); has {
+		s.supplied, err = supply(schema, st, vc, declSubject(decl))
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // declarationDecline returns the construct of an element declaration's own
@@ -443,7 +482,7 @@ func (b *binding) localElement(el xsd.ElementDeclaration, occurs xsd.Occurs) (fi
 	}
 	f := field{shape: s, st: st}
 	if vc, has := el.ValueConstraint(); has {
-		f.supplied, err = b.supply(st, vc, declSubject(el))
+		f.supplied, err = supply(b.schema, st, vc, declSubject(el))
 	}
 	return f, 0, err
 }
@@ -475,7 +514,7 @@ func (b *binding) attributeUse(u xsd.AttributeUse) (field, construct, string, er
 		f.shape = shapeOne
 	}
 	if has {
-		f.supplied, err = b.supply(st, vc, subject)
+		f.supplied, err = supply(b.schema, st, vc, subject)
 	}
 	return f, 0, subject, err
 }
@@ -485,8 +524,8 @@ func (b *binding) attributeUse(u xsd.AttributeUse) (field, construct, string, er
 // whose simple type is st: vc's {lexical form} as [value.ApplyWhiteSpace]
 // normalizes it under st (§3.3.5.4 sic-eltType clause 1.1, §3.4.5.1
 // sic-attrDefault).
-func (b *binding) supply(st *xsd.SimpleType, vc xsd.ValueConstraint, subject string) (*string, error) {
-	v, err := value.ApplyWhiteSpace(b.schema, st, vc.LexicalForm())
+func supply(schema *xsd.Schema, st *xsd.SimpleType, vc xsd.ValueConstraint, subject string) (*string, error) {
+	v, err := value.ApplyWhiteSpace(schema, st, vc.LexicalForm())
 	if err != nil {
 		return nil, fmt.Errorf("codec: normalizing the {value constraint} of %s: %w", subject, err)
 	}
@@ -579,7 +618,7 @@ func (b *binding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflec
 			continue
 		}
 		if a.Name().Space() != xsd.XMLSchemaInstanceNS {
-			return fmt.Errorf("codec: %s: attribute %s is attributed to no attribute use", a.Loc(), expanded(a.Name()))
+			return unattributed(a)
 		}
 	}
 	for {
@@ -609,25 +648,88 @@ func (b *binding) child(r *xmltree.Reader, start *xmltree.StartElement, out refl
 	if !ok {
 		return fmt.Errorf("codec: %s: element %s is attributed to no particle", start.Loc(), expanded(start.Name()))
 	}
+	v, err := elementValue(r, start, b.schema, b.fields[i].st, b.fields[i].supplied)
+	if err != nil {
+		return err
+	}
+	b.store(out, i, v)
+	return nil
+}
+
+// elementValue reads the character children of the element start, of simple
+// type st, from r up to its end tag and returns their ·normalized value·
+// under st, or supplied, already normalized, when it is not nil and there are
+// none, the value the element's {value constraint} supplies (cvc-elt clause
+// 5.1), as Decode's doc states.
+func elementValue(r *xmltree.Reader, start *xmltree.StartElement, schema *xsd.Schema, st *xsd.SimpleType, supplied *string) (string, error) {
 	var text bytes.Buffer
 	for {
 		tok, err := r.Token()
 		if err != nil {
-			return err
+			return "", err
 		}
 		switch tok := tok.(type) {
 		case *xmltree.CharData:
 			text.WriteString(tok.Data())
 		case *xmltree.StartElement:
-			return fmt.Errorf("codec: %s: element %s of simple type holds element %s", tok.Loc(), expanded(start.Name()), expanded(tok.Name()))
+			return "", fmt.Errorf("codec: %s: element %s of simple type holds element %s", tok.Loc(), expanded(start.Name()), expanded(tok.Name()))
 		case *xmltree.EndElement:
-			if s := b.fields[i].supplied; s != nil && text.Len() == 0 {
-				b.store(out, i, *s)
-				return nil
+			if supplied != nil && text.Len() == 0 {
+				return *supplied, nil
 			}
-			return b.set(out, i, text.String())
+			v, err := value.ApplyWhiteSpace(schema, st, text.String())
+			if err != nil {
+				return "", fmt.Errorf("codec: normalizing the value of element %s: %w", expanded(start.Name()), err)
+			}
+			return v, nil
 		}
 	}
+}
+
+// simpleRoot is the type codegen emits for a document element declaration
+// whose {type definition} is st, a simple type Decode decodes, as Decode reads
+// it; supplied is the value its {value constraint} supplies, already
+// normalized under st, nil exactly when there is none.
+type simpleRoot struct {
+	schema   *xsd.Schema
+	st       *xsd.SimpleType
+	supplied *string
+}
+
+// check returns nil when t's underlying type is string, and otherwise the
+// ErrTypeMismatch error Decode's doc states, item 6. t's name is never
+// compared.
+func (s *simpleRoot) check(t reflect.Type) error {
+	if t.Kind() != reflect.String {
+		return fmt.Errorf("%w: the underlying type of %s is not string", ErrTypeMismatch, t)
+	}
+	return nil
+}
+
+// fill sets out, whose underlying type is string, from the document element
+// root, whose start tag r has just returned, and from r's tokens up to its end
+// tag, or returns the xsi:type decline Decode's doc states, item 7.
+func (s *simpleRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
+	if err := checkXsiType(root); err != nil {
+		return err
+	}
+	for _, a := range root.Attributes() {
+		if a.Name().Space() != xsd.XMLSchemaInstanceNS {
+			return unattributed(a)
+		}
+	}
+	v, err := elementValue(r, root, s.schema, s.st, s.supplied)
+	if err != nil {
+		return err
+	}
+	out.SetString(v)
+	return nil
+}
+
+// unattributed is the error for the attribute a of the document element when
+// no attribute use of its declaration's type attributes it.
+func unattributed(a xmltree.Attribute) error {
+	return fmt.Errorf("codec: %s: attribute %s is attributed to no attribute use", a.Loc(), expanded(a.Name()))
 }
 
 // checkXsiType returns the xsi:type decline for start when it carries one.

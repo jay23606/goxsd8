@@ -706,7 +706,7 @@ refuses without reading a schema, and the error types both return
 `codegen/doc.go`, not here:** its "Coverage" section, the eight sections
 that follow it, and its "Determinism" and "Naming" sections state what `Generate` does today, and its "Planned" sections what it
 does not. `codec` (M10) exports `Decode`, which decodes a valid XML
-instance into the struct `codegen` emits for its document element, for the
+instance into the type `codegen` emits for its document element, for the
 slice `codec/doc.go`'s "What decodes" states, declining every other
 construct, `Option`/`WithURI`, `DeclineError` and its `Construct`, and `ErrTypeMismatch`. Its
 runtime path today reads no value space:

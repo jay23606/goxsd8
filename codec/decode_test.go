@@ -317,12 +317,16 @@ func TestDecodeNilArguments(t *testing.T) {
 }
 
 // TestDecodeTypeMismatch pins item 6 of Decode's doc: a T that is not the
-// struct codegen emits is an error errors.Is reports as ErrTypeMismatch, no
-// decline and no rule, and nothing is filled; an error that is no T mismatch
-// is not reported as one.
+// type codegen emits is an error errors.Is reports as ErrTypeMismatch, no
+// decline and no rule, and nothing is filled, for a document element of
+// complex type and, a T whose underlying type is not string, of simple type;
+// an error that is no T mismatch is not reported as one.
 func TestDecodeTypeMismatch(t *testing.T) {
 	schema := schemaOf(t, shapesSchema)
 	data := instanceOf(` req="r"`, "<s:one>x</s:one><s:tok>t</s:tok>")
+	simple := schemaOf(t, `<xs:element name="r" type="xs:string"/>`)
+	simpleData := instanceOf("", "x")
+	type count int
 	type renamed struct {
 		One  string
 		Opt  *string
@@ -355,6 +359,10 @@ func TestDecodeTypeMismatch(t *testing.T) {
 			ErrTypeMismatch.Error() + ": codec.short has 1 fields where codegen emits 6"},
 		{"no struct", func() (any, error) { return Decode[string](schema, strict.New(), data) },
 			ErrTypeMismatch.Error() + ": string is no struct"},
+		{"a struct for a simple root", func() (any, error) { return Decode[struct{ A string }](simple, strict.New(), simpleData) },
+			ErrTypeMismatch.Error() + ": the underlying type of struct { A string } is not string"},
+		{"a type over int for a simple root", func() (any, error) { return Decode[count](simple, strict.New(), simpleData) },
+			ErrTypeMismatch.Error() + ": the underlying type of codec.count is not string"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -391,6 +399,54 @@ func TestDecodeTypeMismatch(t *testing.T) {
 	if err == nil || err.Error() != want || errors.Is(err, ErrTypeMismatch) {
 		t.Errorf("bind(undeclared document element) = %v, want %q, no ErrTypeMismatch", err, want)
 	}
+}
+
+// TestDecodeSimpleRoot pins a document element of simple type (cvc-type
+// clause 3.1): it decodes into a T whose underlying type is string, its name
+// never compared, holding the element's ·normalized value· under the
+// declaration's type (Datatypes §4.3.6): an xs:string's preserved, an
+// xs:token's and an xs:anyURI's collapsed, and a user restriction of
+// xs:string under its own whiteSpace facet.
+func TestDecodeSimpleRoot(t *testing.T) {
+	type label string
+	rows := []struct {
+		name    string
+		decls   string
+		content string
+		decode  func(*xsd.Schema, []byte) (string, error)
+		want    string
+	}{
+		{"xs:string, into string", `<xs:element name="r" type="xs:string"/>`, " a\tb ", decodeAs[string], " a\tb "},
+		{"xs:string, into a named type", `<xs:element name="r" type="xs:string"/>`, " a\tb ", decodeAs[label], " a\tb "},
+		{"xs:token", `<xs:element name="r" type="xs:token"/>`, "\n  a   b \n", decodeAs[label], "a b"},
+		{"xs:anyURI", `<xs:element name="r" type="xs:anyURI"/>`, "  http://e.x/a \t b  ", decodeAs[label], "http://e.x/a b"},
+		{"a user restriction of xs:string", `<xs:simpleType name="code"><xs:restriction base="xs:string"><xs:whiteSpace value="collapse"/><xs:maxLength value="4"/></xs:restriction></xs:simpleType>
+			<xs:element name="r" type="s:code"/>`, " a   b ", decodeAs[label], "a b"},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf("", row.content)
+			mustAccept(t, schema, data)
+			got, err := row.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != row.want {
+				t.Errorf("Decode = %q, want %q", got, row.want)
+			}
+		})
+	}
+}
+
+// decodeAs decodes data against schema into T, whose underlying type is
+// string, and returns the value as a string.
+func decodeAs[T ~string](schema *xsd.Schema, data []byte) (string, error) {
+	v, err := Decode[T](schema, strict.New(), data)
+	if err != nil {
+		return "", err
+	}
+	return string(*v), nil
 }
 
 // TestDecodeStringDerivedTypes pins the package doc's "# What decodes" list

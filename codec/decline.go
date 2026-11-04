@@ -61,11 +61,13 @@ type construct uint8
 
 // The construct values, in the order Decode finds them: the document
 // element's declaration, its type, its content, each particle in order, its
-// attribute uses in order, its attribute wildcard, and the instance.
+// attribute uses in order, its attribute wildcard, and the instance. The four
+// of a simple type, constructList to constructOtherPrimitive, sit with the
+// particle's, though a document element of simple type, and an attribute
+// use, decline by them too.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
-	constructSimpleRoot
 	constructEmptyContent
 	constructSimpleContent
 	constructMixedContent
@@ -92,7 +94,6 @@ const (
 var constructNames = [...]string{
 	constructTypeTable:         "an element declaration with a {type table}",
 	constructNillable:          "an element declaration with {nillable} true",
-	constructSimpleRoot:        "a document element of simple type",
 	constructEmptyContent:      "empty content",
 	constructSimpleContent:     "simple content",
 	constructMixedContent:      "mixed content",
