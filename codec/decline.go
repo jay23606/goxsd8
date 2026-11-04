@@ -73,7 +73,7 @@ const (
 	constructMixedContent
 	constructOpenContent
 	constructGroupRefContent
-	constructChoiceContent
+	constructChoiceOccurs
 	constructAllContent
 	constructSequenceOccurs
 	constructNestedGroup
@@ -81,6 +81,7 @@ const (
 	constructElementRef
 	constructComplexElement
 	constructSharedName
+	constructSharedBranch
 	constructList
 	constructUnion
 	constructSpecial
@@ -99,7 +100,7 @@ var constructNames = [...]string{
 	constructMixedContent:      "mixed content",
 	constructOpenContent:       "{open content}",
 	constructGroupRefContent:   "a <group ref> content particle",
-	constructChoiceContent:     "choice content",
+	constructChoiceOccurs:      "a content choice occurring other than exactly once",
 	constructAllContent:        "all content",
 	constructSequenceOccurs:    "a content sequence occurring other than exactly once",
 	constructNestedGroup:       "a nested model group particle",
@@ -107,6 +108,7 @@ var constructNames = [...]string{
 	constructElementRef:        "an <element ref> particle",
 	constructComplexElement:    "a local element declaration of complex type",
 	constructSharedName:        "two particles sharing an expanded name",
+	constructSharedBranch:      "two choice alternatives whose branch structs have one shape",
 	constructList:              "a list simple type",
 	constructUnion:             "a union simple type",
 	constructSpecial:           "a special simple type",

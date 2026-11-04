@@ -46,8 +46,9 @@ func schemaTest(doc string) string {
 }
 
 // censusSuite is the fixture suite. Group g's schema generates, and its
-// cases decode (a.xml, twice, and f.xml, of simple type), decline with
-// another primitive (e.xml, twice) and choice content (c.xml), and fail
+// cases decode (a.xml, twice, f.xml, of simple type, and g.xml, a choice,
+// through the branch set the census binds), decline with
+// another primitive (e.xml, twice) and all content (c.xml), and fail
 // otherwise, charged (invalid.xml) and with no declaration for the document
 // element (u.xml), which decodes into the placeholder; its case old is
 // withheld. Group rec's schema assembles and does not generate, group bad's
@@ -58,7 +59,7 @@ var censusSuite = map[string]string{
   <testGroup name="g">` + schemaTest("s.xsd") +
 		instanceTest("decoded", "a.xml", "") + instanceTest("decoded2", "a.xml", "") +
 		instanceTest("simple", "e.xml", "") + instanceTest("simple2", "e.xml", "") + instanceTest("simpledecoded", "f.xml", "") +
-		instanceTest("choice", "c.xml", "") + instanceTest("invalid", "invalid.xml", "") +
+		instanceTest("all", "c.xml", "") + instanceTest("choice", "g.xml", "") + instanceTest("invalid", "invalid.xml", "") +
 		instanceTest("undeclared", "u.xml", "") + instanceTest("old", "a.xml", ` version="1.0"`) + `</testGroup>
   <testGroup name="rec">` + schemaTest("rec.xsd") + instanceTest("i", "a.xml", "") + `</testGroup>
   <testGroup name="bad">` + schemaTest("bad.xsd") + instanceTest("i", "a.xml", "") + `</testGroup>
@@ -66,9 +67,10 @@ var censusSuite = map[string]string{
 </testSet>`,
 	"d/s.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
-  <xs:element name="c"><xs:complexType><xs:choice><xs:element name="d" type="xs:string"/></xs:choice></xs:complexType></xs:element>
+  <xs:element name="c"><xs:complexType><xs:all><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
   <xs:element name="e" type="xs:int"/>
   <xs:element name="f" type="xs:string"/>
+  <xs:element name="g"><xs:complexType><xs:choice><xs:element name="h" type="xs:string"/><xs:element name="i" type="xs:string"/></xs:choice></xs:complexType></xs:element>
 </xs:schema>`,
 	"d/rec.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>
@@ -78,6 +80,7 @@ var censusSuite = map[string]string{
 	"d/c.xml":         `<c><d>x</d></c>`,
 	"d/e.xml":         `<e>1</e>`,
 	"d/f.xml":         `<f>x</f>`,
+	"d/g.xml":         `<g><i>x</i></g>`,
 	"d/invalid.xml":   `<a/>`,
 	"d/u.xml":         `<u/>`,
 	"d/notes.txt":     "not a document",
@@ -86,9 +89,9 @@ var censusSuite = map[string]string{
 
 // wantCounts is the report's head over censusSuite: every count, and its
 // construct lines.
-const wantCounts = `decodecensus: 11 instance case(s) under %ROOT%
-  schema generates: 8
-  decoded: 3
+const wantCounts = `decodecensus: 12 instance case(s) under %ROOT%
+  schema generates: 9
+  decoded: 4
   declined: 3
   undecided: 0
   rejected codegen's own struct: 0
@@ -97,7 +100,7 @@ const wantCounts = `decodecensus: 11 instance case(s) under %ROOT%
 
 === First decline, by construct: 2 construct(s) ===
        2  an atomic simple type whose primitive is neither xs:string nor xs:anyURI
-       1  choice content
+       1  all content
 
 === Caveats ===
 `
@@ -106,9 +109,11 @@ const wantCounts = `decodecensus: 11 instance case(s) under %ROOT%
 // and run included, and pins every count the report prints, the decline
 // table, every caveat and the placeholder's. It fails with instanceCases'
 // withheld test removed, with plan's generates count removed, and with the
-// decoded, declined or failed other arm of the driver's tallyOutcome removed;
-// undecided, rejected and the differential, which no schema document makes
-// codec return, are TestReportPrintsEachMergedCount's and package assess's.
+// decoded, declined or failed other arm of the driver's tallyOutcome removed,
+// and with driverSource's bound branch list dropped, which moves g.xml from
+// decoded to rejected; undecided, rejected and the differential, which no
+// schema document makes codec return, are TestReportPrintsEachMergedCount's
+// and package assess's.
 func TestCensusCounts(t *testing.T) {
 	root := writeTree(t, censusSuite)
 	var out bytes.Buffer
@@ -245,10 +250,11 @@ func TestOwnTypeFindsEachTopLevelElementsType(t *testing.T) {
 	if errs := codegen.Generate([]codegen.Target{{Schema: schema, Dir: dir, Package: "p"}}); errs != nil {
 		t.Fatalf("Generate: %v", errs)
 	}
-	types, err := generatedTypes(filepath.Join(dir, "xsd_gen.go"))
+	file, err := parseGenerated(filepath.Join(dir, "xsd_gen.go"))
 	if err != nil {
-		t.Fatalf("generatedTypes: %v", err)
+		t.Fatalf("parseGenerated: %v", err)
 	}
+	types := generatedTypes(file)
 	cases := []struct {
 		local, typ string
 		decl, ok   bool
@@ -289,11 +295,79 @@ func TestOwnTypeRendersAnAbsoluteLoc(t *testing.T) {
 	if errs := codegen.Generate([]codegen.Target{{Schema: schema, Dir: dir, Package: "p"}}); errs != nil {
 		t.Fatalf("Generate: %v", errs)
 	}
-	types, err := generatedTypes(filepath.Join(dir, "xsd_gen.go"))
+	file, err := parseGenerated(filepath.Join(dir, "xsd_gen.go"))
 	if err != nil {
-		t.Fatalf("generatedTypes: %v", err)
+		t.Fatalf("parseGenerated: %v", err)
 	}
+	types := generatedTypes(file)
 	if typ, _, ok := resolveCase(schema, types, xsd.QName{Local: "a"}, dir); typ != "A" || !ok {
 		t.Errorf("resolveCase(a) = %q, %v, want \"A\", true; types %v", typ, ok, types)
+	}
+}
+
+// TestDriverSourceBindsBranches pins the census's branch-set supply: a
+// generated file declaring two interfaces, one with two marker types and one
+// with a union's non-struct variant, beside a method that is no marker, a
+// pointer-receiver method of a marker's name and a generic interface, yields
+// sealedInterfaces' list, and a driver source declaring one WithBranches per
+// non-generic interface, in file order, bound to each decoder of that package
+// alone.
+func TestDriverSourceBindsBranches(t *testing.T) {
+	const src = `package p0
+
+type R interface {
+	isR()
+}
+
+type RA struct{ A string }
+
+func (RA) isR() {}
+
+type RB struct{ B string }
+
+func (RB) isR() {}
+
+func (RB) String() string { return "" }
+
+type U interface {
+	isU()
+}
+
+type UInt int32
+
+func (UInt) isU() {}
+
+func (*RA) isU() {}
+
+type Nillable[T, A any] interface {
+	isNillable(T, A)
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "xsd_gen.go")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	file, err := parseGenerated(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed := sealedInterfaces(file)
+	want := []sealedDecl{{name: "R", branches: []string{"RA", "RB"}}, {name: "U", branches: []string{"UInt"}}}
+	if !reflect.DeepEqual(sealed, want) {
+		t.Errorf("sealedInterfaces = %+v, want %+v", sealed, want)
+	}
+	got := string(driverSource(batch{packages: []genPackage{{name: "p0", sealed: sealed}, {name: "p1"}}, decoders: []string{"p0.R", "p1.S", "p0.X"}}))
+	for _, line := range []string{
+		"\t\"github.com/kud360/goxsd8/codec\"\n",
+		"var p0Branches = []codec.Option{\n\tcodec.WithBranches[p0.R](*new(p0.RA), *new(p0.RB)),\n\tcodec.WithBranches[p0.U](*new(p0.UInt)),\n}\n",
+		"\tassess.DecoderFor[p0.R](p0Branches...),\n\tassess.DecoderFor[p1.S](),\n\tassess.DecoderFor[p0.X](p0Branches...),\n",
+	} {
+		if !strings.Contains(got, line) {
+			t.Errorf("driver source\n%s\nlacks\n%s", got, line)
+		}
+	}
+	if strings.Contains(got, "p1Branches") {
+		t.Errorf("driver source\n%s\ndeclares branches for p1, which declares no interface", got)
 	}
 }

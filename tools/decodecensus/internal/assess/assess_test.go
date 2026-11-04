@@ -14,27 +14,40 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// fixtureSchema declares a, in the slice codec decodes, c, whose choice
-// content codec declines, and u, a's shape with an assertion whose for
-// expression the XPath subset declines, so validate leaves it undecided
-// (cvc-assertion).
+// fixtureSchema declares a, in the slice codec decodes, c, whose all
+// content codec declines, p, a choice codec decodes into a sealed interface,
+// and u, a's shape with an assertion whose for expression the XPath subset
+// declines, so validate leaves it undecided (cvc-assertion).
 const fixtureSchema = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
-  <xs:element name="c"><xs:complexType><xs:choice><xs:element name="d" type="xs:string"/></xs:choice></xs:complexType></xs:element>
+  <xs:element name="c"><xs:complexType><xs:all><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
+  <xs:element name="p"><xs:complexType><xs:choice><xs:element name="q" type="xs:string"/><xs:element name="r" type="xs:string"/></xs:choice></xs:complexType></xs:element>
   <xs:element name="u"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
     <xs:assert test="(for $x in b return string-length($x)) = 1"/></xs:complexType></xs:element>
 </xs:schema>
 `
 
-// The fixture's instances: valid.xml and choice.xml are valid, invalid.xml
+// p, pq and pr are the sealed interface and branches codegen emits for
+// element p.
+type (
+	p  interface{ isP() }
+	pq struct{ Q string }
+	pr struct{ R string }
+)
+
+func (pq) isP() {}
+func (pr) isP() {}
+
+// The fixture's instances: valid.xml, all.xml and choice.xml are valid, invalid.xml
 // lacks a's required child b, so validate charges it, and undecided.xml is
 // Undecided.
 var fixtureFiles = map[string]string{
 	"s.xsd":         fixtureSchema,
 	"valid.xml":     `<a><b>x</b></a>`,
 	"invalid.xml":   `<a/>`,
-	"choice.xml":    `<c><d>x</d></c>`,
+	"all.xml":       `<c><d>x</d></c>`,
+	"choice.xml":    `<p><r>x</r></p>`,
 	"undecided.xml": `<u><b>x</b></u>`,
 }
 
@@ -88,7 +101,7 @@ func accepting(*xsd.Schema, value.Backend, []byte, ...codec.Option) error { retu
 // removed; the row differential fails with assess's differential always false,
 // and the row after it with the differential set on every decoded case.
 func TestDriveCountsEachBucket(t *testing.T) {
-	own := []Decoder{DecoderFor[a]}
+	own := []Decoder{DecoderFor[a]()}
 	cases := []struct {
 		name     string
 		decoders []Decoder
@@ -96,14 +109,16 @@ func TestDriveCountsEachBucket(t *testing.T) {
 		want     Summary
 	}{
 		{"decoded", own, Case{"valid.xml", 0}, Summary{Decoded: 1}},
-		{"declined", []Decoder{DecoderFor[a]}, Case{"choice.xml", 0},
-			Summary{Declines: []Tally{{Construct: "choice content", Count: 1}}}},
+		{"declined", []Decoder{DecoderFor[a]()}, Case{"all.xml", 0},
+			Summary{Declines: []Tally{{Construct: "all content", Count: 1}}}},
 		{"undecided", own, Case{"undecided.xml", 0}, Summary{Undecided: 1}},
-		{"rejected", []Decoder{DecoderFor[mismatched]}, Case{"valid.xml", 0}, Summary{Rejected: 1}},
+		{"rejected", []Decoder{DecoderFor[mismatched]()}, Case{"valid.xml", 0}, Summary{Rejected: 1}},
 		{"failed other", own, Case{"invalid.xml", 0}, Summary{FailedOther: 1}},
 		{"placeholder mismatch", nil, Case{"valid.xml", -1}, Summary{FailedOther: 1, PlaceholderMismatch: 1}},
 		{"differential", []Decoder{accepting}, Case{"invalid.xml", 0}, Summary{Decoded: 1, Differential: 1}},
 		{"no differential where validate accepts", []Decoder{accepting}, Case{"valid.xml", 0}, Summary{Decoded: 1}},
+		{"decoded under bound branches", []Decoder{DecoderFor[p](codec.WithBranches[p](pq{}, pr{}))}, Case{"choice.xml", 0}, Summary{Decoded: 1}},
+		{"rejected without them", []Decoder{DecoderFor[p]()}, Case{"choice.xml", 0}, Summary{Rejected: 1}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -117,8 +132,8 @@ func TestDriveCountsEachBucket(t *testing.T) {
 // TestDriveTalliesDeclinesByConstruct pins the decline table's key: two
 // cases declining one construct are one Tally of 2.
 func TestDriveTalliesDeclinesByConstruct(t *testing.T) {
-	got := drive(t, []Decoder{DecoderFor[a]}, Case{"choice.xml", 0}, Case{"valid.xml", 0}, Case{"choice.xml", 0})
-	want := Summary{Decoded: 1, Declines: []Tally{{Construct: "choice content", Count: 2}}}
+	got := drive(t, []Decoder{DecoderFor[a]()}, Case{"all.xml", 0}, Case{"valid.xml", 0}, Case{"all.xml", 0})
+	want := Summary{Decoded: 1, Declines: []Tally{{Construct: "all content", Count: 2}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Summary = %+v, want %+v", got, want)
 	}
@@ -133,7 +148,7 @@ func TestDriveRefusesAnUnknownDecoder(t *testing.T) {
 			t.Fatalf("encoding the request: %v", err)
 		}
 		var out bytes.Buffer
-		if err := Drive(bytes.NewReader(req), &out, []Decoder{DecoderFor[a]}); err == nil {
+		if err := Drive(bytes.NewReader(req), &out, []Decoder{DecoderFor[a]()}); err == nil {
 			t.Errorf("Drive with decoder index %d: no error, summary %s", i, out.String())
 		}
 	}

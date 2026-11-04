@@ -7,6 +7,7 @@
 //	func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error)
 //	type Option func(*config)
 //	func WithURI(uri string) Option
+//	func WithBranches[I any](branches ...I) Option
 //	type DeclineError struct{ ... }
 //	func (e *DeclineError) Loc() xsderr.Loc
 //	func (e *DeclineError) Error() string
@@ -26,7 +27,8 @@
 // returns in every other case. It reads the schema, not T:
 // codegen's structs carry no tags, so Decode derives each field's name, order
 // and Go type from the declaration by codegen's own rules and refuses a T
-// that differs. Package codec does not import codegen. Nothing encodes yet.
+// that differs, and reads a sealed interface's branch types from
+// [WithBranches]. Package codec does not import codegen. Nothing encodes yet.
 //
 // # What decodes
 //
@@ -39,20 +41,31 @@
 // {type table} and {nillable} false, and its {type definition} is either a
 // simple type that decodes, its value T's own, or a complex type with
 // element-only content and no {open content} or {attribute wildcard}, whose
-// {particle} is an inline sequence occurring exactly once. Each particle of
-// that sequence is a local element declaration with no {type table} and
-// {nillable} false, of a simple type that decodes, no two particles sharing
-// an expanded name; each attribute use is outside the xsi namespace and is
-// typed the same way. Each field is a string, a *string or a []string by its
-// occurrence, an attribute's by its use's {required} and, as [Decode]'s doc
-// states, its effective value constraint (§3.5.4 key-evc). No element in the
-// instance carries xsi:type.
+// {particle} is an inline sequence or choice occurring exactly once. Each
+// particle of that sequence or choice is a local element declaration with no
+// {type table} and {nillable} false, of a simple type that decodes, no two
+// particles sharing an expanded name; each attribute use is outside the xsi
+// namespace and is typed the same way. Each field is a string, a *string or a
+// []string by its occurrence, an attribute's by its use's {required} and, as
+// [Decode]'s doc states, its effective value constraint (§3.5.4 key-evc). No
+// element in the instance carries xsi:type.
 //
-// Every other construct is a [*DeclineError], never a zero value: a choice,
-// an all group, a nested model group or <group ref>, a wildcard, an <element
-// ref> or substitution group, mixed, simple or empty content, a local
-// element of complex type, xs:anyType included, a nillable element, a list,
-// a union, a special type, any other primitive, and an xsi:type.
+// A choice decodes into codegen's sealed interface, the branch of the one
+// alternative the instance matches (§3.8.4.3 cvc-model-group) holding its one
+// field: a string, or a []string for an alternative whose {max occurs} is
+// above 1 or unbounded, its {min occurs} 0 read as 1. The interface is T
+// itself, or, where the type has an attribute use or one occurrence of the
+// choice is emptiable (§3.9.6.3 cos-group-emptiable), the first field of T, a
+// struct whose further fields are the attribute uses'. An empty match is the
+// nil interface.
+//
+// Every other construct is a [*DeclineError], never a zero value: a content
+// choice occurring other than exactly once, two choice alternatives whose
+// branch structs have one shape, an all group, a nested model group or
+// <group ref>, a choice's model-group alternative included, a wildcard, an
+// <element ref> or substitution group, mixed, simple or empty content, a
+// local element of complex type, xs:anyType included, a nillable element, a
+// list, a union, a special type, any other primitive, and an xsi:type.
 // Two of those are rulings rather than coverage still to come:
 //
 //   - A declaration with a {type table} declines. The slice that decodes it

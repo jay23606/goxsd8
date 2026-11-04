@@ -547,3 +547,308 @@ func TestDecodeDerivedTypes(t *testing.T) {
 		t.Errorf("Decode(r4) = %v, %v", r4, err)
 	}
 }
+
+// generated returns the file codegen writes for schema.
+func generated(t *testing.T, schema *xsd.Schema) []byte {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/m\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "s")
+	if err := codegen.Generate([]codegen.Target{{Schema: schema, Dir: dir, Package: "s"}}); err != nil {
+		t.Fatal(err)
+	}
+	gen, err := os.ReadFile(filepath.Join(dir, "xsd_gen.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return gen
+}
+
+// The choice schemas, each declaring s:r of an anonymous complex type whose
+// content is a choice occurring once: pickSchema's alternatives are a and a
+// repeated b, so codegen gives the bare interface pick; optSchema's b has
+// {min occurs} 0, so the choice is emptiable and codegen gives the struct
+// opt; attributedSchema adds an attribute named choice and a required one,
+// so codegen gives the struct attributed, whose field Choice2 pins that the
+// choice's field claims its name first.
+const (
+	pickSchema       = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:token" maxOccurs="3"/></xs:choice></xs:complexType></xs:element>`
+	optSchema        = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:choice></xs:complexType></xs:element>`
+	attributedSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:choice>
+		<xs:attribute name="choice" type="xs:string"/><xs:attribute name="tag" type="xs:string" use="required"/></xs:complexType></xs:element>`
+)
+
+// pick, pickA and pickB are the types codegen emits for pickSchema, R, RA and
+// RB, which TestChoiceTypesAreCodegens pins; pickC, of a shape codegen emits
+// no branch in, and pickA2, of pickA's, are implementers codegen does not
+// emit.
+type (
+	pick   interface{ isPick() }
+	pickA  struct{ A string }
+	pickB  struct{ B []string }
+	pickC  struct{ C string }
+	pickA2 struct{ A string }
+)
+
+func (pickA) isPick()  {}
+func (pickB) isPick()  {}
+func (pickC) isPick()  {}
+func (pickA2) isPick() {}
+
+// opt, optChoice, optA and optB are optSchema's R, RChoice, RChoiceA and
+// RChoiceB.
+type (
+	opt       struct{ Choice optChoice }
+	optChoice interface{ isOptChoice() }
+	optA      struct{ A string }
+	optB      struct{ B string }
+)
+
+func (optA) isOptChoice() {}
+func (optB) isOptChoice() {}
+
+// attributed, attributedChoice, attributedA and attributedB are
+// attributedSchema's R, RChoice, RChoiceA and RChoiceB.
+type (
+	attributed struct {
+		Choice  attributedChoice
+		Choice2 *string
+		Tag     string
+	}
+	attributedChoice interface{ isAttributedChoice() }
+	attributedA      struct{ A string }
+	attributedB      struct{ B string }
+)
+
+func (attributedA) isAttributedChoice() {}
+func (attributedB) isAttributedChoice() {}
+
+// The branch sets of the three schemas' interfaces.
+var (
+	pickBranches       = WithBranches[pick](pickA{}, pickB{})
+	optBranches        = WithBranches[optChoice](optA{}, optB{})
+	attributedBranches = WithBranches[attributedChoice](attributedA{}, attributedB{})
+)
+
+// TestChoiceTypesAreCodegens pins the types above to those codegen emits for
+// each choice schema, in shape, so that the rows decoding into them decode
+// into codegen's types.
+func TestChoiceTypesAreCodegens(t *testing.T) {
+	rows := []struct {
+		decls string
+		want  []string
+	}{
+		{pickSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
+			"type RB struct {\n\tB []string\n}\n\nfunc (RB) isR() {}\n",
+		}},
+		{optSchema, []string{
+			"type R struct {\n\tChoice RChoice\n}\n",
+			"type RChoice interface {\n\tisRChoice()\n}\n",
+			"type RChoiceA struct {\n\tA string\n}\n\nfunc (RChoiceA) isRChoice() {}\n",
+			"type RChoiceB struct {\n\tB string\n}\n\nfunc (RChoiceB) isRChoice() {}\n",
+		}},
+		{attributedSchema, []string{
+			"type R struct {\n\tChoice  RChoice\n\tChoice2 *string\n\tTag     string\n}\n",
+			"type RChoice interface {\n\tisRChoice()\n}\n",
+			"type RChoiceA struct {\n\tA string\n}\n\nfunc (RChoiceA) isRChoice() {}\n",
+			"type RChoiceB struct {\n\tB string\n}\n\nfunc (RChoiceB) isRChoice() {}\n",
+		}},
+	}
+	for _, row := range rows {
+		gen := generated(t, schemaOf(t, row.decls))
+		for _, decl := range row.want {
+			if !bytes.Contains(gen, []byte(decl)) {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+			}
+		}
+	}
+}
+
+// TestDecodeChoice pins the choice lift (cvc-model-group: one alternative
+// matches): each branch of the bare interface, a repeated alternative
+// appending into its one branch, the emptiable choice's empty match as the
+// nil interface (cos-group-emptiable) and its {min occurs} 0 alternative's
+// branch holding a string, and the struct holding the choice beside its
+// attribute fields. Each value is its element's ·normalized value·: b's
+// xs:token collapses.
+func TestDecodeChoice(t *testing.T) {
+	str := func(s string) *string { return &s }
+	rows := []struct {
+		name   string
+		decls  string
+		attrs  string
+		body   string
+		decode func(*xsd.Schema, []byte) (any, error)
+		want   any
+	}{
+		{"bare interface, first branch", pickSchema, "", "<s:a> x </s:a>", decodeInto[pick](pickBranches), pick(pickA{A: " x "})},
+		{"bare interface, repeated branch", pickSchema, "", "<s:b> 1  2 </s:b><s:b>3</s:b><s:b/>", decodeInto[pick](pickBranches), pick(pickB{B: []string{"1 2", "3", ""}})},
+		{"emptiable choice, empty match", optSchema, "", "", decodeInto[opt](optBranches), opt{}},
+		{"emptiable choice, its optional alternative present", optSchema, "", "<s:b>v</s:b>", decodeInto[opt](optBranches), opt{Choice: optB{B: "v"}}},
+		{"emptiable choice, its required alternative", optSchema, "", "<s:a>w</s:a>", decodeInto[opt](optBranches), opt{Choice: optA{A: "w"}}},
+		{"attributes beside the choice", attributedSchema, ` tag="t" choice="c"`, "<s:b>v</s:b>", decodeInto[attributed](attributedBranches),
+			attributed{Choice: attributedB{B: "v"}, Choice2: str("c"), Tag: "t"}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf(row.attrs, row.body)
+			mustAccept(t, schema, data)
+			got, err := row.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+		})
+	}
+}
+
+// decodeInto returns a function decoding data against schema into T under
+// opts and returning the value T holds, or nil with Decode's error.
+func decodeInto[T any](opts ...Option) func(*xsd.Schema, []byte) (any, error) {
+	return func(schema *xsd.Schema, data []byte) (any, error) {
+		v, err := Decode[T](schema, strict.New(), data, opts...)
+		if err != nil {
+			return nil, err
+		}
+		return *v, nil
+	}
+}
+
+// TestDecodeChoiceTypeMismatch pins item 6 of Decode's doc for a choice: a T
+// or a branch set that is not codegen's is ErrTypeMismatch, no decline, and
+// nothing is filled.
+func TestDecodeChoiceTypeMismatch(t *testing.T) {
+	type exported interface{ IsR() }
+	type twoMethods interface {
+		isPick()
+		isOther()
+	}
+	type stringChoice struct {
+		Choice  string
+		Choice2 *string
+		Tag     string
+	}
+	type misnamed struct {
+		C       attributedChoice
+		Choice2 *string
+		Tag     string
+	}
+	type attributeShort struct {
+		Choice attributedChoice
+		Tag    string
+		X      *string
+	}
+	pickData := instanceOf("", "<s:a>x</s:a>")
+	tagged := instanceOf(` tag="t"`, "<s:a>x</s:a>")
+	rows := []struct {
+		name   string
+		decls  string
+		data   []byte
+		decode func(*xsd.Schema, []byte) (any, error)
+		want   string
+	}{
+		{"no WithBranches", pickSchema, pickData, decodeInto[pick](),
+			"no WithBranches supplies the branches of codec.pick, the interface of T, where codegen emits 2"},
+		{"one branch short", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{})),
+			"WithBranches supplies 1 branches of codec.pick where codegen emits 2"},
+		{"one extra branch", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{}, pickB{}, pickC{})),
+			"WithBranches supplies 3 branches of codec.pick where codegen emits 2"},
+		{"a pointer branch", pickSchema, pickData, decodeInto[pick](WithBranches[pick](&pickA{}, pickB{})),
+			"WithBranches supplies *codec.pickA, no struct, as a branch of codec.pick"},
+		{"a nil branch", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{}, nil)),
+			"WithBranches supplies a nil branch of codec.pick"},
+		{"a branch twice", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{}, pickA{})),
+			"WithBranches supplies codec.pickA twice as a branch of codec.pick"},
+		{"a branch of no alternative's shape", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{}, pickC{})),
+			"branch codec.pickC of codec.pick has the shape of no branch struct codegen emits that an earlier branch did not match"},
+		{"two branches of one alternative's shape", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{}, pickA2{})),
+			"branch codec.pickA2 of codec.pick has the shape of no branch struct codegen emits that an earlier branch did not match"},
+		{"a struct where codegen emits the bare interface", pickSchema, pickData, decodeInto[opt](optBranches),
+			"T is codec.opt, no interface, where codegen emits a sealed interface"},
+		{"the bare interface where codegen emits a struct", optSchema, pickData, decodeInto[optChoice](optBranches),
+			"codec.optChoice is no struct"},
+		{"an interface whose method is exported", pickSchema, pickData, decodeInto[exported](),
+			"T is codec.exported, which is not an interface of one unexported method, codegen's sealed interface"},
+		{"an interface of two methods", pickSchema, pickData, decodeInto[twoMethods](),
+			"T is codec.twoMethods, which is not an interface of one unexported method, codegen's sealed interface"},
+		{"the choice's field not an interface", attributedSchema, tagged, decodeInto[stringChoice](),
+			"field Choice of codec.stringChoice is string, no interface, where codegen emits a sealed interface"},
+		{"the choice's field misnamed", attributedSchema, tagged, decodeInto[misnamed](attributedBranches),
+			"field 0 of codec.misnamed is C codec.attributedChoice where codegen emits Choice, a sealed interface"},
+		{"an attribute field after the choice's", attributedSchema, tagged, decodeInto[attributeShort](attributedBranches),
+			"field 1 of codec.attributeShort is Tag string where codegen emits Choice2 *string"},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			mustAccept(t, schema, row.data)
+			got, err := row.decode(schema, row.data)
+			if got != nil || err == nil {
+				t.Fatalf("Decode = (%v, %v), want no value and an error", got, err)
+			}
+			if want := ErrTypeMismatch.Error() + ": " + row.want; err.Error() != want {
+				t.Errorf("error = %q, want %q", err, want)
+			}
+			var de *DeclineError
+			if !errors.Is(err, ErrTypeMismatch) || errors.As(err, &de) {
+				t.Errorf("error %v: want ErrTypeMismatch alone", err)
+			}
+		})
+	}
+}
+
+// TestWithBranches pins WithBranches' option contract: a set for an
+// interface T does not hold, or for a type that is no interface, is ignored;
+// a later set for the same interface replaces an earlier one, in either
+// order; and the branches may come in any order.
+func TestWithBranches(t *testing.T) {
+	schema := schemaOf(t, pickSchema)
+	data := instanceOf("", "<s:b>x</s:b>")
+	want := pick(pickB{B: []string{"x"}})
+	accepted := []struct {
+		name string
+		opts []Option
+	}{
+		{"a set for an interface T does not hold", []Option{optBranches, pickBranches, attributedBranches}},
+		{"a set for a type that is no interface", []Option{WithBranches[string]("x"), pickBranches}},
+		{"a later set replaces a short one", []Option{WithBranches[pick](pickA{}), pickBranches}},
+		{"branches permuted", []Option{WithBranches[pick](pickB{}, pickA{})}},
+	}
+	for _, row := range accepted {
+		t.Run(row.name, func(t *testing.T) {
+			got, err := Decode[pick](schema, strict.New(), data, row.opts...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(*got, want) {
+				t.Errorf("Decode = %#v, want %#v", *got, want)
+			}
+		})
+	}
+	_, err := Decode[pick](schema, strict.New(), data, pickBranches, WithBranches[pick](pickA{}))
+	if want := ErrTypeMismatch.Error() + ": WithBranches supplies 1 branches of codec.pick where codegen emits 2"; err == nil || err.Error() != want {
+		t.Errorf("Decode under a full set then a short one = %v, want %q: the later set replaces the earlier", err, want)
+	}
+}
+
+// TestChoiceSharedBranchIsCodegens pins that the shared-branch decline guards
+// a shape codegen does emit: two alternatives whose expanded names differ give
+// two branch structs of one shape, which no branch type tells apart.
+func TestChoiceSharedBranchIsCodegens(t *testing.T) {
+	gen := generated(t, schemaOf(t, root(`<xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`)))
+	for _, decl := range []string{
+		"type RX struct {\n\tX string\n}\n",
+		"type RX2 struct {\n\tX string\n}\n",
+	} {
+		if !bytes.Contains(gen, []byte(decl)) {
+			t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+		}
+	}
+}

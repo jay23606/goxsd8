@@ -55,7 +55,18 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a, constructOpenContent, 1, 1},
 		{"group ref content", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>` + root(`<xs:group ref="s:g"/>`),
 			"", a, constructGroupRefContent, 1, 1},
-		{"choice content", root(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructChoiceContent, 1, 1},
+		{"content choice occurring twice", root(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructChoiceOccurs, 1, 1},
+		{"optional content choice", root(`<xs:choice minOccurs="0"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructChoiceOccurs, 1, 1},
+		{"choice alternative of a sequence", root(`<xs:choice><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`),
+			"", a, constructNestedGroup, 1, 1},
+		{"choice alternative of an element ref", `<xs:element name="b" type="xs:string"/>` + root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element ref="s:b"/></xs:choice>`),
+			"", a, constructElementRef, 1, 1},
+		{"choice alternative of another primitive", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int"/></xs:choice>`),
+			"", a, constructOtherPrimitive, 1, 1},
+		{"choice alternatives sharing a branch shape, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`),
+			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a branch shape, a and A", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:token"/></xs:choice>`),
+			"", a, constructSharedBranch, 1, 1},
 		{"all content", root(`<xs:all><xs:element name="a" type="xs:string"/></xs:all>`), "", a, constructAllContent, 1, 1},
 		{"content sequence occurring twice", root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:sequence>`), "", a, constructSequenceOccurs, 1, 1},
 		{"nested model group", sequenceOf(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructNestedGroup, 1, 1},
@@ -175,8 +186,8 @@ func TestDeclineConstruct(t *testing.T) {
 			{sequenceOf(`<xs:element name="a" type="xs:string" nillable="true"/>`), "", a},
 		}},
 		{"content", [2]decl{
-			{root(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`), "", a},
-			{`<xs:complexType name="ct"><xs:choice><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
+			{root(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a},
+			{`<xs:complexType name="ct"><xs:choice minOccurs="0"><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
 		}},
 		{"particle", [2]decl{
 			{sequenceOf(`<xs:any processContents="lax"/>`), "", a},
@@ -223,9 +234,9 @@ func TestDeclineConstruct(t *testing.T) {
 // document element's type: the declaration's schema Loc, then the type's,
 // labelled as the type's, then the refusal tail.
 func TestDeclineErrorText(t *testing.T) {
-	schema := schemaOf(t, root(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`))
+	schema := schemaOf(t, root(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`))
 	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", `<s:a>x</s:a>`))
-	const want = "?:1:1: codec does not decode choice content: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at s.xsd:1:202; a decoder refusal, not a schema or instance fault"
+	const want = "?:1:1: codec does not decode a content choice occurring other than exactly once: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at s.xsd:1:202; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}

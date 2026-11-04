@@ -26,7 +26,9 @@
 // working directory, so that its generated main packages may import package
 // assess. Each batch of up to batchSize packages builds one driver
 // with `go build`, which calls assess.Drive with one assess.DecoderFor
-// instantiation per type the batch's cases decode into. The command therefore
+// Decoder per type the batch's cases decode into, bound to one
+// codec.WithBranches per interface of that type's package, so that the census
+// supplies every package's branch sets (sealedInterfaces). The command therefore
 // runs inside this module's tree, with the go command on PATH and the module
 // cache holding this module's requirements, as GOFLAGS=-mod=mod builds offline
 // from it.
@@ -238,13 +240,29 @@ func writeModule(dir string, m module) error {
 	return nil
 }
 
-// batch is one driver's share of the census: the request it reads, and the
-// decoders it compiles, each a qualified type, `p<N>.<Name>`, at the index a
-// case's assess.Case.Decoder names.
+// batch is one driver's share of the census: the request it reads, the
+// generated packages it imports, and the decoders it compiles, each a
+// qualified type, `p<N>.<Name>`, at the index a case's assess.Case.Decoder
+// names.
 type batch struct {
 	req      assess.Request
-	packages []string
+	packages []genPackage
 	decoders []string
+}
+
+// genPackage is one generated package a driver imports: its name, p<N>, and
+// its generated file's sealed interfaces, in file order.
+type genPackage struct {
+	name   string
+	sealed []sealedDecl
+}
+
+// sealedDecl is one interface type a generated file declares, by name, and
+// its branches, the names of the types the file gives its marker method, in
+// file order.
+type sealedDecl struct {
+	name     string
+	branches []string
 }
 
 // plan generates each group's package into dir, resolves each case's type,
@@ -285,10 +303,11 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (repor
 		if errs := codegen.Generate([]codegen.Target{{Schema: schema, Dir: pkgDir, Package: pkg, Name: pkg}}); errs != nil {
 			continue
 		}
-		types, err := generatedTypes(filepath.Join(pkgDir, "xsd_gen.go"))
+		file, err := parseGenerated(filepath.Join(pkgDir, "xsd_gen.go"))
 		if err != nil {
 			return report{}, nil, err
 		}
+		types := generatedTypes(file)
 		if cur == nil || len(cur.packages) == batchSize {
 			batches = append(batches, batch{req: assess.Request{Root: abs}})
 			cur = &batches[len(batches)-1]
@@ -315,7 +334,7 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (repor
 		}
 		cur.req.Groups = append(cur.req.Groups, ag)
 		if used {
-			cur.packages = append(cur.packages, pkg)
+			cur.packages = append(cur.packages, genPackage{name: pkg, sealed: sealedInterfaces(file)})
 		}
 	}
 	return rep, batches, nil
@@ -383,13 +402,18 @@ type typeDecl struct {
 	name, header string
 }
 
-// generatedTypes returns the type declarations of the generated file at path,
-// in file order.
-func generatedTypes(path string) ([]typeDecl, error) {
+// parseGenerated parses the generated file at path, its comments included.
+func parseGenerated(path string) (*ast.File, error) {
 	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("parsing generated file %s: %w", path, err)
 	}
+	return file, nil
+}
+
+// generatedTypes returns the type declarations of the generated file, in
+// file order.
+func generatedTypes(file *ast.File) []typeDecl {
 	var types []typeDecl
 	for _, d := range file.Decls {
 		gen, ok := d.(*ast.GenDecl)
@@ -400,7 +424,46 @@ func generatedTypes(path string) ([]typeDecl, error) {
 			types = append(types, typeDecl{name: spec.(*ast.TypeSpec).Name.Name, header: gen.Doc.List[0].Text})
 		}
 	}
-	return types, nil
+	return types
+}
+
+// sealedInterfaces returns each interface type the generated file declares
+// with no type parameters, in file order, with its branches. A generic
+// interface, such as codegen's Nillable, is no type a WithBranches can name
+// uninstantiated, and Decode declines the nillable element Nillable is
+// emitted for before item 6. The branches are each type B the file gives a method of a
+// single value receiver of type B, named "is" plus the interface's name, with
+// no parameters or results, the marker codegen's package doc "# Complex
+// types" states, in file order.
+func sealedInterfaces(file *ast.File) []sealedDecl {
+	var sealed []sealedDecl
+	for _, d := range file.Decls {
+		gen, ok := d.(*ast.GenDecl)
+		if !ok || gen.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			ts := spec.(*ast.TypeSpec)
+			if _, isInterface := ts.Type.(*ast.InterfaceType); isInterface && ts.TypeParams == nil {
+				sealed = append(sealed, sealedDecl{name: ts.Name.Name})
+			}
+		}
+	}
+	for _, d := range file.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil || len(fn.Recv.List) != 1 || fn.Type.Params.NumFields() != 0 || fn.Type.Results.NumFields() != 0 {
+			continue
+		}
+		recv, ok := fn.Recv.List[0].Type.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		i := slices.IndexFunc(sealed, func(s sealedDecl) bool { return fn.Name.Name == "is"+s.name })
+		if i >= 0 {
+			sealed[i].branches = append(sealed[i].branches, recv.Name)
+		}
+	}
+	return sealed
 }
 
 // ownProvenances are the texts a header renders the declaration a top-level
@@ -510,17 +573,46 @@ func drive(dir string, n int, b batch) (assess.Summary, error) {
 }
 
 // driverSource returns the main package of b's driver: an import of each of
-// b's packages, and a decoder per qualified type, in b's order.
+// b's packages; for each package declaring a sealed interface, the option
+// list p<N>Branches, one codec.WithBranches per interface, each branch's zero
+// value as *new(B), so that a branch that is no struct compiles too; and a
+// decoder per qualified type, in b's order, bound to its package's list.
 func driverSource(b batch) []byte {
 	var s strings.Builder
 	s.WriteString("// Code generated by decodecensus; DO NOT EDIT.\n\npackage main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\n")
+	if slices.ContainsFunc(b.packages, func(p genPackage) bool { return len(p.sealed) > 0 }) {
+		s.WriteString("\t\"github.com/kud360/goxsd8/codec\"\n")
+	}
 	s.WriteString("\t\"github.com/kud360/goxsd8/tools/decodecensus/internal/assess\"\n")
 	for _, p := range b.packages {
-		fmt.Fprintf(&s, "\t%s %q\n", p, path.Join(driverModule, p))
+		fmt.Fprintf(&s, "\t%s %q\n", p.name, path.Join(driverModule, p.name))
 	}
-	s.WriteString(")\n\nvar decoders = []assess.Decoder{\n")
+	s.WriteString(")\n")
+	for _, p := range b.packages {
+		if len(p.sealed) == 0 {
+			continue
+		}
+		fmt.Fprintf(&s, "\nvar %sBranches = []codec.Option{\n", p.name)
+		for _, sd := range p.sealed {
+			fmt.Fprintf(&s, "\tcodec.WithBranches[%s.%s](", p.name, sd.name)
+			for i, br := range sd.branches {
+				if i > 0 {
+					s.WriteString(", ")
+				}
+				fmt.Fprintf(&s, "*new(%s.%s)", p.name, br)
+			}
+			s.WriteString("),\n")
+		}
+		s.WriteString("}\n")
+	}
+	s.WriteString("\nvar decoders = []assess.Decoder{\n")
 	for _, d := range b.decoders {
-		fmt.Fprintf(&s, "\tassess.DecoderFor[%s],\n", d)
+		pkg, _, _ := strings.Cut(d, ".")
+		bound := ""
+		if i := slices.IndexFunc(b.packages, func(p genPackage) bool { return p.name == pkg }); i >= 0 && len(b.packages[i].sealed) > 0 {
+			bound = pkg + "Branches..."
+		}
+		fmt.Fprintf(&s, "\tassess.DecoderFor[%s](%s),\n", d, bound)
 	}
 	s.WriteString("}\n\nfunc main() {\n\tif err := assess.Drive(os.Stdin, os.Stdout, decoders); err != nil {\n" +
 		"\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n}\n")

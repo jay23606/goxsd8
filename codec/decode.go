@@ -45,6 +45,12 @@ var (
 // therefore reads the document element's name itself, through parser/xmltree
 // or encoding/xml, before choosing T.
 //
+// T may be codegen's sealed interface for a choice, as the package doc's
+// "# What decodes" states, and Decode then returns a *T pointing at it. The
+// branch types reach Decode only through [WithBranches], and item 6 holds them
+// to the alternatives by shape: neither T's, the interface's nor a branch's
+// name is compared.
+//
 // The slice Decode covers is the package doc's "# What decodes". Decode
 // first assesses data against schema with package validate and decodes only
 // an instance whose Result has no source fault and stands
@@ -93,17 +99,30 @@ var (
 //     order: the declaration's {type table} and {nillable}, then its {type
 //     definition}: a simple type's {variety} and {primitive type definition},
 //     after which nothing further is examined, or a complex type's content,
-//     each particle of its content in order, each of its attribute uses in
-//     order, and its {attribute wildcard}.
+//     then the occurrence of its sequence or choice, each particle of its
+//     content in order — of a choice, each alternative's own constructs, then
+//     a branch field of the name and Go type an earlier alternative's has,
+//     which declines as two choice alternatives whose branch structs have one
+//     shape — each of its attribute uses in order, and its {attribute
+//     wildcard}.
 //  6. T does not match the type codegen emits for the declaration, as Decode
 //     derives it from the schema: for a complex {type definition}, T is not a
 //     struct whose fields are exactly those codegen emits, in name, order and
-//     Go type; for a simple one, T's underlying type is not string. It is an
-//     error errors.Is reports as [ErrTypeMismatch], no *DeclineError, so that
-//     a T that does not match the schema is never filled. Decode never reads
-//     the fields from T, so for a type codegen emitted from this schema the
-//     error is a defect of Decode's, and for any other T it is a T that does
-//     not match.
+//     Go type, or, where codegen emits the choice's sealed interface as the
+//     type itself, T is not an interface; for a simple one, T's underlying
+//     type is not string. A sealed interface, T or the struct's first field,
+//     does not match when it is not an interface whose one method is
+//     unexported, or when its branch set, as [WithBranches] supplied it, is
+//     not one struct of one field per alternative, that field the name and Go
+//     type of the alternative's branch field: when no WithBranches supplies
+//     it for a choice with {particles}, or its count differs, or it holds a
+//     nil value, a type that is no struct, a type twice, or a branch matching
+//     no alternative an earlier branch did not match. It is an error
+//     errors.Is reports as [ErrTypeMismatch], no *DeclineError, so that a T
+//     that does not match the schema is never filled. Decode never reads the
+//     fields from T, so for a type codegen emitted from this schema the error
+//     is a defect of Decode's, or a branch set WithBranches did not supply as
+//     codegen emitted it, and for any other T it is a T that does not match.
 //  7. An element carrying xsi:type, the document element or a child: a
 //     *DeclineError at that element's instance Loc, the first in document
 //     order, whose [DeclineError.Construct] is xsi:type's. A document element
@@ -132,11 +151,12 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 	if err != nil {
 		return nil, err
 	}
-	if err := b.check(reflect.TypeFor[T]()); err != nil {
+	f, err := b.check(reflect.TypeFor[T](), cfg.branches)
+	if err != nil {
 		return nil, err
 	}
 	out := new(T)
-	if err := b.fill(r, root, reflect.ValueOf(out).Elem()); err != nil {
+	if err := f.fill(r, root, reflect.ValueOf(out).Elem()); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -249,12 +269,13 @@ func (s shape) goType() reflect.Type {
 	panic(fmt.Sprintf("codec: invalid shape %d", s))
 }
 
-// field is one field of the struct codegen emits for the document element's
-// declaration: its Go name, its shape, the simple type its value is
-// normalized under, and supplied, the value Decode's doc states the
-// post-schema-validation infoset supplies for it, already normalized under
-// st, nil exactly when there is no value constraint: an element's {value
-// constraint}, an attribute use's effective one (§3.5.4 key-evc).
+// field is one field of a struct codegen emits: of the document element's
+// declaration's struct, or of a choice's branch struct. It holds its Go name,
+// its shape, the simple type its value is normalized under, and supplied, the
+// value Decode's doc states the post-schema-validation infoset supplies for
+// it, already normalized under st, nil exactly when there is no value
+// constraint: an element's {value constraint}, an attribute use's effective
+// one (§3.5.4 key-evc).
 type field struct {
 	name     string
 	shape    shape
@@ -262,28 +283,84 @@ type field struct {
 	supplied *string
 }
 
+// set stores the ·normalized value· of initial, under f's simple type, in dst,
+// a value of f's Go type.
+func (f field) set(schema *xsd.Schema, dst reflect.Value, initial string) error {
+	v, err := value.ApplyWhiteSpace(schema, f.st, initial)
+	if err != nil {
+		return fmt.Errorf("codec: normalizing the value of field %s: %w", f.name, err)
+	}
+	f.store(dst, v)
+	return nil
+}
+
+// store stores v, a value already normalized, in dst, a value of f's Go type,
+// by f's shape: a repeated field appends it, and an optional one points at a
+// copy of it.
+func (f field) store(dst reflect.Value, v string) {
+	switch f.shape {
+	case shapeOptional:
+		dst.Set(reflect.ValueOf(&v))
+	case shapeRepeated:
+		dst.Set(reflect.Append(dst, reflect.ValueOf(v)))
+	default:
+		dst.SetString(v)
+	}
+}
+
+// matches reports whether got, a struct field of T, is f as codegen emits it:
+// the same name and Go type, and not embedded.
+func (f field) matches(got reflect.StructField) bool {
+	return got.Name == f.name && got.Type == f.shape.goType() && !got.Anonymous
+}
+
 // A binder is the type codegen emits for one document element declaration,
-// as Decode reads it: check holds T to it, item 6 of Decode's doc, and fill
+// as Decode reads it: check holds T to it, item 6 of Decode's doc, reading
+// each sealed interface's branch types from sets, and returns the filler that
 // sets a value of T from the document element. A *binding binds a complex
-// {type definition} and a *simpleRoot a simple one.
+// {type definition} codegen gives a struct, a *choiceRoot one it gives a bare
+// sealed interface, and a *simpleRoot a simple one.
 type binder interface {
-	check(t reflect.Type) error
+	check(t reflect.Type, sets branchSets) (filler, error)
+}
+
+// A filler sets out, a value of the T a binder's check held, from the
+// document element root, whose start tag r has just returned, and from r's
+// tokens up to its end tag, or returns the xsi:type decline Decode's doc
+// states, item 7.
+type filler interface {
 	fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error
 }
 
 // binding is the struct codegen emits for one document element declaration
-// of complex type, as Decode reads it: its fields in codegen's order, each
-// element particle's first, then each attribute use's.
+// of complex type, as Decode reads it: its fields in codegen's order, its
+// content's first, then each attribute use's.
 type binding struct {
-	schema *xsd.Schema
-	fields []field
-	// firstAttribute is the index in fields of the first attribute use's
-	// field, len(fields) when there is none.
-	firstAttribute int
-	// children and attributes map an expanded name to its field's index; each
-	// is a lookup index only and never iterated (STYLE D2).
-	children   map[xsd.QName]int
+	schema  *xsd.Schema
+	content elementContent
+	attrs   []field
+	// attributes maps an attribute's expanded name to its field's index in
+	// attrs; it is a lookup index only and never iterated (STYLE D2).
 	attributes map[xsd.QName]int
+}
+
+// elementContent is the element content of the struct a *binding binds, the
+// fields that precede its attribute fields, a closed sum: a *sequence, the
+// fields of a sequence's particles, or a *choice, the one field holding a
+// choice's sealed interface.
+type elementContent interface {
+	// width is how many of the struct's fields the content's are.
+	width() int
+	// check holds t's first width fields to the content's, item 6 of Decode's
+	// doc, and returns the contentFiller that sets them.
+	check(t reflect.Type, sets branchSets) (contentFiller, error)
+}
+
+// A contentFiller sets the content's fields of out, the struct an
+// elementContent's check held, from the child element start, reading r up to
+// its end tag.
+type contentFiller interface {
+	child(r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error
 }
 
 // bind returns the binder of root's declaration, or the first decline
@@ -314,49 +391,319 @@ func bind(schema *xsd.Schema, root *xmltree.StartElement) (binder, error) {
 		return bindSimpleRoot(schema, decl, st, loc, typeSubject)
 	}
 	ct, _ := td.(xsd.ComplexType)
-	particles, d := contentParticles(ct)
+	content, group, d := contentGroup(ct)
 	if d != 0 {
 		return nil, decline(loc, d, typeSubject)
 	}
-	b := &binding{schema: schema, children: map[xsd.QName]int{}, attributes: map[xsd.QName]int{}}
-	var locals []string
-	for _, p := range particles {
-		el, d := particleElement(p)
-		if d != 0 {
-			return nil, decline(loc, d, "a particle of "+typeSubject)
-		}
-		f, d, err := b.localElement(el, p.Occurs())
-		if err != nil {
-			return nil, err
-		}
-		if d != 0 {
-			return nil, decline(loc, d, declSubject(el))
-		}
-		b.children[el.Name()] = len(b.fields)
-		b.fields = append(b.fields, f)
-		locals = append(locals, el.Name().Local)
+	b := &binding{schema: schema, attributes: map[xsd.QName]int{}}
+	// names is the struct's Namer: the content's fields claim from it in
+	// particle order, then the attribute fields (codegen/doc.go "# Particles").
+	// A bare sealed interface has no struct and discards it.
+	names := goname.NewNamer()
+	// ch is the content's choice, nil for a sequence: the one content a bare
+	// sealed interface can bind.
+	var ch *choice
+	var err error
+	b.content, ch, err = bindContent(schema, group, names, loc, typeSubject)
+	if err != nil {
+		return nil, err
 	}
-	b.firstAttribute = len(b.fields)
 	for _, u := range ct.AttributeUses() {
-		f, d, subject, err := b.attributeUse(u)
+		f, d, subject, err := attributeUse(schema, u)
 		if err != nil {
 			return nil, err
 		}
 		if d != 0 {
 			return nil, decline(loc, d, subject)
 		}
-		b.attributes[u.DeclarationName()] = len(b.fields)
-		b.fields = append(b.fields, f)
-		locals = append(locals, u.DeclarationName().Local)
+		f.name = names.Claim(u.DeclarationName().Local)
+		b.attributes[u.DeclarationName()] = len(b.attrs)
+		b.attrs = append(b.attrs, f)
 	}
 	if _, has := ct.AttributeWildcard(); has {
 		return nil, decline(loc, constructAttributeWildcard, typeSubject)
 	}
-	names := goname.NewNamer()
-	for i, local := range locals {
-		b.fields[i].name = names.Claim(local)
+	// codegen/emit.go's shape: a choice occurring once, in a type with no
+	// attribute field, is the type itself unless it has {particles} and one
+	// occurrence of it is emptiable (cos-group-emptiable).
+	if ch != nil && len(b.attrs) == 0 && (len(ch.alts) == 0 || !schema.ParticleEmptiable(content)) {
+		return &choiceRoot{choice: ch}, nil
 	}
 	return b, nil
+}
+
+// bindContent returns the elementContent of group, a content sequence or
+// choice, its fields named from names, and for a choice that choice, or the
+// first decline Decode's doc states for its particles, item 5, at the instance
+// Loc loc, typeSubject naming the type.
+func bindContent(schema *xsd.Schema, group xsd.ModelGroup, names *goname.Namer, loc xsderr.Loc, typeSubject string) (elementContent, *choice, error) {
+	if group.Compositor() == xsd.CompositorChoice {
+		ch, err := bindChoice(schema, group.Particles(), names, loc, typeSubject)
+		if err != nil {
+			return nil, nil, err
+		}
+		return ch, ch, nil
+	}
+	s, err := bindSequence(schema, group.Particles(), names, loc, typeSubject)
+	if err != nil {
+		return nil, nil, err
+	}
+	return s, nil, nil
+}
+
+// sequence is a sequence's particles as the struct codegen emits holds them:
+// one field per particle, in particle order.
+type sequence struct {
+	schema *xsd.Schema
+	fields []field
+	// children maps a child's expanded name to its field's index; it is a
+	// lookup index only and never iterated (STYLE D2).
+	children map[xsd.QName]int
+}
+
+// bindSequence returns the sequence of particles, a content sequence's, each
+// field named from names by its element's local name in particle order, or the
+// first decline Decode's doc states for them, item 5, at the instance Loc loc,
+// typeSubject naming the type.
+func bindSequence(schema *xsd.Schema, particles []xsd.Particle, names *goname.Namer, loc xsderr.Loc, typeSubject string) (*sequence, error) {
+	s := &sequence{schema: schema, children: map[xsd.QName]int{}}
+	for _, p := range particles {
+		el, d := particleElement(p)
+		if d != 0 {
+			return nil, decline(loc, d, "a particle of "+typeSubject)
+		}
+		f, d, err := localElement(schema, s.children, el, p.Occurs())
+		if err != nil {
+			return nil, err
+		}
+		if d != 0 {
+			return nil, decline(loc, d, declSubject(el))
+		}
+		f.name = names.Claim(el.Name().Local)
+		s.children[el.Name()] = len(s.fields)
+		s.fields = append(s.fields, f)
+	}
+	return s, nil
+}
+
+// width is the particle count.
+func (s *sequence) width() int { return len(s.fields) }
+
+// check holds t's first fields to s's, in name, order and Go type, and
+// returns s, which sets them.
+func (s *sequence) check(t reflect.Type, _ branchSets) (contentFiller, error) {
+	for i, want := range s.fields {
+		if got := t.Field(i); !want.matches(got) {
+			return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, i, t, got.Name, got.Type, want.name, want.shape.goType())
+		}
+	}
+	return s, nil
+}
+
+// child sets the field of the child element start, reading its character
+// children from r up to its end tag: their ·normalized value·, or the
+// field's supplied value when there are none, as Decode's doc states.
+func (s *sequence) child(r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
+	i, ok := s.children[expanded(start.Name())]
+	if !ok {
+		return unparticled(start)
+	}
+	v, err := elementValue(r, start, s.schema, s.fields[i].st, s.fields[i].supplied)
+	if err != nil {
+		return err
+	}
+	s.fields[i].store(out.Field(i), v)
+	return nil
+}
+
+// choice is a choice occurring once as codegen emits it: a sealed interface,
+// whose one method is unexported, and one branch struct per alternative, in
+// particle order, each holding the one field its alternative's particle
+// gives, its {min occurs} 0 read as 1 and its {max occurs} kept
+// (codegen/doc.go "# Complex types"). The interface is the type itself
+// (*choiceRoot) or the first field of the type's struct (*binding), named
+// name. alts holds each alternative's branch field, in particle order.
+type choice struct {
+	schema *xsd.Schema
+	name   string
+	alts   []field
+	// children maps a child's expanded name to its alternative's index in
+	// alts; it is a lookup index only and never iterated (STYLE D2).
+	children map[xsd.QName]int
+}
+
+// bindChoice returns the choice of particles, a content choice's, its field
+// named from names by the local name choice before any alternative is read
+// (codegen/doc.go "# Particles"), or the first decline Decode's doc states for
+// them, item 5, at the instance Loc loc, typeSubject naming the type: each
+// alternative's as a sequence's particle declines, then an alternative whose
+// branch struct has an earlier one's shape, which no branch type could tell
+// apart.
+func bindChoice(schema *xsd.Schema, particles []xsd.Particle, names *goname.Namer, loc xsderr.Loc, typeSubject string) (*choice, error) {
+	c := &choice{schema: schema, name: names.Claim("choice"), children: map[xsd.QName]int{}}
+	for _, p := range particles {
+		el, d := particleElement(p)
+		if d != 0 {
+			return nil, decline(loc, d, "a particle of "+typeSubject)
+		}
+		f, d, err := localElement(schema, c.children, el, p.Occurs())
+		if err != nil {
+			return nil, err
+		}
+		if d != 0 {
+			return nil, decline(loc, d, declSubject(el))
+		}
+		// A branch's {min occurs} 0 reads as 1: the empty match is the nil
+		// interface, so no branch holds an absent value (cos-group-emptiable).
+		if f.shape == shapeOptional {
+			f.shape = shapeOne
+		}
+		f.name = goname.NewNamer().Claim(el.Name().Local)
+		for _, earlier := range c.alts {
+			if earlier.name == f.name && earlier.shape == f.shape {
+				return nil, decline(loc, constructSharedBranch, declSubject(el))
+			}
+		}
+		c.children[el.Name()] = len(c.alts)
+		c.alts = append(c.alts, f)
+	}
+	return c, nil
+}
+
+// width is the one field holding the interface.
+func (c *choice) width() int { return 1 }
+
+// check holds t's first field to the one holding c's interface, and returns
+// the boundChoice that sets it.
+func (c *choice) check(t reflect.Type, sets branchSets) (contentFiller, error) {
+	got := t.Field(0)
+	if got.Name != c.name || got.Anonymous {
+		return nil, fmt.Errorf("%w: field 0 of %s is %s %s where codegen emits %s, a sealed interface", ErrTypeMismatch, t, got.Name, got.Type, c.name)
+	}
+	bc, err := c.checkSite(got.Type, fmt.Sprintf("field %s of %s", got.Name, t), sets)
+	if err != nil {
+		return nil, err
+	}
+	return bc, nil
+}
+
+// checkSite holds it, the Go type at the site site names, to c's sealed
+// interface, item 6 of Decode's doc: an interface whose one method is
+// unexported, whose branch types sets holds as one struct per alternative of
+// the alternative's branch shape. It returns c bound to those branch types.
+// Neither the interface's nor a branch's name is compared.
+func (c *choice) checkSite(it reflect.Type, site string, sets branchSets) (*boundChoice, error) {
+	if it.Kind() != reflect.Interface {
+		return nil, fmt.Errorf("%w: %s is %s, no interface, where codegen emits a sealed interface", ErrTypeMismatch, site, it)
+	}
+	if it.NumMethod() != 1 || it.Method(0).IsExported() {
+		return nil, fmt.Errorf("%w: %s is %s, which is not an interface of one unexported method, codegen's sealed interface", ErrTypeMismatch, site, it)
+	}
+	branches, supplied := sets.of(it)
+	if !supplied && len(c.alts) > 0 {
+		return nil, fmt.Errorf("%w: no WithBranches supplies the branches of %s, the interface of %s, where codegen emits %d", ErrTypeMismatch, it, site, len(c.alts))
+	}
+	if len(branches) != len(c.alts) {
+		return nil, fmt.Errorf("%w: WithBranches supplies %d branches of %s where codegen emits %d", ErrTypeMismatch, len(branches), it, len(c.alts))
+	}
+	// As many branches as alternatives, each matching one no earlier branch
+	// matched, leave no entry of matched nil.
+	matched := make([]reflect.Type, len(c.alts))
+	for i, bt := range branches {
+		if bt == nil {
+			return nil, fmt.Errorf("%w: WithBranches supplies a nil branch of %s", ErrTypeMismatch, it)
+		}
+		if bt.Kind() != reflect.Struct {
+			return nil, fmt.Errorf("%w: WithBranches supplies %s, no struct, as a branch of %s", ErrTypeMismatch, bt, it)
+		}
+		if slices.Contains(branches[:i], bt) {
+			return nil, fmt.Errorf("%w: WithBranches supplies %s twice as a branch of %s", ErrTypeMismatch, bt, it)
+		}
+		j := slices.IndexFunc(c.alts, func(a field) bool {
+			return bt.NumField() == 1 && a.matches(bt.Field(0))
+		})
+		if j < 0 || matched[j] != nil {
+			return nil, fmt.Errorf("%w: branch %s of %s has the shape of no branch struct codegen emits that an earlier branch did not match", ErrTypeMismatch, bt, it)
+		}
+		matched[j] = bt
+	}
+	return &boundChoice{choice: c, branches: matched}, nil
+}
+
+// boundChoice is a choice whose sealed interface checkSite held: branches[i]
+// is the branch struct of choice.alts[i], none nil.
+type boundChoice struct {
+	choice   *choice
+	branches []reflect.Type
+}
+
+// child sets the choice's field of out, the struct, from the child element
+// start.
+func (bc *boundChoice) child(r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
+	return bc.set(r, start, out.Field(0))
+}
+
+// set sets dst, a value of the choice's interface, from the child element
+// start, reading its character children from r up to its end tag: the branch
+// of start's alternative holds their ·normalized value·, or the field's
+// supplied value when there are none, as Decode's doc states, a repeated
+// alternative's appended to the branch dst already holds.
+func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, dst reflect.Value) error {
+	i, ok := bc.choice.children[expanded(start.Name())]
+	if !ok {
+		return unparticled(start)
+	}
+	alt, bt := bc.choice.alts[i], bc.branches[i]
+	branch := reflect.New(bt).Elem()
+	if !dst.IsNil() {
+		// Validation charges a child of a second alternative first
+		// (cvc-model-group); this is the defensive check.
+		if dst.Elem().Type() != bt {
+			return fmt.Errorf("codec: %s: element %s matches a second alternative of the choice", start.Loc(), expanded(start.Name()))
+		}
+		branch.Set(dst.Elem())
+	}
+	v, err := elementValue(r, start, bc.choice.schema, alt.st, alt.supplied)
+	if err != nil {
+		return err
+	}
+	alt.store(branch.Field(0), v)
+	dst.Set(branch)
+	return nil
+}
+
+// choiceRoot is the bare sealed interface codegen emits for a document
+// element declaration whose complex type's content is choice and which has no
+// attribute field, as Decode reads it.
+type choiceRoot struct {
+	choice *choice
+}
+
+// check holds t, T itself, to the choice's sealed interface, and returns the
+// boundChoiceRoot that fills it.
+func (c *choiceRoot) check(t reflect.Type, sets branchSets) (filler, error) {
+	bc, err := c.choice.checkSite(t, "T", sets)
+	if err != nil {
+		return nil, err
+	}
+	return boundChoiceRoot{choice: bc}, nil
+}
+
+// boundChoiceRoot is a choiceRoot whose T check held.
+type boundChoiceRoot struct {
+	choice *boundChoice
+}
+
+// fill sets out, a value of the interface, as a filler does. An empty match
+// leaves out nil.
+func (c boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
+	if err := checkXsiType(root); err != nil {
+		return err
+	}
+	if err := noAttributes(root); err != nil {
+		return err
+	}
+	return eachChild(r, func(start *xmltree.StartElement) error { return c.choice.set(r, start, out) })
 }
 
 // bindSimpleRoot returns the simpleRoot of decl, a top-level element
@@ -392,47 +739,52 @@ func declarationDecline(decl xsd.ElementDeclaration) construct {
 	return 0
 }
 
-// contentParticles returns the particles of ct's content, an inline sequence
-// occurring exactly once, or the construct Decode declines in its place.
-// ContentType and the particle term are closed sums, so the switches are
-// STYLE T2's sealed-sum exception.
-func contentParticles(ct xsd.ComplexType) ([]xsd.Particle, construct) {
+// contentGroup returns the {particle} of ct's content and its model group, an
+// inline sequence or choice occurring exactly once, or the construct Decode
+// declines in its place. ContentType and the particle term are closed sums, so
+// the switches are STYLE T2's sealed-sum exception.
+func contentGroup(ct xsd.ComplexType) (xsd.Particle, xsd.ModelGroup, construct) {
 	var content xsd.ElementContent
 	switch c := ct.ContentType().(type) {
 	case xsd.EmptyContent:
-		return nil, constructEmptyContent
+		return xsd.Particle{}, xsd.ModelGroup{}, constructEmptyContent
 	case xsd.SimpleContent:
-		return nil, constructSimpleContent
+		return xsd.Particle{}, xsd.ModelGroup{}, constructSimpleContent
 	case xsd.ElementContent:
 		content = c
 	}
 	if content.Mixed {
-		return nil, constructMixedContent
+		return xsd.Particle{}, xsd.ModelGroup{}, constructMixedContent
 	}
 	if content.OpenContent != nil {
-		return nil, constructOpenContent
+		return xsd.Particle{}, xsd.ModelGroup{}, constructOpenContent
 	}
 	if _, isRef := content.Particle.Term().(xsd.ModelGroupRef); isRef {
-		return nil, constructGroupRefContent
+		return xsd.Particle{}, xsd.ModelGroup{}, constructGroupRefContent
 	}
 	resolved, _ := content.Particle.Term().(xsd.ResolvedTerm)
 	group, _ := resolved.Term.(xsd.ModelGroup)
+	occurs := content.Particle.Occurs()
+	upper, bounded := occurs.Max()
+	once := occurs.Min() == 1 && bounded && upper == 1
 	switch group.Compositor() {
 	case xsd.CompositorChoice:
-		return nil, constructChoiceContent
-	case xsd.CompositorAll:
-		return nil, constructAllContent
-	case xsd.CompositorSequence:
-		occurs := content.Particle.Occurs()
-		if upper, bounded := occurs.Max(); occurs.Min() != 1 || !bounded || upper != 1 {
-			return nil, constructSequenceOccurs
+		if !once {
+			return xsd.Particle{}, xsd.ModelGroup{}, constructChoiceOccurs
 		}
-		return group.Particles(), 0
+		return content.Particle, group, 0
+	case xsd.CompositorAll:
+		return xsd.Particle{}, xsd.ModelGroup{}, constructAllContent
+	case xsd.CompositorSequence:
+		if !once {
+			return xsd.Particle{}, xsd.ModelGroup{}, constructSequenceOccurs
+		}
+		return content.Particle, group, 0
 	}
 	// The {particle} of element-only content is a model group (§3.4.2.3.3), so
 	// the zero ModelGroup, no compositor, is a component no schema document
 	// yields; decline it with the nearest construct rather than read it.
-	return nil, constructNestedGroup
+	return xsd.Particle{}, xsd.ModelGroup{}, constructNestedGroup
 }
 
 // particleElement returns the local element declaration p's term holds, or
@@ -453,15 +805,16 @@ func particleElement(p xsd.Particle) (xsd.ElementDeclaration, construct) {
 	return xsd.ElementDeclaration{}, constructNestedGroup
 }
 
-// localElement returns the field, its name unset, of the local element
-// declaration el in a particle occurring as occurs, or the construct Decode
-// declines it for, in the order Decode's doc states: its own properties, its
-// type, and an expanded name an earlier particle of the sequence shares.
-func (b *binding) localElement(el xsd.ElementDeclaration, occurs xsd.Occurs) (field, construct, error) {
+// localElement returns the field, but for its name, which its caller claims,
+// of the local element declaration el in a particle occurring as occurs, or
+// the construct Decode declines it for, in the order Decode's doc states:
+// its own properties, its type, and an expanded name an earlier particle of
+// its model group shares, children indexing the earlier particles' names.
+func localElement(schema *xsd.Schema, children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, construct, error) {
 	if d := declarationDecline(el); d != 0 {
 		return field{}, d, nil
 	}
-	td, ok := b.schema.ResolvedType(el.TypeDefinition())
+	td, ok := schema.ResolvedType(el.TypeDefinition())
 	if !ok {
 		return field{}, 0, fmt.Errorf("codec: the {type definition} of %s does not resolve", declSubject(el))
 	}
@@ -469,11 +822,11 @@ func (b *binding) localElement(el xsd.ElementDeclaration, occurs xsd.Occurs) (fi
 	if !ok {
 		return field{}, constructComplexElement, nil
 	}
-	d, err := simpleDecline(b.schema, st)
+	d, err := simpleDecline(schema, st)
 	if err != nil || d != 0 {
 		return field{}, d, err
 	}
-	if _, shared := b.children[el.Name()]; shared {
+	if _, shared := children[el.Name()]; shared {
 		return field{}, constructSharedName, nil
 	}
 	s, err := occursShape(occurs, el)
@@ -482,17 +835,18 @@ func (b *binding) localElement(el xsd.ElementDeclaration, occurs xsd.Occurs) (fi
 	}
 	f := field{shape: s, st: st}
 	if vc, has := el.ValueConstraint(); has {
-		f.supplied, err = supply(b.schema, st, vc, declSubject(el))
+		f.supplied, err = supply(schema, st, vc, declSubject(el))
 	}
 	return f, 0, err
 }
 
-// attributeUse returns the field, its name unset, of attribute use u, or the
-// construct Decode declines it for and the subject naming it. The field's
-// shape is codegen's, as the package doc's "# What decodes" states, and needs
-// no xsi: test here: an xsi: use declines before its shape is picked.
-func (b *binding) attributeUse(u xsd.AttributeUse) (field, construct, string, error) {
-	decl, ok := b.schema.ResolvedAttributeDeclaration(u)
+// attributeUse returns the field, but for its name, which its caller claims,
+// of attribute use u, or the construct Decode declines it for and the subject
+// naming it. The field's shape is codegen's, as the package doc's "# What
+// decodes" states, and needs no xsi: test here: an xsi: use declines before
+// its shape is picked.
+func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (field, construct, string, error) {
+	decl, ok := schema.ResolvedAttributeDeclaration(u)
 	if !ok {
 		return field{}, 0, "", fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName())
 	}
@@ -500,21 +854,21 @@ func (b *binding) attributeUse(u xsd.AttributeUse) (field, construct, string, er
 	if decl.Name().Space == xsd.XMLSchemaInstanceNS {
 		return field{}, constructXsiAttribute, subject, nil
 	}
-	st, ok := b.schema.ResolvedSimpleType(decl.TypeDefinition())
+	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
 	if !ok {
 		return field{}, 0, "", fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
 	}
-	d, err := simpleDecline(b.schema, st)
+	d, err := simpleDecline(schema, st)
 	if err != nil || d != 0 {
 		return field{}, d, subject, err
 	}
 	f := field{shape: shapeOptional, st: st}
-	vc, has := b.schema.EffectiveValueConstraint(u)
+	vc, has := schema.EffectiveValueConstraint(u)
 	if u.Required() || has {
 		f.shape = shapeOne
 	}
 	if has {
-		f.supplied, err = supply(b.schema, st, vc, subject)
+		f.supplied, err = supply(schema, st, vc, subject)
 	}
 	return f, 0, subject, err
 }
@@ -577,42 +931,53 @@ func occursShape(occurs xsd.Occurs, el xsd.ElementDeclaration) (shape, error) {
 	return shapeOne, nil
 }
 
-// check returns nil when t is the struct codegen emits for b, and otherwise
-// the ErrTypeMismatch error Decode's doc states, item 6.
-func (b *binding) check(t reflect.Type) error {
+// check returns the boundBinding that fills t when t is the struct codegen
+// emits for b, and otherwise the ErrTypeMismatch error Decode's doc states,
+// item 6.
+func (b *binding) check(t reflect.Type, sets branchSets) (filler, error) {
 	if t.Kind() != reflect.Struct {
-		return fmt.Errorf("%w: %s is no struct", ErrTypeMismatch, t)
+		return nil, fmt.Errorf("%w: %s is no struct", ErrTypeMismatch, t)
 	}
-	if t.NumField() != len(b.fields) {
-		return fmt.Errorf("%w: %s has %d fields where codegen emits %d", ErrTypeMismatch, t, t.NumField(), len(b.fields))
+	width := b.content.width()
+	if t.NumField() != width+len(b.attrs) {
+		return nil, fmt.Errorf("%w: %s has %d fields where codegen emits %d", ErrTypeMismatch, t, t.NumField(), width+len(b.attrs))
 	}
-	for i, want := range b.fields {
-		got := t.Field(i)
-		if got.Name != want.name || got.Type != want.shape.goType() || got.Anonymous {
-			return fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, i, t, got.Name, got.Type, want.name, want.shape.goType())
+	cf, err := b.content.check(t, sets)
+	if err != nil {
+		return nil, err
+	}
+	for i, want := range b.attrs {
+		if got := t.Field(width + i); !want.matches(got) {
+			return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, width+i, t, got.Name, got.Type, want.name, want.shape.goType())
 		}
 	}
-	return nil
+	return &boundBinding{binding: b, content: cf}, nil
 }
 
-// fill sets out's fields from the document element root, whose start tag r
-// has just returned, and from r's tokens up to its end tag, or returns the
-// xsi:type decline Decode's doc states, item 7. An attribute field with a
-// supplied value holds it unless its attribute is present, as Decode's doc
-// states.
-func (b *binding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
+// boundBinding is a binding whose T check held, content its content's
+// contentFiller.
+type boundBinding struct {
+	binding *binding
+	content contentFiller
+}
+
+// fill sets out's fields as a filler does. An attribute field with a supplied
+// value holds it unless its attribute is present, as Decode's doc states.
+func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err
 	}
-	for i := b.firstAttribute; i < len(b.fields); i++ {
-		if s := b.fields[i].supplied; s != nil {
-			b.store(out, i, *s)
+	bd := b.binding
+	width := bd.content.width()
+	for i, f := range bd.attrs {
+		if f.supplied != nil {
+			f.store(out.Field(width+i), *f.supplied)
 		}
 	}
 	for _, a := range root.Attributes() {
-		i, ok := b.attributes[expanded(a.Name())]
+		i, ok := bd.attributes[expanded(a.Name())]
 		if ok {
-			if err := b.set(out, i, a.Value()); err != nil {
+			if err := bd.attrs[i].set(bd.schema, out.Field(width+i), a.Value()); err != nil {
 				return err
 			}
 			continue
@@ -621,6 +986,14 @@ func (b *binding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflec
 			return unattributed(a)
 		}
 	}
+	return eachChild(r, func(start *xmltree.StartElement) error { return b.content.child(r, start, out) })
+}
+
+// eachChild reads r's tokens up to the end tag of the element whose start tag
+// r has just returned, and calls child for each child element's start tag,
+// which reads r up to that child's end tag, once that child carries no
+// xsi:type, or returns the xsi:type decline Decode's doc states, item 7.
+func eachChild(r *xmltree.Reader, child func(*xmltree.StartElement) error) error {
 	for {
 		tok, err := r.Token()
 		if err != nil {
@@ -630,30 +1003,20 @@ func (b *binding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflec
 		case *xmltree.EndElement:
 			return nil
 		case *xmltree.StartElement:
-			if err := b.child(r, tok, out); err != nil {
+			if err := checkXsiType(tok); err != nil {
+				return err
+			}
+			if err := child(tok); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-// child sets the field of the child element start, reading its character
-// children from r up to its end tag: their ·normalized value·, or the
-// field's supplied value when there are none, as Decode's doc states.
-func (b *binding) child(r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
-	if err := checkXsiType(start); err != nil {
-		return err
-	}
-	i, ok := b.children[expanded(start.Name())]
-	if !ok {
-		return fmt.Errorf("codec: %s: element %s is attributed to no particle", start.Loc(), expanded(start.Name()))
-	}
-	v, err := elementValue(r, start, b.schema, b.fields[i].st, b.fields[i].supplied)
-	if err != nil {
-		return err
-	}
-	b.store(out, i, v)
-	return nil
+// unparticled is the error for the child element start when no particle of
+// its parent's content attributes it.
+func unparticled(start *xmltree.StartElement) error {
+	return fmt.Errorf("codec: %s: element %s is attributed to no particle", start.Loc(), expanded(start.Name()))
 }
 
 // elementValue reads the character children of the element start, of simple
@@ -696,33 +1059,40 @@ type simpleRoot struct {
 	supplied *string
 }
 
-// check returns nil when t's underlying type is string, and otherwise the
-// ErrTypeMismatch error Decode's doc states, item 6. t's name is never
-// compared.
-func (s *simpleRoot) check(t reflect.Type) error {
+// check returns s, which fills t, when t's underlying type is string, and
+// otherwise the ErrTypeMismatch error Decode's doc states, item 6. t's name is
+// never compared.
+func (s *simpleRoot) check(t reflect.Type, _ branchSets) (filler, error) {
 	if t.Kind() != reflect.String {
-		return fmt.Errorf("%w: the underlying type of %s is not string", ErrTypeMismatch, t)
+		return nil, fmt.Errorf("%w: the underlying type of %s is not string", ErrTypeMismatch, t)
 	}
-	return nil
+	return s, nil
 }
 
-// fill sets out, whose underlying type is string, from the document element
-// root, whose start tag r has just returned, and from r's tokens up to its end
-// tag, or returns the xsi:type decline Decode's doc states, item 7.
+// fill sets out, whose underlying type is string, as a filler does.
 func (s *simpleRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err
 	}
-	for _, a := range root.Attributes() {
-		if a.Name().Space() != xsd.XMLSchemaInstanceNS {
-			return unattributed(a)
-		}
+	if err := noAttributes(root); err != nil {
+		return err
 	}
 	v, err := elementValue(r, root, s.schema, s.st, s.supplied)
 	if err != nil {
 		return err
 	}
 	out.SetString(v)
+	return nil
+}
+
+// noAttributes returns the error for the first attribute of the document
+// element root outside the xsi namespace, for a type with no attribute use.
+func noAttributes(root *xmltree.StartElement) error {
+	for _, a := range root.Attributes() {
+		if a.Name().Space() != xsd.XMLSchemaInstanceNS {
+			return unattributed(a)
+		}
+	}
 	return nil
 }
 
@@ -741,32 +1111,6 @@ func checkXsiType(start *xmltree.StartElement) error {
 		}
 	}
 	return nil
-}
-
-// set stores the ·normalized value· of initial, under field i's simple type,
-// in out's field i.
-func (b *binding) set(out reflect.Value, i int, initial string) error {
-	f := b.fields[i]
-	v, err := value.ApplyWhiteSpace(b.schema, f.st, initial)
-	if err != nil {
-		return fmt.Errorf("codec: normalizing the value of field %s: %w", f.name, err)
-	}
-	b.store(out, i, v)
-	return nil
-}
-
-// store stores v, a value already normalized, in out's field i by its shape:
-// a repeated field appends it, and an optional one points at a copy of it.
-func (b *binding) store(out reflect.Value, i int, v string) {
-	dst := out.Field(i)
-	switch b.fields[i].shape {
-	case shapeOptional:
-		dst.Set(reflect.ValueOf(&v))
-	case shapeRepeated:
-		dst.Set(reflect.Append(dst, reflect.ValueOf(v)))
-	default:
-		dst.SetString(v)
-	}
 }
 
 // declSubject names the element declaration decl and its schema Loc.

@@ -2,7 +2,7 @@
 // driver: the program the census compiles, in a temporary module, beside the
 // packages codegen emitted, so that codec.Decode can be instantiated with each
 // generated type. Its importers are that driver's generated main package,
-// which calls [Drive] with one [DecoderFor] instantiation per type, and the
+// which calls [Drive] with one [DecoderFor] Decoder per type, and the
 // census command, which calls [Assemble] and writes the [Request] Drive reads.
 // The command's package doc owns the population, the assembly and the report;
 // this package owns how one instance is classified, so that the tests that
@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/codec"
@@ -92,10 +93,14 @@ func closureReached(resolver loader.Resolver, report *parser.AssemblyReport, loc
 // into the Go type its maker chose, and returns codec.Decode's error alone.
 type Decoder func(schema *xsd.Schema, backend value.Backend, data []byte, opts ...codec.Option) error
 
-// DecoderFor is the Decoder into T: codec.Decode[T], its value discarded.
-func DecoderFor[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...codec.Option) error {
-	_, err := codec.Decode[T](schema, backend, data, opts...)
-	return err
+// DecoderFor returns the Decoder into T: codec.Decode[T], its value
+// discarded, under bound and then the options each call passes. The census
+// binds every codec.WithBranches set of T's generated package.
+func DecoderFor[T any](bound ...codec.Option) Decoder {
+	return func(schema *xsd.Schema, backend value.Backend, data []byte, opts ...codec.Option) error {
+		_, err := codec.Decode[T](schema, backend, data, append(slices.Clone(bound), opts...)...)
+		return err
+	}
 }
 
 // placeholder is the T a case decodes into when the census resolved no
@@ -276,7 +281,7 @@ func Drive(r io.Reader, w io.Writer, decoders []Decoder) error {
 // Decoder and false.
 func decoderAt(decoders []Decoder, i int) (Decoder, bool, error) {
 	if i == -1 {
-		return DecoderFor[placeholder], false, nil
+		return DecoderFor[placeholder](), false, nil
 	}
 	if i < 0 || i >= len(decoders) {
 		return nil, false, fmt.Errorf("decoder index %d is outside the %d decoders", i, len(decoders))
