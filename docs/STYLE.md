@@ -95,7 +95,7 @@ keeping its own `[rule]` prefix and its own citation. `Error()`'s `[rule]`
 prefix and the inline rule ID both stay (#2311). Target shape:
 
 ```
-<loc>: [cvc-type] element n's value "x3" is not a valid <int>, which cvc-type clause 3.1.3 requires: [cvc-pattern-valid] "x3" matches no member of the pattern facet of <integer>, whose {value} holds <pattern>, but cvc-pattern-valid requires one to match
+<loc>: [cvc-type] element n's value "x3" is not a valid <int>, which cvc-type clause 3.1.3 requires: [cvc-pattern-valid] "x3" matches no member of the pattern facet that <int> inherits from <integer>, whose {value} holds <pattern>, but cvc-pattern-valid requires one to match
 ```
 
 ## Data & determinism

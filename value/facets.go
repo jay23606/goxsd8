@@ -555,24 +555,24 @@ func compile(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, a AssertionEvalu
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	for _, ef := range eff {
+	for i, ef := range eff {
 		switch ef.Facet().Kind() {
 		case xsd.FacetWhiteSpace:
 			// Consumed by the whiteSpace normalize stage, not a checker.
 		case xsd.FacetPattern:
-			pf, err := newPatternFacet(ef)
+			pf, err := newPatternFacet(ef.Facet(), newFacetOrigin(st, eff, i))
 			if err != nil {
 				return nil, nil, nil, err
 			}
 			lexFacets = append(lexFacets, pf)
 		case xsd.FacetEnumeration:
-			enf, err := newEnumFacet(b, r, st, ef, a)
+			enf, err := newEnumFacet(b, r, st, ef.Facet(), newFacetOrigin(st, eff, i), a)
 			if err != nil {
 				return nil, nil, nil, err
 			}
 			valFacets = append(valFacets, enf)
 		case xsd.FacetMaxInclusive, xsd.FacetMaxExclusive, xsd.FacetMinInclusive, xsd.FacetMinExclusive:
-			bf, err := newBoundFacet(b, r, st, ef, a)
+			bf, err := newBoundFacet(b, r, st, ef.Facet(), newFacetOrigin(st, eff, i), a)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -626,6 +626,69 @@ func compile(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, a AssertionEvalu
 		}
 	}
 	return lexFacets, valFacets, assertFacets, nil
+}
+
+// facetOrigin is how the type compile checks holds one entry of its {facets}:
+// declared by its own restriction, or inherited from the ancestor that declared
+// it — the restriction case of the {facets} mapping (Datatypes §4.1.2 case 1),
+// which the spec states as no chargeable relation, so this is provenance a
+// pattern, enumeration or bound message renders, not a rule. The checked type
+// is compile's st: the item or member type under a list or union, never the
+// cvc-type governing type validate reports. The zero facetOrigin reads as own.
+type facetOrigin struct {
+	// declaring is EffectiveFacet.Declaring(): the zero QName for an anonymous
+	// declarer.
+	declaring xsd.QName
+	// heir is the checked type when the facet is inherited, nil when it is the
+	// checked type's own.
+	heir *xsd.SimpleType
+}
+
+// newFacetOrigin decides whether eff[i], an entry of st.EffectiveFacets, is
+// st's own: it is iff st.OwnFacets holds a facet of eff[i]'s kind and no later
+// entry of eff has that kind; otherwise st inherits it. Kind and position decide
+// it, never QName equality of Declaring() and st's name, which cannot tell an
+// anonymous type's own facet from one an anonymous ancestor declared — both
+// sides are the zero QName (#552). The rule rests on two facts: st declares at
+// most one facet per kind (st-props-correct clause 4, xsd checkSTProps), and
+// EffectiveFacets keeps st's own entry of a kind last — the only entry of a
+// replace kind, the last of the pattern entries it keeps base before derived
+// (xsd overlayFacet).
+func newFacetOrigin(st *xsd.SimpleType, eff []xsd.EffectiveFacet, i int) facetOrigin {
+	kind := eff[i].Facet().Kind()
+	o := facetOrigin{declaring: eff[i].Declaring()}
+	for _, later := range eff[i+1:] {
+		if later.Facet().Kind() == kind {
+			o.heir = st
+			return o
+		}
+	}
+	for _, own := range st.OwnFacets() {
+		if own.Kind() == kind {
+			return o
+		}
+	}
+	o.heir = st
+	return o
+}
+
+// relation renders the facet's tie to the type it was checked against, after
+// the facet's noun: "of <declaring>" for an own facet, "that <heir> inherits
+// from <declaring>" for an inherited one.
+func (o facetOrigin) relation() string {
+	if o.heir == nil {
+		return "of " + simpleTypeLabel(o.declaring)
+	}
+	return fmt.Sprintf("that %s inherits from %s", simpleTypeLabel(o.heir.Name()), simpleTypeLabel(o.declaring))
+}
+
+// inheritedBy renders the heir after a message that already names the declaring
+// type: "" for an own facet, " that <heir> inherits" for an inherited one.
+func (o facetOrigin) inheritedBy() string {
+	if o.heir == nil {
+		return ""
+	}
+	return fmt.Sprintf(" that %s inherits", simpleTypeLabel(o.heir.Name()))
 }
 
 // governingMapping resolves the Mapping that governs node's value space. For a
@@ -806,19 +869,21 @@ func facetValue(m Mapping, ws whiteSpace, raw string, ctx Context) (Value, error
 // patternFacet per such EffectiveFacet, and ValidateLexical requires EVERY one
 // to pass (AND-across-steps); within a single patternFacet a literal is
 // pattern-valid if it matches ANY member (the same-step OR-set). The RE2
-// regexes are compiled once at construction; ef is kept so a rejection names
-// the step that failed — its literals and the type that declares them.
+// regexes are compiled once at construction; facet and origin are kept so a
+// rejection names the step that failed — its literals, the type that declares
+// them, and whether the checked type inherits them.
 type patternFacet struct {
-	ef  xsd.EffectiveFacet
-	res []*regexp.Regexp
+	facet  xsd.Facet
+	origin facetOrigin
+	res    []*regexp.Regexp
 }
 
-// newPatternFacet translates each XSD-flavor pattern value of ef to RE2 and
+// newPatternFacet translates each XSD-flavor pattern value of f to RE2 and
 // compiles it (regex.FlavorXSD is implicitly whole-string anchored; ^ and $ are
 // literal characters, not anchors). A bad pattern surfaces here, not
 // mid-validation.
-func newPatternFacet(ef xsd.EffectiveFacet) (patternFacet, error) {
-	values := ef.Facet().Values()
+func newPatternFacet(f xsd.Facet, o facetOrigin) (patternFacet, error) {
+	values := f.Values()
 	res := make([]*regexp.Regexp, 0, len(values))
 	for _, p := range values {
 		goRE, err := regex.Translate(p, regex.FlavorXSD, "")
@@ -831,7 +896,7 @@ func newPatternFacet(ef xsd.EffectiveFacet) (patternFacet, error) {
 		}
 		res = append(res, re)
 	}
-	return patternFacet{ef: ef, res: res}, nil
+	return patternFacet{facet: f, origin: o, res: res}, nil
 }
 
 // patternMemberEscaper renders one pattern {value} member for a
@@ -847,31 +912,34 @@ var patternMemberEscaper = strings.NewReplacer(`&`, "&amp;", `"`, "&quot;", "\n"
 // CheckLexical accepts the normalized literal iff it matches at least one
 // pattern in the OR-set (cvc-pattern-valid, §4.3.4.4). A rejection names the
 // whole OR-set of the failed step — every member, never a single `|` branch,
-// rendered by patternMemberEscaper — and the type on the base chain that
-// declares it, which is derived provenance, not a spec property
-// (simpleTypeLabel renders the zero QName of an anonymous one).
+// rendered by patternMemberEscaper — and its facetOrigin relation: the type on
+// the base chain that declares it, and the checked type when that type inherits
+// it, which is derived provenance, not a spec property (simpleTypeLabel renders
+// the zero QName of an anonymous one).
 func (p patternFacet) CheckLexical(normalized string) error {
 	for _, re := range p.res {
 		if re.MatchString(normalized) {
 			return nil
 		}
 	}
-	values := p.ef.Facet().Values()
+	values := p.facet.Values()
 	quoted := make([]string, len(values))
 	for i, v := range values {
 		quoted[i] = `"` + patternMemberEscaper.Replace(v) + `"`
 	}
 	return xsderr.New(ruleCvcPatternValid, xsderr.Loc{},
-		"%q matches no member of the pattern facet of %s, whose {value} holds %s, but cvc-pattern-valid requires one to match",
-		normalized, simpleTypeLabel(p.ef.Declaring()), strings.Join(quoted, ", "))
+		"%q matches no member of the pattern facet %s, whose {value} holds %s, but cvc-pattern-valid requires one to match",
+		normalized, p.origin.relation(), strings.Join(quoted, ", "))
 }
 
 // enumFacet is the enumeration value-facet stage (cvc-enumeration-valid,
 // §4.3.5.4): a candidate is valid iff it is "equal or identical to one of the
 // values specified in {value}". The members are parsed once, in the value space
-// of the type that DECLARES the enumeration (widest-space rule).
+// of the type that DECLARES the enumeration (widest-space rule); origin names
+// that type in a rejection.
 type enumFacet struct {
 	members []Value
+	origin  facetOrigin
 }
 
 // newEnumFacet parses each enumeration {value} member via the declaring type's
@@ -889,19 +957,19 @@ type enumFacet struct {
 // §4.3.5.3), so the bare cvc-datatype-valid Parse returns is remapped to that
 // construction-time rule — the sibling of src-pattern-value newPatternFacet
 // already uses.
-func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.EffectiveFacet, a AssertionEvaluator) (enumFacet, error) {
-	m, ws, ok, err := declaringFacetSpace(b, r, st, ef.Declaring(), a)
+func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, f xsd.Facet, o facetOrigin, a AssertionEvaluator) (enumFacet, error) {
+	m, ws, ok, err := declaringFacetSpace(b, r, st, o.declaring, a)
 	if err != nil {
 		return enumFacet{}, err
 	}
 	if !ok {
 		return enumFacet{}, xsderr.New(ruleCvcEnumerationValid, xsderr.Loc{},
-			"%s, which declares the enumeration facet, has no governing backend mapping, so cvc-enumeration-valid cannot be decided against the facet's {value}",
-			simpleTypeLabel(ef.Declaring()))
+			"%s, which declares the enumeration facet%s, has no governing backend mapping, so cvc-enumeration-valid cannot be decided against the facet's {value}",
+			simpleTypeLabel(o.declaring), o.inheritedBy())
 	}
 	// compile() routes only FacetEnumeration facets here, so EnumerationMembers
 	// always reports ok=true; the second result is discarded deliberately.
-	enumMembers, _ := ef.Facet().EnumerationMembers()
+	enumMembers, _ := f.EnumerationMembers()
 	members := make([]Value, 0, len(enumMembers))
 	for _, em := range enumMembers {
 		v, err := facetValue(m, ws, em.Lexical(), newMemberContext(em))
@@ -910,7 +978,7 @@ func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.Effe
 		}
 		members = append(members, v)
 	}
-	return enumFacet{members: members}, nil
+	return enumFacet{members: members, origin: o}, nil
 }
 
 // xmlNamespaceURI is the single reserved, implicitly-bound XML namespace prefix
@@ -990,7 +1058,8 @@ func (c nsContext) LookupNamespace(prefix string) (namespace string, ok bool) {
 }
 
 // CheckValue accepts v iff it is equal or identical to a member
-// (cvc-enumeration-valid, §4.3.5.4).
+// (cvc-enumeration-valid, §4.3.5.4). A rejection names the facet by its
+// facetOrigin relation.
 func (e enumFacet) CheckValue(v Value) error {
 	for _, member := range e.members {
 		if enumMatch(v, member) {
@@ -998,7 +1067,8 @@ func (e enumFacet) CheckValue(v Value) error {
 		}
 	}
 	return xsderr.New(ruleCvcEnumerationValid, xsderr.Loc{},
-		"value is not equal or identical to any enumeration member, but cvc-enumeration-valid requires it to be equal or identical to one")
+		"value is not equal or identical to any member of the enumeration facet %s, but cvc-enumeration-valid requires it to be equal or identical to one",
+		e.origin.relation())
 }
 
 // enumMatch reports the "equal or identical" relation cvc-enumeration-valid
@@ -1029,24 +1099,26 @@ type boundFacet struct {
 	// the spelling ("+007" and "7" are one limit).
 	lexical string
 	kind    xsd.FacetKind
+	// origin names the facet's declaring type in a rejection.
+	origin facetOrigin
 }
 
 // newBoundFacet parses the single bound {value} via the declaring type's
 // mapping (widest-space rule), whiteSpace-normalized through its base's mode
 // first (declaringFacetSpace/facetValue), and requires the result to be Ordered.
-func newBoundFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.EffectiveFacet, a AssertionEvaluator) (boundFacet, error) {
-	kind := ef.Facet().Kind()
+func newBoundFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, f xsd.Facet, o facetOrigin, a AssertionEvaluator) (boundFacet, error) {
+	kind := f.Kind()
 	rule := boundRule(kind)
-	m, ws, ok, err := declaringFacetSpace(b, r, st, ef.Declaring(), a)
+	m, ws, ok, err := declaringFacetSpace(b, r, st, o.declaring, a)
 	if err != nil {
 		return boundFacet{}, err
 	}
 	if !ok {
 		return boundFacet{}, xsderr.New(rule, xsderr.Loc{},
-			"%s, which declares the %s facet, has no governing backend mapping, so %s cannot be decided against the facet's {value}",
-			simpleTypeLabel(ef.Declaring()), kind, rule)
+			"%s, which declares the %s facet%s, has no governing backend mapping, so %s cannot be decided against the facet's {value}",
+			simpleTypeLabel(o.declaring), kind, o.inheritedBy(), rule)
 	}
-	values := ef.Facet().Values()
+	values := f.Values()
 	if len(values) != 1 {
 		return boundFacet{}, xsderr.New(rule, xsderr.Loc{},
 			"the %s facet of %s carries %d values rather than one, so %s cannot be decided against its {value}",
@@ -1062,10 +1134,12 @@ func newBoundFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.Eff
 			"the %s facet of %s, whose {value} %q parses to a %T that is not Ordered, is not applicable to that type, but cos-applicable-facets allows in {facets} only the facets applicable to the type",
 			kind, simpleTypeLabel(st.Name()), values[0], v)
 	}
-	return boundFacet{limit: ord, lexical: values[0], kind: kind}, nil
+	return boundFacet{limit: ord, lexical: values[0], kind: kind, origin: o}, nil
 }
 
-// CheckValue rejects a candidate that violates the bound (§4.3.7–4.3.10).
+// CheckValue rejects a candidate that violates the bound (§4.3.7–4.3.10). A
+// rejection names the facet by its facetOrigin relation; the cos-applicable-facets
+// precondition names none.
 func (bf boundFacet) CheckValue(v Value) error {
 	cand, ok := v.(Ordered)
 	if !ok {
@@ -1080,13 +1154,13 @@ func (bf boundFacet) CheckValue(v Value) error {
 		// NaN candidate against a numeric bound, or any candidate when the bound
 		// value is itself NaN (the restricted space is then empty).
 		return xsderr.New(boundRule(bf.kind), xsderr.Loc{},
-			"value is incomparable with the %s facet's {value} %q, so it is excluded from the restricted value space, but %s requires a value %s it",
-			bf.kind, bf.lexical, boundRule(bf.kind), boundRelation(bf.kind))
+			"value is incomparable with the {value} %q of the %s facet %s, so it is excluded from the restricted value space, but %s requires a value %s it",
+			bf.lexical, bf.kind, bf.origin.relation(), boundRule(bf.kind), boundRelation(bf.kind))
 	}
 	if bf.violates(ord) {
 		return xsderr.New(boundRule(bf.kind), xsderr.Loc{},
-			"value violates the %s facet, whose {value} is %q, but %s requires a value %s it",
-			bf.kind, bf.lexical, boundRule(bf.kind), boundRelation(bf.kind))
+			"value violates the %s facet %s, whose {value} is %q, but %s requires a value %s it",
+			bf.kind, bf.origin.relation(), bf.lexical, boundRule(bf.kind), boundRelation(bf.kind))
 	}
 	return nil
 }

@@ -255,15 +255,15 @@ func runIntPattern(t *testing.T) (instance string, code int, stdout, stderr stri
 }
 
 // TestValidateNamesTheBuiltinPatternAndItsDeclaringType pins that a built-in
-// type's pattern rejection names the pattern it failed and the type that
-// declares it — xs:integer's [\-+]?[0-9]+ — rather than reading as a pattern
-// the schema author wrote (#2310).
+// type's pattern rejection names the pattern it failed, the type that declares
+// it — xs:integer's [\-+]?[0-9]+ — and that xs:int inherits it, rather than
+// reading as a pattern the schema author wrote (#2310, #3335).
 func TestValidateNamesTheBuiltinPatternAndItsDeclaringType(t *testing.T) {
 	_, code, stdout, stderr := runIntPattern(t)
 	if code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout, stderr)
 	}
-	const want = `[cvc-pattern-valid] "x3" matches no member of the pattern facet of the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`
+	const want = `[cvc-pattern-valid] "x3" matches no member of the pattern facet that the simple type {http://www.w3.org/2001/XMLSchema}int inherits from the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`
 	if !strings.Contains(stdout, want) {
 		t.Errorf("stdout =\n%s\nwant it to carry\n%s", stdout, want)
 	}

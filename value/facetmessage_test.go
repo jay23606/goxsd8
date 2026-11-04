@@ -36,6 +36,18 @@ func TestFacetStageMessagesWhole(t *testing.T) {
 	enumerated := prim("enumerated", xsd.NewEnumerationFacet([]xsd.EnumerationMember{xsd.NewEnumerationMember("1", nil, nil)}))
 	bounded := prim("bounded", xsd.NewFacet(xsd.FacetMinInclusive, []string{"0"}, false))
 	twoBounds := prim("twoBounds", xsd.NewFacet(xsd.FacetMaxInclusive, []string{"1", "2"}, false))
+	// An heir is mapped while the ancestor whose facet it inherits is not, so
+	// the fault names both.
+	heir := func(local string, base *xsd.SimpleType) *xsd.SimpleType {
+		t.Helper()
+		st, err := newCheckedSimpleType(xsderr.Loc{}, q(local), xsd.RestrictionDerivation{}, base, nil, nil)
+		if err != nil {
+			t.Fatalf("NewSimpleType(%s): %v", local, err)
+		}
+		return st
+	}
+	enumHeir := heir("enumHeir", enumerated)
+	boundHeir := heir("boundHeir", bounded)
 	bare, err := xsd.NewPrimitiveType(xsderr.Loc{}, q("bare"), nil, nil)
 	if err != nil {
 		t.Fatalf("NewPrimitiveType(bare): %v", err)
@@ -98,6 +110,10 @@ func TestFacetStageMessagesWhole(t *testing.T) {
 			`the simple type {urn:t}enumerated, which declares the enumeration facet, has no governing backend mapping, so cvc-enumeration-valid cannot be decided against the facet's {value}`},
 		{"bound declared on an unmapped type", validate(plainBackend{}, bounded, assertionsUndecided{}), ruleCvcMinInclusiveValid, false, false, false,
 			`the simple type {urn:t}bounded, which declares the minInclusive facet, has no governing backend mapping, so cvc-minInclusive-valid cannot be decided against the facet's {value}`},
+		{"enumeration inherited from an unmapped type", validate(plainBackend{enumHeir.Name(): true}, enumHeir, assertionsUndecided{}), ruleCvcEnumerationValid, false, false, false,
+			`the simple type {urn:t}enumerated, which declares the enumeration facet that the simple type {urn:t}enumHeir inherits, has no governing backend mapping, so cvc-enumeration-valid cannot be decided against the facet's {value}`},
+		{"bound inherited from an unmapped type", validate(plainBackend{boundHeir.Name(): true}, boundHeir, assertionsUndecided{}), ruleCvcMinInclusiveValid, false, false, false,
+			`the simple type {urn:t}bounded, which declares the minInclusive facet that the simple type {urn:t}boundHeir inherits, has no governing backend mapping, so cvc-minInclusive-valid cannot be decided against the facet's {value}`},
 		{"bound facet with two values", validate(plainBackend{twoBounds.Name(): true}, twoBounds, assertionsUndecided{}), ruleCvcMaxInclusiveValid, false, false, false,
 			`the maxInclusive facet of the simple type {urn:t}twoBounds carries 2 values rather than one, so cvc-maxInclusive-valid cannot be decided against its {value}`},
 		{"explicitTimezone facet with two values", second(newExplicitTimezoneFacet(twoValues(xsd.FacetExplicitTimezone))), ruleCvcExplicitTimezoneValid, false, true, false,

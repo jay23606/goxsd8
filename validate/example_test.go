@@ -164,7 +164,7 @@ func ExampleResult() {
 
 	// Output:
 	// violation cvc-type order.xml:3:7
-	//   element qty's value "many" is not a valid {http://www.w3.org/2001/XMLSchema}int, which cvc-type clause 3.1.3 requires: [cvc-pattern-valid] "many" matches no member of the pattern facet of the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match
+	//   element qty's value "many" is not a valid {http://www.w3.org/2001/XMLSchema}int, which cvc-type clause 3.1.3 requires: [cvc-pattern-valid] "many" matches no member of the pattern facet that the simple type {http://www.w3.org/2001/XMLSchema}int inherits from the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match
 	// undecided cvc-assertion order.xml:2:3
 	//   element order was not assessed against assertion 1 of 1 in the {assertions} of the ·governing type definition· an anonymous type definition, whose {test} is "@* = 5", which was not evaluated: this engine's XPath evaluator declined it because the attribute step @* is not supported in this position or over its declared type, so cvc-complex-type clause 6 is undecided for that assertion
 }
