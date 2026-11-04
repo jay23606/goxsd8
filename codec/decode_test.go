@@ -838,17 +838,219 @@ func TestWithBranches(t *testing.T) {
 	}
 }
 
+// The <element ref> schemas, each declaring s:r whose particles are refs to
+// top-level heads with {abstract} false and no other member with {abstract}
+// false: refSchema's a, b and c in each occurrence shape; blockedSchema's h,
+// whose member m its {disallowed substitutions} blocks (cos-equiv-derived-ok-rec
+// clause 2.1); derivationBlockedSchema's h, whose member m's type derives by
+// the restriction h blocks (clause 2.3); abstractMemberSchema's h, whose one
+// member is abstract (cvc-elt clause 2); and refChoiceSchema's choice, a local
+// a beside refs to A, of a's Go field name and shape, and to k, repeated.
+const (
+	refSchema = `<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:token"/><xs:element name="c" type="xs:string"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:a"/><xs:element ref="s:b" minOccurs="0"/><xs:element ref="s:c" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>`
+	blockedSchema = `<xs:element name="h" type="xs:string" block="substitution"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	derivationBlockedSchema = `<xs:element name="h" type="xs:string" block="restriction"/><xs:element name="m" type="xs:token" substitutionGroup="s:h"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	abstractMemberSchema = `<xs:element name="h" type="xs:string"/><xs:element name="m" type="xs:string" abstract="true" substitutionGroup="s:h"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	refChoiceSchema = `<xs:element name="A" type="xs:string"/><xs:element name="k" type="xs:token"/>
+		<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element ref="s:A"/><xs:element ref="s:k" maxOccurs="2"/></xs:choice></xs:complexType></xs:element>`
+)
+
+// refA to refs are refSchema's A, B, C and R; refH and refHolder are R and H
+// of blockedSchema, derivationBlockedSchema and abstractMemberSchema alike;
+// refChoice to refK are refChoiceSchema's R, RA, RA2, RK, A and K. Each pin
+// is TestRefTypesAreCodegens'.
+type (
+	refA string
+	refB string
+	refC string
+	refs struct {
+		A refA
+		B *refB
+		C []refC
+	}
+	refH        string
+	refHolder   struct{ H refH }
+	refChoice   interface{ isRefChoice() }
+	refChoiceA  struct{ A string }
+	refChoiceA2 struct{ A refA }
+	refChoiceK  struct{ K []refK }
+	refK        string
+)
+
+func (refChoiceA) isRefChoice()  {}
+func (refChoiceA2) isRefChoice() {}
+func (refChoiceK) isRefChoice()  {}
+
+var refChoiceBranches = WithBranches[refChoice](refChoiceA{}, refChoiceA2{}, refChoiceK{})
+
+// TestRefTypesAreCodegens pins the types above to those codegen emits for
+// each <element ref> schema, in shape: each ref field holds the head's own
+// named type over string, never string itself.
+func TestRefTypesAreCodegens(t *testing.T) {
+	holder := []string{"type H string\n", "type R struct {\n\tH H\n}\n"}
+	rows := []struct {
+		decls string
+		want  []string
+	}{
+		{refSchema, []string{"type A string\n", "type B string\n", "type C string\n", "type R struct {\n\tA A\n\tB *B\n\tC []C\n}\n"}},
+		{blockedSchema, holder},
+		{derivationBlockedSchema, holder},
+		{abstractMemberSchema, holder},
+		{refChoiceSchema, []string{
+			"type A string\n",
+			"type K string\n",
+			"type R interface {\n\tisR()\n}\n",
+			"type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
+			"type RA2 struct {\n\tA A\n}\n\nfunc (RA2) isR() {}\n",
+			"type RK struct {\n\tK []K\n}\n\nfunc (RK) isR() {}\n",
+		}},
+	}
+	for _, row := range rows {
+		gen := generated(t, schemaOf(t, row.decls))
+		for _, decl := range row.want {
+			if !bytes.Contains(gen, []byte(decl)) {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+			}
+		}
+	}
+}
+
+// TestDecodeElementRef pins the <element ref> lift: a ref to a head with
+// {abstract} false whose ·substitution group· (§3.3.6.4 key-eq) holds no
+// other declaration with {abstract} false decodes into the head's own named
+// type, in each occurrence shape, the value its ·normalized value· under the
+// head's type (b's xs:token collapses), whether no other declaration
+// affiliates with the head or the one that does is blocked (cos-equiv-derived-ok-rec
+// clauses 2.1 and 2.3) or abstract; and a ref alternative of a choice decodes
+// into its branch beside a local alternative of the same Go field name.
+func TestDecodeElementRef(t *testing.T) {
+	str := func(s string) *refB { b := refB(s); return &b }
+	rows := []struct {
+		name   string
+		decls  string
+		body   string
+		decode func(*xsd.Schema, []byte) (any, error)
+		want   any
+	}{
+		{"one, optional and repeated, present", refSchema, "<s:a> x </s:a><s:b> 1  2 </s:b><s:c>p</s:c><s:c>q</s:c>", decodeInto[refs](),
+			refs{A: " x ", B: str("1 2"), C: []refC{"p", "q"}}},
+		{"optional and repeated absent", refSchema, "<s:a>x</s:a>", decodeInto[refs](), refs{A: "x"}},
+		{"a head blocking substitution", blockedSchema, "<s:h>x</s:h>", decodeInto[refHolder](), refHolder{H: "x"}},
+		{"a head blocking its member's derivation", derivationBlockedSchema, "<s:h> x </s:h>", decodeInto[refHolder](), refHolder{H: " x "}},
+		{"a head whose one member is abstract", abstractMemberSchema, "<s:h>x</s:h>", decodeInto[refHolder](), refHolder{H: "x"}},
+		{"a choice's local alternative beside a ref of its Go name and shape", refChoiceSchema, "<s:a>v</s:a>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceA{A: "v"})},
+		{"a choice's ref alternative", refChoiceSchema, "<s:A>v</s:A>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceA2{A: "v"})},
+		{"a choice's repeated ref alternative", refChoiceSchema, "<s:k> u  v </s:k><s:k>w</s:k>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceK{K: []refK{"u v", "w"}})},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf("", row.body)
+			mustAccept(t, schema, data)
+			got, err := row.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+		})
+	}
+}
+
+// TestDecodeElementRefTypeMismatch pins item 6 of Decode's doc for a ref
+// field: string itself where codegen emits the head's named type, in each
+// occurrence shape, and a named type over string where codegen emits string
+// for a local element, are ErrTypeMismatch, no decline, and nothing is filled.
+func TestDecodeElementRefTypeMismatch(t *testing.T) {
+	type plainOne struct {
+		A string
+		B *refB
+		C []refC
+	}
+	type plainOptional struct {
+		A refA
+		B *string
+		C []refC
+	}
+	type plainRepeated struct {
+		A refA
+		B *refB
+		C []string
+	}
+	type namedLocal struct {
+		One  refA
+		Opt  *string
+		Rep  []string
+		Tok  string
+		Req  string
+		Opt2 *string
+	}
+	refData := instanceOf("", "<s:a>x</s:a>")
+	rows := []struct {
+		name   string
+		decls  string
+		data   []byte
+		decode func(*xsd.Schema, []byte) (any, error)
+		want   string
+	}{
+		{"string at a ref", refSchema, refData, decodeInto[plainOne](),
+			"field 0 of codec.plainOne is A string where codegen emits A N for a named type N over string"},
+		{"*string at an optional ref", refSchema, refData, decodeInto[plainOptional](),
+			"field 1 of codec.plainOptional is B *string where codegen emits B *N for a named type N over string"},
+		{"[]string at a repeated ref", refSchema, refData, decodeInto[plainRepeated](),
+			"field 2 of codec.plainRepeated is C []string where codegen emits C []N for a named type N over string"},
+		{"a named type at a local element", shapesSchema, instanceOf(` req="r"`, "<s:one>x</s:one><s:tok>t</s:tok>"), decodeInto[namedLocal](),
+			"field 0 of codec.namedLocal is One codec.refA where codegen emits One string"},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			mustAccept(t, schema, row.data)
+			got, err := row.decode(schema, row.data)
+			if got != nil || err == nil {
+				t.Fatalf("Decode = (%v, %v), want no value and an error", got, err)
+			}
+			if want := ErrTypeMismatch.Error() + ": " + row.want; err.Error() != want {
+				t.Errorf("error = %q, want %q", err, want)
+			}
+			var de *DeclineError
+			if !errors.Is(err, ErrTypeMismatch) || errors.As(err, &de) {
+				t.Errorf("error %v: want ErrTypeMismatch alone", err)
+			}
+		})
+	}
+}
+
 // TestChoiceSharedBranchIsCodegens pins that the shared-branch decline guards
 // a shape codegen does emit: two alternatives whose expanded names differ give
-// two branch structs of one shape, which no branch type tells apart.
+// two branch structs of one shape, which no branch type tells apart, for two
+// local alternatives and for refs to a and A, whose fields' named types item 6
+// reads by underlying type alone.
 func TestChoiceSharedBranchIsCodegens(t *testing.T) {
-	gen := generated(t, schemaOf(t, root(`<xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`)))
-	for _, decl := range []string{
-		"type RX struct {\n\tX string\n}\n",
-		"type RX2 struct {\n\tX string\n}\n",
-	} {
-		if !bytes.Contains(gen, []byte(decl)) {
-			t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+	rows := []struct {
+		decls string
+		want  []string
+	}{
+		{root(`<xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`), []string{
+			"type RX struct {\n\tX string\n}\n",
+			"type RX2 struct {\n\tX string\n}\n",
+		}},
+		{`<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/><xs:element ref="s:A"/></xs:choice>`), []string{
+			"type RA struct {\n\tA A\n}\n",
+			"type RA2 struct {\n\tA A2\n}\n",
+		}},
+	}
+	for _, row := range rows {
+		gen := generated(t, schemaOf(t, row.decls))
+		for _, decl := range row.want {
+			if !bytes.Contains(gen, []byte(decl)) {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+			}
 		}
 	}
 }

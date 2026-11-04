@@ -34,16 +34,16 @@ var (
 // T is the caller's choice: nothing dispatches a document element to its
 // generated type, and item 6 below never compares T's own name. For a complex
 // {type definition} item 6 compares T's fields with those codegen emits for
-// the declaration in name, order and Go type alone, so a T whose fields
-// differ returns [ErrTypeMismatch] where item 6 is the first that applies,
-// but a T of the same shape, such as the struct codegen emits for another
-// top-level element of the same type, passes item 6 and decodes as the
-// declaration's own struct does, an error only where that one's is. For a
-// simple one item 6 reads T's underlying type alone, so any T over string
-// passes it, such as the type codegen emits for another document element of
-// the same simple type. A caller decoding documents of several roots
-// therefore reads the document element's name itself, through parser/xmltree
-// or encoding/xml, before choosing T.
+// the declaration in name, order and Go type alone, a field's type as item 6
+// reads it, so a T whose fields differ returns [ErrTypeMismatch] where item 6
+// is the first that applies, but a T of the same shape, such as the struct
+// codegen emits for another top-level element of the same type, passes item 6
+// and decodes as the declaration's own struct does, an error only where that
+// one's is. For a simple one item 6 reads T's underlying type alone, so any T
+// over string passes it, such as the type codegen emits for another document
+// element of the same simple type. A caller decoding documents of several
+// roots therefore reads the document element's name itself, through
+// parser/xmltree or encoding/xml, before choosing T.
 //
 // T may be codegen's sealed interface for a choice, as the package doc's
 // "# What decodes" states, and Decode then returns a *T pointing at it. The
@@ -100,17 +100,28 @@ var (
 //     definition}: a simple type's {variety} and {primitive type definition},
 //     after which nothing further is examined, or a complex type's content,
 //     then the occurrence of its sequence or choice, each particle of its
-//     content in order — of a choice, each alternative's own constructs, then
-//     a branch field of the name and Go type an earlier alternative's has,
-//     which declines as two choice alternatives whose branch structs have one
-//     shape — each of its attribute uses in order, and its {attribute
-//     wildcard}.
+//     content in order — a nested model group or wildcard, then, of an
+//     <element ref>, the referenced declaration's substitution group, then
+//     the particle's element declaration's {type table} and {nillable}, its
+//     {type definition}, any complex one declining and a simple one as the
+//     document element's does, and an expanded name an earlier particle
+//     shares; of a choice, each alternative's own constructs, then a branch
+//     field of the name and Go type, as item 6 reads it, an earlier
+//     alternative's has, which declines as two choice alternatives whose
+//     branch structs have one shape — each of its attribute uses in order,
+//     and its {attribute wildcard}.
 //  6. T does not match the type codegen emits for the declaration, as Decode
 //     derives it from the schema: for a complex {type definition}, T is not a
 //     struct whose fields are exactly those codegen emits, in name, order and
 //     Go type, or, where codegen emits the choice's sealed interface as the
 //     type itself, T is not an interface; for a simple one, T's underlying
-//     type is not string. A sealed interface, T or the struct's first field,
+//     type is not string. A field's Go type is string, *string or []string
+//     for a local element declaration's particle and an attribute use; for an
+//     <element ref> particle it is N, *N or []N, N the named type codegen
+//     emits for the referenced declaration, matched as any named type whose
+//     underlying type is string, never by name; string itself, a local
+//     particle's type, does not pass, so a ref's field and a local one's never
+//     accept one Go type. A sealed interface, T or the struct's first field,
 //     does not match when it is not an interface whose one method is
 //     unexported, or when its branch set, as [WithBranches] supplied it, is
 //     not one struct of one field per alternative, that field the name and Go
@@ -244,41 +255,40 @@ func documentElement(r *xmltree.Reader) (*xmltree.StartElement, error) {
 	}
 }
 
-// shape is the occurrence a field holds its string in, by codegen's
+// shape is the occurrence a field holds its value in, by codegen's
 // occurrence rules: one value, an optional one, or a repeated one. The zero
 // value is invalid (STYLE T1).
 type shape uint8
 
 const (
-	shapeOne      shape = iota + 1 // string
-	shapeOptional                  // *string
-	shapeRepeated                  // []string
+	shapeOne      shape = iota + 1 // V
+	shapeOptional                  // *V
+	shapeRepeated                  // []V
 )
 
-// goType returns the Go type codegen gives a field of shape s over string.
-func (s shape) goType() reflect.Type {
-	switch s {
-	case shapeOne:
-		return reflect.TypeFor[string]()
-	case shapeOptional:
-		return reflect.TypeFor[*string]()
-	case shapeRepeated:
-		return reflect.TypeFor[[]string]()
-	}
-	// The zero shape is an internal bug, never input.
-	panic(fmt.Sprintf("codec: invalid shape %d", s))
-}
+// valueType is the Go type V a field's shape holds its value in, by codegen's
+// field rules: string for a local element declaration's particle and an
+// attribute use, and, for an <element ref> particle, the named type codegen
+// emits for the referenced top-level declaration, whose underlying type is
+// string. The zero value is invalid (STYLE T1).
+type valueType uint8
+
+const (
+	valueString valueType = iota + 1 // string
+	valueNamed                       // a named type over string
+)
 
 // field is one field of a struct codegen emits: of the document element's
 // declaration's struct, or of a choice's branch struct. It holds its Go name,
-// its shape, the simple type its value is normalized under, and supplied, the
-// value Decode's doc states the post-schema-validation infoset supplies for
-// it, already normalized under st, nil exactly when there is no value
-// constraint: an element's {value constraint}, an attribute use's effective
-// one (§3.5.4 key-evc).
+// its shape, its value type, the simple type its value is normalized under,
+// and supplied, the value Decode's doc states the post-schema-validation
+// infoset supplies for it, already normalized under st, nil exactly when
+// there is no value constraint: an element's {value constraint}, an attribute
+// use's effective one (§3.5.4 key-evc).
 type field struct {
 	name     string
 	shape    shape
+	value    valueType
 	st       *xsd.SimpleType
 	supplied *string
 }
@@ -294,24 +304,77 @@ func (f field) set(schema *xsd.Schema, dst reflect.Value, initial string) error 
 	return nil
 }
 
-// store stores v, a value already normalized, in dst, a value of f's Go type,
-// by f's shape: a repeated field appends it, and an optional one points at a
-// copy of it.
+// store stores v, a value already normalized, in dst, a value of a Go type f
+// accepts, by f's shape: a repeated field appends it, and an optional one
+// points at a copy of it, each built as a value of dst's own element type.
 func (f field) store(dst reflect.Value, v string) {
 	switch f.shape {
 	case shapeOptional:
-		dst.Set(reflect.ValueOf(&v))
+		p := reflect.New(dst.Type().Elem())
+		p.Elem().SetString(v)
+		dst.Set(p)
 	case shapeRepeated:
-		dst.Set(reflect.Append(dst, reflect.ValueOf(v)))
+		e := reflect.New(dst.Type().Elem()).Elem()
+		e.SetString(v)
+		dst.Set(reflect.Append(dst, e))
 	default:
 		dst.SetString(v)
 	}
 }
 
 // matches reports whether got, a struct field of T, is f as codegen emits it:
-// the same name and Go type, and not embedded.
+// the same name, a Go type f accepts, and not embedded.
 func (f field) matches(got reflect.StructField) bool {
-	return got.Name == f.name && got.Type == f.shape.goType() && !got.Anonymous
+	return got.Name == f.name && f.accepts(got.Type) && !got.Anonymous
+}
+
+// accepts reports whether t is the Go type codegen gives f, as Decode's doc,
+// item 6, reads it: f's shape over a value type that is string itself for
+// valueString, and for valueNamed a named type whose underlying type is
+// string, other than string, its name never compared.
+func (f field) accepts(t reflect.Type) bool {
+	switch f.shape {
+	case shapeOne:
+	case shapeOptional:
+		if t.Kind() != reflect.Pointer {
+			return false
+		}
+		t = t.Elem()
+	case shapeRepeated:
+		if t.Kind() != reflect.Slice {
+			return false
+		}
+		t = t.Elem()
+	default:
+		// The zero shape is an internal bug, never input.
+		panic(fmt.Sprintf("codec: invalid shape %d", f.shape))
+	}
+	switch f.value {
+	case valueString:
+		return t == reflect.TypeFor[string]()
+	case valueNamed:
+		return t.Kind() == reflect.String && t != reflect.TypeFor[string]()
+	}
+	// The zero valueType is an internal bug, never input.
+	panic(fmt.Sprintf("codec: invalid value type %d", f.value))
+}
+
+// describe spells the Go type codegen gives f for an ErrTypeMismatch message:
+// string, *string or []string, or the same over N for a named type N over
+// string.
+func (f field) describe() string {
+	var prefix string
+	switch f.shape {
+	case shapeOne:
+	case shapeOptional:
+		prefix = "*"
+	case shapeRepeated:
+		prefix = "[]"
+	}
+	if f.value == valueNamed {
+		return prefix + "N for a named type N over string"
+	}
+	return prefix + "string"
 }
 
 // A binder is the type codegen emits for one document element declaration,
@@ -468,11 +531,14 @@ type sequence struct {
 func bindSequence(schema *xsd.Schema, particles []xsd.Particle, names *goname.Namer, loc xsderr.Loc, typeSubject string) (*sequence, error) {
 	s := &sequence{schema: schema, children: map[xsd.QName]int{}}
 	for _, p := range particles {
-		el, d := particleElement(p)
+		el, d, err := particleElement(schema, p)
+		if err != nil {
+			return nil, err
+		}
 		if d != 0 {
 			return nil, decline(loc, d, "a particle of "+typeSubject)
 		}
-		f, d, err := localElement(schema, s.children, el, p.Occurs())
+		f, d, err := elementField(schema, s.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
 		}
@@ -494,7 +560,7 @@ func (s *sequence) width() int { return len(s.fields) }
 func (s *sequence) check(t reflect.Type, _ branchSets) (contentFiller, error) {
 	for i, want := range s.fields {
 		if got := t.Field(i); !want.matches(got) {
-			return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, i, t, got.Name, got.Type, want.name, want.shape.goType())
+			return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, i, t, got.Name, got.Type, want.name, want.describe())
 		}
 	}
 	return s, nil
@@ -542,11 +608,14 @@ type choice struct {
 func bindChoice(schema *xsd.Schema, particles []xsd.Particle, names *goname.Namer, loc xsderr.Loc, typeSubject string) (*choice, error) {
 	c := &choice{schema: schema, name: names.Claim("choice"), children: map[xsd.QName]int{}}
 	for _, p := range particles {
-		el, d := particleElement(p)
+		el, d, err := particleElement(schema, p)
+		if err != nil {
+			return nil, err
+		}
 		if d != 0 {
 			return nil, decline(loc, d, "a particle of "+typeSubject)
 		}
-		f, d, err := localElement(schema, c.children, el, p.Occurs())
+		f, d, err := elementField(schema, c.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
 		}
@@ -560,7 +629,7 @@ func bindChoice(schema *xsd.Schema, particles []xsd.Particle, names *goname.Name
 		}
 		f.name = goname.NewNamer().Claim(el.Name().Local)
 		for _, earlier := range c.alts {
-			if earlier.name == f.name && earlier.shape == f.shape {
+			if earlier.name == f.name && earlier.shape == f.shape && earlier.value == f.value {
 				return nil, decline(loc, constructSharedBranch, declSubject(el))
 			}
 		}
@@ -787,30 +856,47 @@ func contentGroup(ct xsd.ComplexType) (xsd.Particle, xsd.ModelGroup, construct) 
 	return xsd.Particle{}, xsd.ModelGroup{}, constructNestedGroup
 }
 
-// particleElement returns the local element declaration p's term holds, or
-// the construct Decode declines in its place: a model group, inline or
-// through <group ref>, is a nested model group particle.
-func particleElement(p xsd.Particle) (xsd.ElementDeclaration, construct) {
+// particleElement returns the element declaration p's term holds, a local
+// one or the top-level one an <element ref> names (§3.3.2.4
+// ref.elt.global), followed through [xsd.Schema.Element], or the construct
+// Decode declines in its place: a model group, inline or through <group ref>,
+// is a nested model group particle. An <element ref> naming no top-level
+// declaration is a plain error.
+func particleElement(schema *xsd.Schema, p xsd.Particle) (xsd.ElementDeclaration, construct, error) {
 	switch term := p.Term().(type) {
 	case xsd.ElementDeclarationRef:
-		return xsd.ElementDeclaration{}, constructElementRef
+		decl, ok := schema.Element(term.Name)
+		if !ok {
+			return xsd.ElementDeclaration{}, 0, fmt.Errorf("codec: the <element ref> particle to %s does not resolve", term.Name)
+		}
+		return decl, 0, nil
 	case xsd.ResolvedTerm:
 		switch inner := term.Term.(type) {
 		case xsd.ElementDeclaration:
-			return inner, 0
+			return inner, 0, nil
 		case xsd.Wildcard:
-			return xsd.ElementDeclaration{}, constructWildcardParticle
+			return xsd.ElementDeclaration{}, constructWildcardParticle, nil
 		}
 	}
-	return xsd.ElementDeclaration{}, constructNestedGroup
+	return xsd.ElementDeclaration{}, constructNestedGroup, nil
 }
 
-// localElement returns the field, but for its name, which its caller claims,
-// of the local element declaration el in a particle occurring as occurs, or
-// the construct Decode declines it for, in the order Decode's doc states:
+// elementField returns the field, but for its name, which its caller claims,
+// of the element declaration el in a particle occurring as occurs, or the
+// construct Decode declines it for, in the order Decode's doc states: for a
+// top-level el, which an <element ref> named, its substitution group, then
 // its own properties, its type, and an expanded name an earlier particle of
-// its model group shares, children indexing the earlier particles' names.
-func localElement(schema *xsd.Schema, children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, construct, error) {
+// its model group shares, children indexing the earlier particles' names. A
+// local el's field holds a string, and a top-level one's the named type
+// codegen emits for el (valueNamed).
+func elementField(schema *xsd.Schema, children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, construct, error) {
+	value := valueString
+	if el.ScopeVariety() == xsd.ScopeGlobal {
+		if substitutable(schema, el) {
+			return field{}, constructSubstitutionRef, nil
+		}
+		value = valueNamed
+	}
 	if d := declarationDecline(el); d != 0 {
 		return field{}, d, nil
 	}
@@ -833,11 +919,25 @@ func localElement(schema *xsd.Schema, children map[xsd.QName]int, el xsd.Element
 	if err != nil {
 		return field{}, 0, err
 	}
-	f := field{shape: s, st: st}
+	f := field{shape: s, value: value, st: st}
 	if vc, has := el.ValueConstraint(); has {
 		f.supplied, err = supply(schema, st, vc, declSubject(el))
 	}
 	return f, 0, err
+}
+
+// substitutable reports whether an element other than one of head, a
+// top-level element declaration, may stand where an <element ref> to head
+// does: whether head's ·substitution group· (§3.3.6.4 key-eq,
+// [xsd.Schema.SubstitutionGroup], which decides cos-equiv-derived-ok-rec
+// clauses 1 to 2.3, a head blocking substitution by clause 2.1 holding itself
+// alone) has members with {abstract} false (cvc-elt clause 2 admits no other
+// in an instance) that are not head alone. That is codegen's test for a field
+// holding the group's sealed interface rather than head's own type, so an
+// abstract head, whatever its other properties, answers true.
+func substitutable(schema *xsd.Schema, head xsd.ElementDeclaration) bool {
+	members := slices.DeleteFunc(schema.SubstitutionGroup(head.Name()), xsd.ElementDeclaration.Abstract)
+	return len(members) != 1 || members[0].Name() != head.Name()
 }
 
 // attributeUse returns the field, but for its name, which its caller claims,
@@ -862,7 +962,7 @@ func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (field, construct, str
 	if err != nil || d != 0 {
 		return field{}, d, subject, err
 	}
-	f := field{shape: shapeOptional, st: st}
+	f := field{shape: shapeOptional, value: valueString, st: st}
 	vc, has := schema.EffectiveValueConstraint(u)
 	if u.Required() || has {
 		f.shape = shapeOne
@@ -948,7 +1048,7 @@ func (b *binding) check(t reflect.Type, sets branchSets) (filler, error) {
 	}
 	for i, want := range b.attrs {
 		if got := t.Field(width + i); !want.matches(got) {
-			return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, width+i, t, got.Name, got.Type, want.name, want.shape.goType())
+			return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, width+i, t, got.Name, got.Type, want.name, want.describe())
 		}
 	}
 	return &boundBinding{binding: b, content: cf}, nil

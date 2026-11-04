@@ -25,8 +25,9 @@ func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 func (e *DeclineError) Loc() xsderr.Loc { return e.loc }
 
 // Error names the instance Loc and the construct, then the declining
-// declaration, the document element's, a local element's or an attribute's,
-// and, for a construct of the document element's type, that type
+// declaration, the document element's, a particle's element declaration's,
+// local or the top-level one an <element ref> names, or an attribute's, and,
+// for a construct of the document element's type, that type
 // labelled as one, each with its schema Loc, which is the zero Loc for a
 // built-in component; for xsi:type, it names the element and the type the
 // xsi:type names.
@@ -78,7 +79,7 @@ const (
 	constructSequenceOccurs
 	constructNestedGroup
 	constructWildcardParticle
-	constructElementRef
+	constructSubstitutionRef
 	constructComplexElement
 	constructSharedName
 	constructSharedBranch
@@ -105,8 +106,8 @@ var constructNames = [...]string{
 	constructSequenceOccurs:    "a content sequence occurring other than exactly once",
 	constructNestedGroup:       "a nested model group particle",
 	constructWildcardParticle:  "a wildcard particle",
-	constructElementRef:        "an <element ref> particle",
-	constructComplexElement:    "a local element declaration of complex type",
+	constructSubstitutionRef:   "an <element ref> particle to a head with {abstract} true or a substitution group of another non-abstract declaration",
+	constructComplexElement:    "a particle's element declaration of complex type",
 	constructSharedName:        "two particles sharing an expanded name",
 	constructSharedBranch:      "two choice alternatives whose branch structs have one shape",
 	constructList:              "a list simple type",
