@@ -589,8 +589,8 @@ func TestGenDeclines(t *testing.T) {
 }
 
 // TestReportGenerateOSFaultNotDecline pins exit 2 with the line alone, no
-// synopsis or helpPointer under it (#3333), for an element of Generate's
-// error that answers errors.Is(_, errors.ErrUnsupported) but holds no
+// synopsis or helpPointer under it (#3333), for one failure Generate returns
+// that answers errors.Is(_, errors.ErrUnsupported) but holds no
 // *codegen.DeclineError: a phase-2 OS fault whose errno is ENOTSUP, wrapped
 // with %w as Generate wraps it (#3090).
 func TestReportGenerateOSFaultNotDecline(t *testing.T) {
@@ -599,7 +599,7 @@ func TestReportGenerateOSFaultNotDecline(t *testing.T) {
 		t.Fatalf("errors.Is(%v, errors.ErrUnsupported) = false on this platform; the row tests nothing", fault)
 	}
 	var stderr bytes.Buffer
-	if code := reportGenerate(errors.Join(fault), &stderr); code != exitUsage {
+	if code := reportGenerate(fault, &stderr); code != exitUsage {
 		t.Errorf("reportGenerate = %d, want %d", code, exitUsage)
 	}
 	if want := "goxsd8: gen: " + fault.Error() + "\n"; stderr.String() != want {
