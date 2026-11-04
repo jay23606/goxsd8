@@ -159,24 +159,24 @@ func LocOf(err error) (Loc, bool) {
 	return Loc{}, false
 }
 
-// IsValidRule reports whether r is a Rule the module is allowed to construct:
-// any rule ID present in the generated spec catalog (ruleCatalog, emitted by
-// tools/rulecat into catalog.go), plus the two hand-added non-spec sentinels,
-// RuleXMLWellFormed and RuleComponentInvariant, which are deliberately outside
-// the catalog because the faults they name have no spec-defined rule ID. It
-// lives here rather than in the generated catalog.go so the sentinel exemptions
-// survive `go generate`.
+// IsValidRule reports whether r is in the generated spec catalog (ruleCatalog,
+// emitted by tools/rulecat into catalog.go) or is one of the two hand-added
+// non-spec sentinels, RuleXMLWellFormed and RuleComponentInvariant, which are
+// deliberately outside the catalog because the faults they name have no
+// spec-defined rule ID. It lives here rather than in the generated catalog.go
+// so the sentinel exemptions survive `go generate`.
 //
 // Membership is exact: no prefix-trimming, no clause-suffix (dotted) leniency.
-// The generated catalog is keyed on the base rule IDs tools/rulecat extracts
-// from the specs ("cvc-complex-type", "cvc-elt"), plus the two hand-listed
-// sentinels above — not on clause-level spellings. So both
-// IsValidRule("cvc-complex-type.2.1") and IsValidRule("cvc-elt.1") are false,
-// and stay false. That costs nothing: no non-test construction site in the
-// module cites a dotted rule ID, because the convention here is one coarse rule
-// ID plus the clause number in prose (see xsd/complexextension.go). Should a
-// call site ever genuinely need to cite a clause-level rule, extend
-// tools/rulecat to emit it rather than weakening this check.
+// The generated catalog holds the rule IDs tools/rulecat extracts from the
+// specs ("cvc-complex-type", "cvc-elt"); they carry no part number, save two
+// dotted names that spec prose spells, cos-ct-extends.1.2 and
+// src-simple-type.1. So both IsValidRule("cvc-complex-type.2.1") and
+// IsValidRule("cvc-elt.1") are false, and stay false. Those two dotted names
+// pass, though no non-test construction site cites them: this check is a floor
+// under the no-part-number convention the package doc's "Using xsderr" states,
+// not the convention itself. Citing a clause-level rule means changing that
+// convention and extending tools/rulecat to emit the name, never weakening this
+// check.
 //
 // The sentinel set stays closed at two; the package doc's "The s4s-grammar
 // class" says why that class gets none.
