@@ -71,7 +71,8 @@ invocations below are worked examples of it.
 
 Every file these examples and the Library ones name is committed in
 `testdata/readme/`; run them from there. `gen` writes `./gen/` beside them,
-which the checkout ignores.
+which the checkout ignores. Every `-out` lies in a Go module, here the
+checkout's, as the `gen` paragraph of `goxsd8 -help` states.
 
 ```sh
 cd testdata/readme                              # from the checkout root

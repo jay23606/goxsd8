@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"slices"
 
 	"github.com/kud360/goxsd8/codegen"
 )
@@ -38,10 +39,10 @@ type genPair struct {
 // itself.
 //
 // runGen restates none of codegen's checks (STYLE D3): it charges each refusal
-// CheckTargets reports exit 2, and hands each failure Generate returns to
-// reportGenerate. Each Target is named by its pair's label, so every error
-// codegen returns already names the pair it came from, and any earlier pair it
-// cites.
+// CheckTargets reports exit 2, appending packageRemedy to each packageRefusals
+// finds, and hands each failure Generate returns to reportGenerate. Each Target
+// is named by its pair's label, so every error codegen returns already names
+// the pair it came from, and any earlier pair it cites.
 //
 // The flags are parsed here rather than by run, for the reason runParse states.
 func runGen(args []string, stderr io.Writer) int {
@@ -99,8 +100,14 @@ func runGen(args []string, stderr io.Writer) int {
 		}
 	}
 	code := exitOK
-	for _, err := range codegen.CheckTargets(targets) {
-		code = worse(code, subcommandFault(stderr, "goxsd8: gen: "+err.Error()))
+	refusals := codegen.CheckTargets(targets)
+	ofPackage := packageRefusals(targets, refusals)
+	for _, err := range refusals {
+		line := "goxsd8: gen: " + err.Error()
+		if ofPackage[err.Index()] {
+			line += packageRemedy
+		}
+		code = worse(code, subcommandFault(stderr, line))
 	}
 	for i, p := range pairs {
 		schema, c := compileArgument("gen", p.schema, *strict, log, stderr)
@@ -114,6 +121,36 @@ func runGen(args []string, stderr io.Writer) int {
 		code = worse(code, reportGenerate(e, stderr))
 	}
 	return code
+}
+
+// packageRemedy closes the line of a refusal of the package name gen derives
+// from an -out, the CLI's fact that codegen's text cannot state.
+const packageRemedy = ": gen names the package after the last path element of -out, so name an -out directory such as ./order"
+
+// acceptedPackage is a package name CheckTargets accepts, which
+// packageRefusals substitutes.
+const acceptedPackage = "order"
+
+// packageRefusals reports, by target index, which of refusals, CheckTargets'
+// answer for targets, refuse the target's Package: those CheckTargets drops or
+// words otherwise once every Package is acceptedPackage. CheckTargets' doc
+// states every refusal but the Package rule's of Dir alone, so the
+// substitution changes a target's refusal exactly when it is the Package's, and
+// codegen, not gen, applies the rule.
+func packageRefusals(targets []codegen.Target, refusals []*codegen.TargetError) []bool {
+	probe := slices.Clone(targets)
+	for i := range probe {
+		probe[i].Package = acceptedPackage
+	}
+	kept := make([]string, len(targets))
+	for _, e := range codegen.CheckTargets(probe) {
+		kept[e.Index()] = e.Error()
+	}
+	ofPackage := make([]bool, len(targets))
+	for _, e := range refusals {
+		ofPackage[e.Index()] = kept[e.Index()] != e.Error()
+	}
+	return ofPackage
 }
 
 // reportGenerate prints err, one failure codegen.Generate returns, on its own

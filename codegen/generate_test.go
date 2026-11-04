@@ -442,7 +442,7 @@ func TestCheckTargetsModuleRefusals(t *testing.T) {
 	}{
 		{"no go.mod", func(dir string) []Target {
 			return []Target{{Dir: filepath.Join(dir, "free", "x"), Package: "p"}}
-		}, []string{"codegen: target 0: no go.mod lies in the output directory %DIR%/free/x or any directory above it, so it has no import path"}},
+		}, []string{"codegen: target 0: no go.mod lies in the output directory %DIR%/free/x or any directory above it, so it has no import path: create a go.mod at or above the output directory, as go mod init <module path> does"}},
 		{"destination refusal first", func(dir string) []Target {
 			return []Target{{Dir: filepath.Join(dir, "free", "file"), Package: "p"}}
 		}, []string{"codegen: target 0: the output directory %DIR%/free/file exists and is not a directory"}},
@@ -472,7 +472,7 @@ func TestCheckTargetsModuleRefusals(t *testing.T) {
 				{Dir: filepath.Join(dir, "two", "y"), Package: "p"},
 			}
 		}, []string{
-			"codegen: target 1: no go.mod lies in the output directory %DIR%/free or any directory above it, so it has no import path",
+			"codegen: target 1: no go.mod lies in the output directory %DIR%/free or any directory above it, so it has no import path: create a go.mod at or above the output directory, as go mod init <module path> does",
 			"codegen: target 2: the output directory %DIR%/two/x has the import path example.com/m/x, which is also the import path of target 0",
 		}},
 	}

@@ -135,7 +135,7 @@ func TestCensusPathsListsOtherFailures(t *testing.T) {
 		t.Fatalf("printReport: %v", err)
 	}
 	want := "\n=== Generate errors other than a decline: 1 ===\n" +
-		"  a.xsd — a.xsd: no go.mod lies in the output directory " + out + " or any directory above it, so it has no import path\n"
+		"  a.xsd — a.xsd: no go.mod lies in the output directory " + out + " or any directory above it, so it has no import path: create a go.mod at or above the output directory, as go mod init <module path> does\n"
 	if !strings.HasSuffix(report.String(), want) {
 		t.Errorf("report closes\n%s\nwant\n%s", report.String(), want)
 	}

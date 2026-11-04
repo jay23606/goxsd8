@@ -354,7 +354,7 @@ func importPath(dir, base string) (string, string, error) {
 		}
 		parent := filepath.Dir(mod)
 		if parent == mod {
-			return "", "", fmt.Errorf("no go.mod lies in the output directory %s or any directory above it, so it has no import path", dir)
+			return "", "", fmt.Errorf("no go.mod lies in the output directory %s or any directory above it, so it has no import path: create a go.mod at or above the output directory, as go mod init <module path> does", dir)
 		}
 		mod = parent
 	}

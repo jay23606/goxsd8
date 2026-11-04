@@ -337,6 +337,11 @@ func TestGenVerboseLogs(t *testing.T) {
 	generatedFile(t, out)
 }
 
+// packageClause is the remedy closing every refusal of the package name gen
+// derives from an -out, spelled out rather than read from packageRemedy so a
+// change to the text fails the rows that carry it.
+const packageClause = ": gen names the package after the last path element of -out, so name an -out directory such as ./order"
+
 // TestGenUsageAndIOFaults pins exit 2: each row's stderr is exactly its want,
 // and nothing is written at the paths it names. A diagnosis of the command
 // line's shape ends in genShapeTail; an unreadable -schema, a refused -out and
@@ -380,22 +385,22 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 				fmt.Sprintf(flagAfterPositionalFmt, "gen", "-weird.xml") + genShapeTail, []string{at("--")}},
 			{"valued help", []string{"-help=true"}, fmt.Sprintf(helpNotAFlagValueFmt, "gen") + genShapeTail, nil},
 			{"package not an identifier", []string{"-schema", flat, "-out", at("my-pkg")},
-				"goxsd8: gen: -schema " + flat + " -out " + at("my-pkg") + `: the package name "my-pkg" is not a Go identifier`,
+				"goxsd8: gen: -schema " + flat + " -out " + at("my-pkg") + `: the package name "my-pkg" is not a Go identifier` + packageClause,
 				[]string{at("my-pkg")}},
 			{"package a keyword", []string{"-schema", flat, "-out", at("type")},
-				"goxsd8: gen: -schema " + flat + " -out " + at("type") + `: the package name "type" is a Go keyword`,
+				"goxsd8: gen: -schema " + flat + " -out " + at("type") + `: the package name "type" is a Go keyword` + packageClause,
 				[]string{at("type")}},
 			{"package blank", []string{"-schema", flat, "-out", at("_")},
-				"goxsd8: gen: -schema " + flat + " -out " + at("_") + `: the package name "_" is the blank identifier`,
+				"goxsd8: gen: -schema " + flat + " -out " + at("_") + `: the package name "_" is the blank identifier` + packageClause,
 				[]string{at("_")}},
 			{"empty -out", []string{"-schema", flat, "-out", ""},
 				"goxsd8: gen: -schema " + flat + " -out : no output directory given",
 				[]string{at("xsd_gen.go")}},
 			{"package main", []string{"-schema", flat, "-out", at("main")},
-				"goxsd8: gen: -schema " + flat + " -out " + at("main") + `: the package name is "main", but the emitted package declares no func main and would not build`,
+				"goxsd8: gen: -schema " + flat + " -out " + at("main") + `: the package name is "main", but the emitted package declares no func main and would not build` + packageClause,
 				[]string{at("main")}},
 			{"-out .", []string{"-schema", flat, "-out", "."},
-				"goxsd8: gen: -schema " + flat + ` -out .: the package name "." is not a Go identifier`,
+				"goxsd8: gen: -schema " + flat + ` -out .: the package name "." is not a Go identifier` + packageClause,
 				[]string{at("xsd_gen.go")}},
 			// The second pair's -out is refused, so the first is not
 			// written either.
@@ -488,7 +493,7 @@ func TestGenModuleRefusals(t *testing.T) {
 		want string
 	}{
 		{"no go.mod", []string{"-schema", flat, "-out", at("free/gen")},
-			"goxsd8: gen: -schema " + flat + " -out " + at("free/gen") + ": no go.mod lies in the output directory " + at("free/gen") + " or any directory above it, so it has no import path"},
+			"goxsd8: gen: -schema " + flat + " -out " + at("free/gen") + ": no go.mod lies in the output directory " + at("free/gen") + " or any directory above it, so it has no import path: create a go.mod at or above the output directory, as go mod init <module path> does"},
 		{"no module directive", []string{"-schema", flat, "-out", at("nomodule/gen")},
 			"goxsd8: gen: -schema " + flat + " -out " + at("nomodule/gen") + ": " + at("nomodule/go.mod") + " holds no module directive"},
 		{"repeated import path", []string{"-schema", flat, "-out", at("one/gen"), "-schema", flat, "-out", at("two/gen")},
@@ -614,7 +619,7 @@ func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 	refusal := func(schema, out, msg string) string {
 		return "goxsd8: gen: -schema " + schema + " -out " + out + ": " + msg + "\n"
 	}
-	notIdentifier := `the package name "my-pkg" is not a Go identifier`
+	notIdentifier := `the package name "my-pkg" is not a Go identifier` + packageClause
 	rows := []struct {
 		name string
 		args []string
@@ -637,7 +642,7 @@ func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 		{"-out a regular file behind a decline", []string{"-schema", "dec.xsd", "-out", "ok", "-schema", flat, "-out", "file"},
 			refusal(flat, "file", "the output directory file exists and is not a directory"), "", []string{"ok"}},
 		{"every refusal in argument order", []string{"-schema", "dec.xsd", "-out", "my-pkg", "-schema", flat, "-out", "ok", "-schema", broken, "-out", "type"},
-			refusal("dec.xsd", "my-pkg", notIdentifier) + refusal(broken, "type", `the package name "type" is a Go keyword`), broken, []string{"my-pkg", "ok", "type"}},
+			refusal("dec.xsd", "my-pkg", notIdentifier) + refusal(broken, "type", `the package name "type" is a Go keyword`+packageClause), broken, []string{"my-pkg", "ok", "type"}},
 	}
 	dec := "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" +
 		`<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>` +
