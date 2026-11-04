@@ -58,8 +58,9 @@ Usage (contract; subcommands land with their milestones):
               fault reading a document it references included. Unranked:
               it answers before any instance is opened, so no instance's
               4, 1 or 2 is reached, and a 2 raised before compiling (a
-              flag, a missing or misplaced argument, a -schema that is
-              - or cannot be read) answers instead of it.
+              flag, a missing or misplaced argument, an instance whose
+              name gives no format, a -schema that is - or cannot be
+              read) answers instead of it.
   4     2     validate: an instance left undecided, by a check the
               assessment declined (validate below names its kinds)
               or by a jsonsrc decline. Nothing was
@@ -183,7 +184,12 @@ Usage (contract; subcommands land with their milestones):
       it exits 2 saying so. - has no extension and
       needs -format, as in goxsd8 validate -format xml -schema
       s.xsd - < i.xml; without one it exits 2 saying so. An instance
-      argument naming a directory exits 2 saying it is a directory.
+      whose name gives no format refuses the whole invocation before
+      any schema is compiled: one line for each such instance, in
+      argument order, then usage: and the synopsis once, and no
+      instance is assessed. An instance argument naming a directory
+      is not one of them whatever its name: it exits 2 saying it is
+      a directory, and stops no instance but its own.
       xsi:schemaLocation hints on the document element of an XML
       instance augment the schema set for that instance (resolved
       relative to the instance; disable with -no-hints). A hint the

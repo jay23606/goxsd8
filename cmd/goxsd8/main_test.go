@@ -237,6 +237,54 @@ func TestArgumentFaultPrintsOneLine(t *testing.T) {
 	}
 }
 
+// TestFormatlessInstanceRefusesTheInvocation pins #3358: an instance whose name
+// gives no source format refuses the whole validate invocation before any
+// instance is assessed, so with one writer as both stdout and stderr the
+// output is that instance's formatOf line, one synopsis and one helpPointer,
+// and no report of order-invalid.xml before it. Several such instances get a
+// line each in argument order above one synopsis. -format names every
+// instance's format, and ber is a per-instance capability refusal, so neither
+// pin row hoists anything: order-invalid.xml's report precedes the one
+// subcommandFault line.
+func TestFormatlessInstanceRefusesTheInvocation(t *testing.T) {
+	const (
+		pass    = "; pass -format xml, json, ber\n"
+		txtLine = `goxsd8: validate: testdata/order.txt: the extension ".txt" names no source format` + pass
+		stdLine = "goxsd8: validate: -: standard input has no extension to name a source format" + pass
+	)
+	refusal := validateUsageLine + "\n" + helpPointer + "\n"
+	var report, reportErr bytes.Buffer
+	if code := run([]string{"validate", "-schema", orderSchema, invalidInstance}, &report, &reportErr); code != exitInvalid || report.Len() == 0 || reportErr.Len() != 0 {
+		t.Fatalf("order-invalid.xml alone = %d with report %q and stderr %q, want %d, a report and no stderr", code, report.String(), reportErr.String(), exitInvalid)
+	}
+	cases := []struct {
+		args []string
+		code int
+		want string
+	}{
+		{[]string{"-schema", orderSchema, invalidInstance, "testdata/order.txt"}, exitUsage, txtLine + refusal},
+		{[]string{"-schema", orderSchema, invalidInstance, stdinArg}, exitUsage, stdLine + refusal},
+		{[]string{"-schema", orderSchema, invalidInstance, "testdata/a.txt", "testdata/b", stdinArg}, exitUsage,
+			`goxsd8: validate: testdata/a.txt: the extension ".txt" names no source format` + pass +
+				`goxsd8: validate: testdata/b: the extension "" names no source format` + pass +
+				stdLine + refusal},
+		{[]string{"-format", "xml", "-schema", orderSchema, invalidInstance, "testdata/order.txt"}, exitUsage,
+			report.String() + "goxsd8: validate: open testdata/order.txt: no such file or directory\n"},
+		{[]string{"-schema", orderSchema, invalidInstance, "testdata/x.ber"}, exitUsage,
+			report.String() + "goxsd8: validate: testdata/x.ber: -format ber is reserved by the contract and not yet implemented; only xml and json instances are assessed today\n"},
+	}
+	for _, c := range cases {
+		args := append([]string{"validate"}, c.args...)
+		var both bytes.Buffer
+		if code := run(args, &both, &both); code != c.code {
+			t.Errorf("run(%q) = %d, want %d", args, code, c.code)
+		}
+		if both.String() != c.want {
+			t.Errorf("run(%q) output = %q, want %q", args, both.String(), c.want)
+		}
+	}
+}
+
 // TestHelpPointerResolvesOutsideTheModule pins #870's second half: the remedy
 // a usage error names must work where an installed binary runs. A `go doc`
 // invocation does not — it needs the module tree — so no message may name one.

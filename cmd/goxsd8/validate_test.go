@@ -373,16 +373,17 @@ func TestValidateSchemaFaultHasItsOwnExitCode(t *testing.T) {
 // not compile answers 3 beside an instance argument that is itself a usage
 // error, since no instance is examined, and a 2 raised before compiling — a
 // bad -format, an unreadable -schema, a -schema of -, a flag after a
-// positional — answers instead of the 3. Each instance argument is first shown
-// to answer 2 against a set that compiles, so the 3 is not an argument that was
-// never a fault.
+// positional, an instance whose name gives no format (an existing order.txt,
+// or - without -format) — answers instead of the 3. Each instance argument of
+// the 3 loop is first shown to answer 2 against a set that compiles, so the 3
+// is not an argument that was never a fault.
 func TestValidateSchemaFaultPrecedesInstanceUsage(t *testing.T) {
 	dir := t.TempDir()
 	unnamed := filepath.Join(dir, "order.txt")
 	if err := os.WriteFile(unnamed, []byte("<order/>\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, instance := range []string{"testdata/nosuch.xml", unnamed, dir, stdinArg} {
+	for _, instance := range []string{"testdata/nosuch.xml", dir} {
 		var stdout, stderr bytes.Buffer
 		if code := run([]string{"validate", "-schema", orderSchema, instance}, &stdout, &stderr); code != exitUsage {
 			t.Fatalf("instance %q against a set that compiles = %d, want %d: it is no usage error to preempt (stderr %q)", instance, code, exitUsage, stderr.String())
@@ -402,6 +403,8 @@ func TestValidateSchemaFaultPrecedesInstanceUsage(t *testing.T) {
 		{"validate", "-schema", "testdata/nosuch.xsd", "-schema", brokenSchema, validInstance},
 		{"validate", "-schema", brokenSchema, validInstance, "-q"},
 		{"validate", "-schema", brokenSchema, "-schema", stdinArg, validInstance},
+		{"validate", "-schema", brokenSchema, unnamed},
+		{"validate", "-schema", brokenSchema, stdinArg},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(args, &stdout, &stderr); code != exitUsage {
