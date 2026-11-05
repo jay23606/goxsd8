@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"strconv"
+	"strings"
 
 	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/value"
@@ -22,17 +24,46 @@ type pipeline struct {
 	log     *slog.Logger
 }
 
-// scalar is one item Decode decodes a value for: its atomic Go type, the
-// simple type its value is decoded under, label, the type as a stage error
-// and a trace name it (typeLabel), and supplied, the value Decode's doc states
-// the post-schema-validation infoset supplies for it, nil exactly when there
-// is no value constraint: an element's {value constraint}, an attribute use's
+// scalar is one item Decode decodes a value for: atom, the atomic Go type of
+// its simple type or, for a list, of its {item type definition}; st, the
+// simple type its value is decoded under; label, the type as a stage error and
+// a trace name it (typeLabel); item, st's {item type definition} where st is a
+// list and nil otherwise; and supplied, the value Decode's doc states the
+// post-schema-validation infoset supplies for it, nil exactly when there is no
+// value constraint: an element's {value constraint}, an attribute use's
 // effective one (§3.5.4 key-evc).
 type scalar struct {
 	atom     atomic
 	st       *xsd.SimpleType
 	label    string
+	item     *listItem
 	supplied *supplied
+}
+
+// listItem is the {item type definition} of a list type (Datatypes §2.4.1.2):
+// st, the type each list item is mapped under, and label, which names st and
+// the list for a stage error and a trace.
+type listItem struct {
+	st    *xsd.SimpleType
+	label string
+}
+
+// goType returns the Go type codegen gives s's simple type: s's atomic Go type
+// A, or []A for a list (codegen/doc.go "# Simple types").
+func (s scalar) goType() reflect.Type {
+	if s.item == nil {
+		return s.atom.bare()
+	}
+	return reflect.SliceOf(s.atom.bare())
+}
+
+// simpleGo is the Go type codegen gives a simple type Decode decodes, as
+// simpleDecline reads it: atom, its atomic Go type or, for a list, its {item
+// type definition}'s, and item, that {item type definition} for a list and nil
+// otherwise.
+type simpleGo struct {
+	atom atomic
+	item *xsd.SimpleType
 }
 
 // supplied is the {lexical form} of the value constraint of the item subject
@@ -51,10 +82,24 @@ func supply(vc xsd.ValueConstraint, has bool, subject string) *supplied {
 	return &supplied{lexical: vc.LexicalForm(), subject: subject}
 }
 
-// newScalar returns the scalar of the item subject names, of simple type st
-// and atomic Go type atom, its value constraint vc where has is true.
-func newScalar(atom atomic, st *xsd.SimpleType, subject string, vc xsd.ValueConstraint, has bool) scalar {
-	return scalar{atom: atom, st: st, label: typeLabel(st, subject), supplied: supply(vc, has, subject)}
+// newScalar returns the scalar of the item subject names, of simple type st,
+// whose Go type is g, its value constraint vc where has is true.
+func newScalar(g simpleGo, st *xsd.SimpleType, subject string, vc xsd.ValueConstraint, has bool) scalar {
+	s := scalar{atom: g.atom, st: st, label: typeLabel(st, subject), supplied: supply(vc, has, subject)}
+	if g.item != nil {
+		s.item = &listItem{st: g.item, label: itemLabel(g.item, s.label)}
+	}
+	return s
+}
+
+// itemLabel names item, the {item type definition} of the list type list
+// names, for a stage error and a trace: its QName and then "the item type of "
+// and list, or for an anonymous item that phrase alone.
+func itemLabel(item *xsd.SimpleType, list string) string {
+	if item.Name() != (xsd.QName{}) {
+		return item.Name().String() + ", the item type of " + list
+	}
+	return "the item type of " + list
 }
 
 // typeLabel names st for a stage error and a trace: its QName, or for an
@@ -77,49 +122,113 @@ const (
 
 // decode runs Decode's value stages on raw, the item's characters or its
 // supplied {lexical form}, from src, and returns the value as a value of
-// s.atom's bare type: whiteSpace (value.ApplyWhiteSpace), then, for every
-// atomic other than string, the lexical mapping (the governing mapping's
-// Parse, value.GoverningMapping) and the conversion to the Go type (its
-// Canonical, then atomic.convert). It traces one Debug record per stage it
-// runs. A whiteSpace fault is a plain error; a lexical-mapping or conversion
-// failure is the *stageError Decode's doc states, item 8.
+// s.goType(): whiteSpace (value.ApplyWhiteSpace) under s.st, then, for an
+// atomic type, the lexical stages on the normalized value. For a list, whose
+// whiteSpace is collapse (Datatypes §4.3.6 rf-whiteSpace, §2.4.1.2), the
+// normalized value is split at each U+0020 before any item is mapped
+// (§2.4.1.2), an empty one into no items (§4.1.1 dt-list), and the lexical
+// stages run on each item under s.item.st, the governing mapping read once,
+// only when there is an item. It traces one Debug record per stage it runs. A
+// whiteSpace fault is a plain error; a lexical-mapping or conversion failure
+// is the *stageError Decode's doc states, item 8.
 func (s scalar) decode(p *pipeline, raw string, src source) (reflect.Value, error) {
 	p.trace("whiteSpace", ruleWhiteSpace, s.label, raw, src)
 	normalized, err := value.ApplyWhiteSpace(p.schema, s.st, raw)
 	if err != nil {
 		return reflect.Value{}, fmt.Errorf("codec: %s: normalizing %s: %w", src.loc(), src.where(), err)
 	}
-	if s.atom == atomicString {
-		return reflect.ValueOf(normalized), nil
+	if s.item == nil {
+		ls, err := newLexicalStages(p, s.atom, s.st, s.label, src, normalized, 0)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		return ls.run(p, normalized, 0)
 	}
-	m, ok, err := value.GoverningMapping(p.backend, p.schema, s.st)
+	var tokens []string
+	if normalized != "" {
+		tokens = strings.Split(normalized, " ")
+	}
+	out := reflect.MakeSlice(s.goType(), 0, len(tokens))
+	if len(tokens) == 0 {
+		return out, nil
+	}
+	ls, err := newLexicalStages(p, s.atom, s.item.st, s.item.label, src, tokens[0], 1)
 	if err != nil {
-		return reflect.Value{}, fmt.Errorf("codec: %s: reading the governing mapping of %s for %s: %w", src.loc(), s.label, src.where(), err)
+		return reflect.Value{}, err
 	}
-	fail := func(st stage, cause error) error {
-		return &stageError{stage: st, label: s.label, fragment: normalized, src: src, cause: cause}
-	}
-	if !ok {
-		return reflect.Value{}, fail(stageLexicalMapping, errors.New("no mapping of the backend governs the type"))
-	}
-	p.trace("lexical mapping", ruleDatatypeValid, s.label, normalized, src, slog.String("clause", "2.1"))
-	v, err := m.Parse(normalized, nil)
-	if err != nil {
-		return reflect.Value{}, fail(stageLexicalMapping, err)
-	}
-	if m.Canonical == nil {
-		return reflect.Value{}, fail(stageConversion, errors.New("the governing mapping has no canonical mapping"))
-	}
-	canonical, err := m.Canonical(v)
-	if err != nil {
-		return reflect.Value{}, fail(stageConversion, err)
-	}
-	p.trace("conversion", ruleCanonicalMapping, s.label, canonical, src)
-	out, err := s.atom.convert(canonical)
-	if err != nil {
-		return reflect.Value{}, fail(stageConversion, fmt.Errorf("canonical form %q is no %s: %w", canonical, s.atom.bare(), err))
+	for i, tok := range tokens {
+		v, err := ls.run(p, tok, i+1)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		out = reflect.Append(out, v)
 	}
 	return out, nil
+}
+
+// lexicalStages are Decode's value stages after whiteSpace for lexicals of
+// one atomic simple type, label naming it, from src: for every atomic other
+// than string, the lexical mapping (m's Parse, the governing mapping
+// value.GoverningMapping returns) and the conversion to the Go type (m's
+// Canonical, then atomic.convert). m is the zero Mapping for atomicString,
+// whose value is the lexical itself.
+type lexicalStages struct {
+	atom  atomic
+	label string
+	src   source
+	m     value.Mapping
+}
+
+// newLexicalStages returns the lexicalStages of st, of atomic Go type atom,
+// or the error for a governing mapping of st that cannot be read, the
+// *stageError of item 8 where no mapping of p's backend governs st, charged to
+// first, the first lexical, at position token as stageError states it.
+func newLexicalStages(p *pipeline, atom atomic, st *xsd.SimpleType, label string, src source, first string, token int) (lexicalStages, error) {
+	ls := lexicalStages{atom: atom, label: label, src: src}
+	if atom == atomicString {
+		return ls, nil
+	}
+	m, ok, err := value.GoverningMapping(p.backend, p.schema, st)
+	if err != nil {
+		return lexicalStages{}, fmt.Errorf("codec: %s: reading the governing mapping of %s for %s: %w", src.loc(), label, src.where(), err)
+	}
+	if !ok {
+		return lexicalStages{}, ls.fail(stageLexicalMapping, first, token, errors.New("no mapping of the backend governs the type"))
+	}
+	ls.m = m
+	return ls, nil
+}
+
+// run returns the value of lexical, at position token as stageError states
+// it, as a value of ls.atom's bare type.
+func (ls lexicalStages) run(p *pipeline, lexical string, token int) (reflect.Value, error) {
+	if ls.atom == atomicString {
+		return reflect.ValueOf(lexical), nil
+	}
+	p.trace("lexical mapping", ruleDatatypeValid, ls.label, lexical, ls.src, slog.String("clause", "2.1"))
+	v, err := ls.m.Parse(lexical, nil)
+	if err != nil {
+		return reflect.Value{}, ls.fail(stageLexicalMapping, lexical, token, err)
+	}
+	if ls.m.Canonical == nil {
+		return reflect.Value{}, ls.fail(stageConversion, lexical, token, errors.New("the governing mapping has no canonical mapping"))
+	}
+	canonical, err := ls.m.Canonical(v)
+	if err != nil {
+		return reflect.Value{}, ls.fail(stageConversion, lexical, token, err)
+	}
+	p.trace("conversion", ruleCanonicalMapping, ls.label, canonical, ls.src)
+	out, err := ls.atom.convert(canonical)
+	if err != nil {
+		return reflect.Value{}, ls.fail(stageConversion, lexical, token, fmt.Errorf("canonical form %q is no %s: %w", canonical, ls.atom.bare(), err))
+	}
+	return out, nil
+}
+
+// fail returns the *stageError of stage st on fragment, at position token,
+// for cause.
+func (ls lexicalStages) fail(st stage, fragment string, token int, cause error) error {
+	return &stageError{stage: st, label: ls.label, fragment: fragment, token: token, src: ls.src, cause: cause}
 }
 
 // trace logs one Debug record for the stage named msg on the value from src,
@@ -159,21 +268,29 @@ func (s stage) name() string {
 
 // stageError is the error Decode's doc states in item 8: stage failed on
 // fragment, the normalized lexical of a value of the type label names, from
-// src, for cause. It has no Unwrap: validate accepted the value on the same
-// backend, so no rule cause carries is charged to the instance.
+// src, for cause. For a list value, fragment is one list item, label names
+// the list's {item type definition}, and token is the item's 1-based position
+// among the value's items; for an atomic value token is 0. It has no Unwrap:
+// validate accepted the value on the same backend, so no rule cause carries is
+// charged to the instance.
 type stageError struct {
 	stage    stage
 	label    string
 	fragment string
+	token    int
 	src      source
 	cause    error
 }
 
-// Error names src's Loc, the stage, the fragment, the type and src, then the
-// cause, and states whose fault it is.
+// Error names src's Loc, the stage, the fragment, for a list item its
+// position, the type and src, then the cause, and states whose fault it is.
 func (e *stageError) Error() string {
-	return fmt.Sprintf("codec: %s: %s failed on %q, a value of %s in %s: %v; validate accepted the value on the same backend, so this is a fault of the backend, not of the instance",
-		e.src.loc(), e.stage.name(), e.fragment, e.label, e.src.where(), e.cause)
+	fragment := strconv.Quote(e.fragment)
+	if e.token > 0 {
+		fragment = fmt.Sprintf("list item %d, %s", e.token, fragment)
+	}
+	return fmt.Sprintf("codec: %s: %s failed on %s, a value of %s in %s: %v; validate accepted the value on the same backend, so this is a fault of the backend, not of the instance",
+		e.src.loc(), e.stage.name(), fragment, e.label, e.src.where(), e.cause)
 }
 
 // A source is where a value Decode decodes comes from, as a stage error and

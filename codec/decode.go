@@ -34,11 +34,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // codegen emits for another top-level element of the same type, passes item 6
 // and decodes as the declaration's own struct does, an error only where that
 // one's is. For a simple one item 6 reads T's underlying type alone, so any T
-// over the atomic Go type codegen gives that simple type passes it, such as
-// the type codegen emits for another document element of the same simple
-// type. A caller decoding documents of several roots therefore reads the
-// document element's name itself, through parser/xmltree or encoding/xml,
-// before choosing T.
+// over the Go type codegen gives that simple type, its atomic Go type A or,
+// for a list, []A, passes it, such as the type codegen emits for another
+// document element of the same simple type. A caller decoding documents of
+// several roots therefore reads the document element's name itself, through
+// parser/xmltree or encoding/xml, before choosing T.
 //
 // T may be codegen's sealed interface for a choice, as the package doc's
 // "# What decodes" states, and Decode then returns a *T pointing at it. The
@@ -71,15 +71,20 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // strconv.ParseFloat at the Go type's width, and a decimal's into big.Rat,
 // big.Int or a bounded Go integer at its width. backend's governing mapping of
 // each such type must therefore have a non-nil Canonical, as builtin/strict's
-// do; item 8 states the error where one fails. So the value is the instance's
-// own even where a fixed value constraint holds it to an equal one that is not
-// identical (§3.5.4 cvc-au, cvc-elt clause 5.2.2.2.2): -0 against fixed 0 on
-// xs:double decodes to negative zero. The field of an optional attribute use
-// with an effective value constraint is the atomic Go type itself, as codegen
-// emits it, holding the supplied value when the attribute is absent; a
-// whitespace-only element has a character child and holds its own value; and
-// an element absent from the instance supplies nothing, its field nil or not
-// appended to.
+// do; item 8 states the error where one fails. For a list type, whose
+// whiteSpace is collapse (Datatypes §4.3.6, §2.4.1.2), the normalized string
+// is split at each U+0020 into its list items before any is mapped, an empty
+// one into none (§4.1.1 dt-list), and each item is read as above under the
+// list's {item type definition}, a restriction of a list taking its base's
+// (Structures §3.16.2.3); the value is the []A of the items in order. So the
+// value is the instance's own even where a fixed value constraint holds it to
+// an equal one that is not identical (§3.5.4 cvc-au, cvc-elt clause 5.2.2.2.2):
+// -0 against fixed 0 on xs:double decodes to negative zero. The field of an
+// optional attribute use with an effective value constraint is the Go type
+// codegen gives its simple type itself, as codegen emits it, holding the
+// supplied value when the attribute is absent; a whitespace-only element has a
+// character child and holds its own value; and an element absent from the
+// instance supplies nothing, its field nil or not appended to.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -108,33 +113,36 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     [DeclineError.Construct] is that construct's. Each is found in this
 //     order: the declaration's {type table} and {nillable}, then its {type
 //     definition}: a simple type's {variety} and {primitive type definition},
-//     after which nothing further is examined, or a complex type's content,
-//     then the occurrence of its sequence or choice, each particle of its
-//     content in order — a nested model group or wildcard, then, of an
-//     <element ref>, the referenced declaration's substitution group, then
-//     the particle's element declaration's {type table} and {nillable}, its
-//     {type definition}, any complex one declining and a simple one as the
-//     document element's does, and an expanded name an earlier particle
-//     shares; of a choice, each alternative's own constructs, then a branch
-//     field of the name and Go type, as item 6 reads it, an earlier
-//     alternative's has, which declines as two choice alternatives whose
-//     branch structs have one shape — each of its attribute uses in order,
-//     and its {attribute wildcard}. A component of the declaration or its
-//     type that does not resolve, or a particle with {max occurs} 0, is a
-//     plain error in place of a decline, at its point in this order.
+//     for a list its {item type definition}'s, whose construct the list
+//     declines by, after which nothing further is examined, or a complex
+//     type's content, then the occurrence of its sequence or choice, each
+//     particle of its content in order — a nested model group or wildcard,
+//     then, of an <element ref>, the referenced declaration's substitution
+//     group, then the particle's element declaration's {type table} and
+//     {nillable}, its {type definition}, any complex one declining and a
+//     simple one as the document element's does, and an expanded name an
+//     earlier particle shares; of a choice, each alternative's own
+//     constructs, then a branch field of the name and Go type, as item 6
+//     reads it, an earlier alternative's has, which declines as two choice
+//     alternatives whose branch structs have one shape — each of its
+//     attribute uses in order, and its {attribute wildcard}. A component of
+//     the declaration or its type that does not resolve, or a particle with
+//     {max occurs} 0, is a plain error in place of a decline, at its point in
+//     this order.
 //  6. T does not match the type codegen emits for the declaration, as Decode
 //     derives it from the schema: for a complex {type definition}, T is not a
 //     struct whose fields are exactly those codegen emits, in name, order and
 //     Go type, or, where codegen emits the choice's sealed interface as the
 //     type itself, T is not an interface; for a simple one, T's underlying
-//     type is not the atomic Go type codegen gives it (the Simple
-//     types section of codegen's package doc): string, bool, float32,
-//     float64, big.Rat, big.Int or a bounded Go integer. A field's Go type is
-//     A, *A or []A, A the atomic Go type of its simple type, for a local
-//     element declaration's particle and an attribute use; for an <element
-//     ref> particle it is N, *N or []N, N the named type codegen emits for
-//     the referenced declaration, matched as any type other than A whose
-//     underlying type is A, never by name; A itself, a local particle's type,
+//     type is not the Go type codegen gives it (the Simple types section of
+//     codegen's package doc): its atomic Go type A, string, bool, float32,
+//     float64, big.Rat, big.Int or a bounded Go integer, or for a list []A,
+//     A its {item type definition}'s. A field's Go type is V, *V or []V, V the
+//     Go type codegen gives its simple type, A or []A, for a local element
+//     declaration's particle and an attribute use; for an <element ref>
+//     particle it is N, *N or []N, N the named type codegen emits for the
+//     referenced declaration, matched as any type other than V whose
+//     underlying type is V, never by name; V itself, a local particle's type,
 //     does not pass, so a ref's field and a local one's never accept one Go
 //     type. A sealed interface, T or the struct's first field, does not match
 //     when it is not an interface whose one method is unexported, or when its
@@ -158,18 +166,22 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //  8. The lexical mapping or the conversion to the Go type failing on a value
 //     validate accepted on the same backend: no mapping of backend governs
 //     the type, its Parse rejects the normalized value, or its Canonical is
-//     nil, fails, or renders a form the Go type does not read. It is a fault
-//     of the backend, not of the instance. The error names the stage, the
-//     type — its QName, or for an anonymous type the declaration it is local
-//     to and that declaration's schema Loc — the normalized value, and the
-//     value's source at its instance Loc: an element's character content, at
-//     its first character data, with that data's byte offset; a present
-//     attribute, at its Loc (xmltree.Attribute.Loc), with no offset; or a supplied value,
-//     at its element's start, with the declaration whose value constraint
-//     supplied it. It wraps nothing: errors.As finds no *xsderr.Error,
-//     *DeclineError or *UndecidedError in it, xsderr.RuleOf no rule, and
-//     errors.Is neither errors.ErrUnsupported nor [ErrTypeMismatch]; and
-//     [ViolationsOf] returns nil for it.
+//     nil, fails, or renders a form the Go type does not read; for a list,
+//     the type is its {item type definition} and the value one list item. It
+//     is a fault of the backend, not of the instance. The error names the
+//     stage, the type — its QName, or for an anonymous type the declaration
+//     it is local to and that declaration's schema Loc, and for a list's item
+//     type the list's too — the normalized value, or the list item and its
+//     1-based position among the value's items, and the value's source at its
+//     instance Loc, for a list the whole value's and never an item's: an
+//     element's character content, at its first character data, with that
+//     data's byte offset; a present attribute, at its Loc
+//     (xmltree.Attribute.Loc), with no offset; or a supplied value, at its
+//     element's start, with the declaration whose value constraint supplied
+//     it. It wraps nothing: errors.As finds no *xsderr.Error, *DeclineError or
+//     *UndecidedError in it, xsderr.RuleOf no rule, and errors.Is neither
+//     errors.ErrUnsupported nor [ErrTypeMismatch]; and [ViolationsOf] returns
+//     nil for it.
 //
 // Items 5 and 6 read no instance; [CheckDecode] returns them for a
 // declaration before an instance arrives.
@@ -350,10 +362,11 @@ const (
 	shapeRepeated                  // []V
 )
 
-// store stores v, a decoded value of an atomic's bare type, in dst, a value of
-// a Go type of shape s over a type v converts to: a repeated one appends it,
-// an optional one points at a copy of it, each converted to dst's own element
-// type, and shapeOne sets dst to it converted to dst's type.
+// store stores v, a decoded value of the Go type codegen gives a simple type
+// (scalar.goType), in dst, a value of a Go type of shape s over a type v
+// converts to: a repeated one appends it, an optional one points at a copy of
+// it, each converted to dst's own element type, and shapeOne sets dst to it
+// converted to dst's type.
 func (s shape) store(dst, v reflect.Value) {
 	switch s {
 	case shapeOptional:
@@ -368,16 +381,16 @@ func (s shape) store(dst, v reflect.Value) {
 }
 
 // valueType is how the Go type V a field's shape holds its value in relates
-// to the field's atomic Go type, by codegen's field rules: that type itself
-// for a local element declaration's particle and an attribute use, and, for
-// an <element ref> particle, the named type codegen emits for the referenced
-// top-level declaration, whose underlying type it is. The zero value is
-// invalid (STYLE T1).
+// to the Go type codegen gives the field's simple type (scalar.goType), by
+// codegen's field rules: that type itself for a local element declaration's
+// particle and an attribute use, and, for an <element ref> particle, the
+// named type codegen emits for the referenced top-level declaration, whose
+// underlying type it is. The zero value is invalid (STYLE T1).
 type valueType uint8
 
 const (
-	valueBare  valueType = iota + 1 // the atomic Go type itself
-	valueNamed                      // a named type over the atomic Go type
+	valueBare  valueType = iota + 1 // the simple type's Go type itself
+	valueNamed                      // a named type over the simple type's Go type
 )
 
 // field is one field of a struct codegen emits: of the document element's
@@ -397,12 +410,14 @@ func (f field) matches(got reflect.StructField) bool {
 }
 
 // accepts reports whether t is the Go type codegen gives f, as Decode's doc,
-// item 6, reads it: f's shape over a value type that is f's atomic Go type
-// itself for valueBare, and for valueNamed a type other than it whose
-// underlying type it is, its name never compared. Equal Kinds of two scalar
-// types mean one underlying type; for big.Rat and big.Int, ConvertibleTo
-// means an identical underlying type, which math/big's unexported fields
-// keep any other struct from having.
+// item 6, reads it: f's shape over a value type that is the Go type codegen
+// gives f's simple type (scalar.goType) itself for valueBare, and for
+// valueNamed a type other than it whose underlying type it is, its name never
+// compared. Equal Kinds of two scalar types mean one underlying type; for
+// big.Rat and big.Int, ConvertibleTo means an identical underlying type, which
+// math/big's unexported fields keep any other struct from having; and for two
+// slice types, Kind Slice and ConvertibleTo mean an identical underlying type,
+// since Go converts between slice types only then.
 func (f field) accepts(t reflect.Type) bool {
 	switch f.shape {
 	case shapeOne:
@@ -420,20 +435,50 @@ func (f field) accepts(t reflect.Type) bool {
 		// The zero shape is an internal bug, never input.
 		panic(fmt.Sprintf("codec: invalid shape %d", f.shape))
 	}
-	bare := f.atom.bare()
+	want := f.goType()
 	switch f.value {
 	case valueBare:
-		return t == bare
+		return t == want
 	case valueNamed:
-		return t != bare && t.Kind() == bare.Kind() && t.ConvertibleTo(bare)
+		return t != want && t.Kind() == want.Kind() && t.ConvertibleTo(want)
 	}
 	// The zero valueType is an internal bug, never input.
 	panic(fmt.Sprintf("codec: invalid value type %d", f.value))
 }
 
+// sharesBranch reports whether f and g, two choice alternatives' branch
+// fields, accept a common Go type, as accepts reads one: the same name and
+// value type, and then, for valueBare, the same Go type of shape over
+// scalar.goType, a repeated xs:int and a list of xs:int each []int32; for
+// valueNamed, the same shape and the same goType separately, since the named
+// type sits between them and []N over int32 is no N over []int32.
+func (f field) sharesBranch(g field) bool {
+	if f.name != g.name || f.value != g.value {
+		return false
+	}
+	if f.value == valueNamed {
+		return f.shape == g.shape && f.goType() == g.goType()
+	}
+	return f.shaped() == g.shaped()
+}
+
+// shaped returns the Go type of f's shape over scalar.goType: V, *V or []V.
+func (f field) shaped() reflect.Type {
+	switch f.shape {
+	case shapeOne:
+		return f.goType()
+	case shapeOptional:
+		return reflect.PointerTo(f.goType())
+	case shapeRepeated:
+		return reflect.SliceOf(f.goType())
+	}
+	// The zero shape is an internal bug, never input.
+	panic(fmt.Sprintf("codec: invalid shape %d", f.shape))
+}
+
 // describe spells the Go type codegen gives f for an ErrTypeMismatch message:
-// the atomic Go type A, *A or []A, or the same over N for a named type N over
-// A.
+// V, *V or []V, V the Go type codegen gives f's simple type, A or for a list
+// []A, or the same over N for a named type N over V.
 func (f field) describe() string {
 	var prefix string
 	switch f.shape {
@@ -444,9 +489,9 @@ func (f field) describe() string {
 		prefix = "[]"
 	}
 	if f.value == valueNamed {
-		return prefix + "N for a named type N over " + f.atom.bare().String()
+		return prefix + "N for a named type N over " + f.goType().String()
 	}
-	return prefix + f.atom.bare().String()
+	return prefix + f.goType().String()
 }
 
 // A binder is the type codegen emits for one document element declaration,
@@ -560,12 +605,9 @@ func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
 		return nil, err
 	}
 	for _, u := range ct.AttributeUses() {
-		f, d, subject, err := attributeUse(schema, u)
+		f, err := attributeUse(schema, u)
 		if err != nil {
 			return nil, err
-		}
-		if d != 0 {
-			return nil, decline(d, subject)
 		}
 		f.name = names.Claim(u.DeclarationName().Local)
 		b.attributes[u.DeclarationName()] = len(b.attrs)
@@ -626,12 +668,9 @@ func bindSequence(pl *pipeline, particles []xsd.Particle, names *goname.Namer, t
 		if d != 0 {
 			return nil, decline(d, "a particle of "+typeSubject)
 		}
-		f, d, err := elementField(pl.schema, s.children, el, p.Occurs())
+		f, err := elementField(pl.schema, s.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
-		}
-		if d != 0 {
-			return nil, decline(d, declSubject(el))
 		}
 		f.name = names.Claim(el.Name().Local)
 		s.children[el.Name()] = len(s.fields)
@@ -691,8 +730,8 @@ type choice struct {
 // (codegen/doc.go "# Particles"), or the first decline Decode's doc states for
 // them, item 5, typeSubject naming the type: each alternative's as a
 // sequence's particle declines, then an alternative whose branch struct has an
-// earlier one's shape, which no branch type could tell apart: one of the same
-// name, shape, value type and atomic Go type.
+// earlier one's shape, which no branch type could tell apart: one whose branch
+// field accepts a Go type the earlier one's does (field.sharesBranch).
 func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*choice, error) {
 	c := &choice{p: pl, name: names.Claim("choice"), children: map[xsd.QName]int{}}
 	for _, p := range particles {
@@ -703,12 +742,9 @@ func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, typ
 		if d != 0 {
 			return nil, decline(d, "a particle of "+typeSubject)
 		}
-		f, d, err := elementField(pl.schema, c.children, el, p.Occurs())
+		f, err := elementField(pl.schema, c.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
-		}
-		if d != 0 {
-			return nil, decline(d, declSubject(el))
 		}
 		// A branch's {min occurs} 0 reads as 1: the empty match is the nil
 		// interface, so no branch holds an absent value (cos-group-emptiable).
@@ -717,7 +753,7 @@ func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, typ
 		}
 		f.name = goname.NewNamer().Claim(el.Name().Local)
 		for _, earlier := range c.alts {
-			if earlier.name == f.name && earlier.shape == f.shape && earlier.value == f.value && earlier.atom == f.atom {
+			if earlier.sharesBranch(f) {
 				return nil, decline(constructSharedBranch, declSubject(el))
 			}
 		}
@@ -867,15 +903,12 @@ func (c boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out
 // declaration whose {type definition} is st, or the decline Decode's doc
 // states for st, item 5, subject naming st.
 func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType, subject string) (binder, error) {
-	atom, d, err := simpleDecline(p.schema, st)
+	g, err := simpleDecline(p.schema, st, subject)
 	if err != nil {
 		return nil, err
 	}
-	if d != 0 {
-		return nil, decline(d, subject)
-	}
 	vc, has := decl.ValueConstraint()
-	return &simpleRoot{p: p, scalar: newScalar(atom, st, declSubject(decl), vc, has)}, nil
+	return &simpleRoot{p: p, scalar: newScalar(g, st, declSubject(decl), vc, has)}, nil
 }
 
 // declarationDecline returns the construct of an element declaration's own
@@ -964,45 +997,48 @@ func particleElement(schema *xsd.Schema, p xsd.Particle) (xsd.ElementDeclaration
 }
 
 // elementField returns the field, but for its name, which its caller claims,
-// of the element declaration el in a particle occurring as occurs, or the
-// construct Decode declines it for, in the order Decode's doc states: for a
-// top-level el, which an <element ref> named, its substitution group, then
-// its own properties, its type, and an expanded name an earlier particle of
-// its model group shares, children indexing the earlier particles' names. A
-// local el's field holds its type's atomic Go type, and a top-level one's the
-// named type codegen emits for el over it (valueNamed).
-func elementField(schema *xsd.Schema, children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, construct, error) {
+// of the element declaration el in a particle occurring as occurs, or as the
+// error the *DeclineError Decode's doc states for it, item 5, naming el, or
+// the plain error that item states in a decline's place, in the order that
+// doc states: for a top-level el, which an <element ref> named, its
+// substitution group, then its own properties, its type, and an expanded name
+// an earlier particle of its model group shares, children indexing the
+// earlier particles' names. A local el's field holds the Go type codegen
+// gives its type, and a top-level one's the named type codegen emits for el
+// over it (valueNamed).
+func elementField(schema *xsd.Schema, children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, error) {
+	subject := declSubject(el)
 	value := valueBare
 	if el.ScopeVariety() == xsd.ScopeGlobal {
 		if substitutable(schema, el) {
-			return field{}, constructSubstitutionRef, nil
+			return field{}, decline(constructSubstitutionRef, subject)
 		}
 		value = valueNamed
 	}
 	if d := declarationDecline(el); d != 0 {
-		return field{}, d, nil
+		return field{}, decline(d, subject)
 	}
 	td, ok := schema.ResolvedType(el.TypeDefinition())
 	if !ok {
-		return field{}, 0, fmt.Errorf("codec: the {type definition} of %s does not resolve", declSubject(el))
+		return field{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
 	}
 	st, ok := td.(*xsd.SimpleType)
 	if !ok {
-		return field{}, constructComplexElement, nil
+		return field{}, decline(constructComplexElement, subject)
 	}
-	atom, d, err := simpleDecline(schema, st)
-	if err != nil || d != 0 {
-		return field{}, d, err
+	g, err := simpleDecline(schema, st, subject)
+	if err != nil {
+		return field{}, err
 	}
 	if _, shared := children[el.Name()]; shared {
-		return field{}, constructSharedName, nil
+		return field{}, decline(constructSharedName, subject)
 	}
 	s, err := occursShape(occurs, el)
 	if err != nil {
-		return field{}, 0, err
+		return field{}, err
 	}
 	vc, has := el.ValueConstraint()
-	return field{shape: s, value: value, scalar: newScalar(atom, st, declSubject(el), vc, has)}, 0, nil
+	return field{shape: s, value: value, scalar: newScalar(g, st, subject, vc, has)}, nil
 }
 
 // substitutable reports whether an element other than one of head, a
@@ -1020,50 +1056,102 @@ func substitutable(schema *xsd.Schema, head xsd.ElementDeclaration) bool {
 }
 
 // attributeUse returns the field, but for its name, which its caller claims,
-// of attribute use u, or the construct Decode declines it for and the subject
-// naming it. The field's shape is codegen's, as the package doc's "# What
-// decodes" states, and needs no xsi: test here: an xsi: use declines before
-// its shape is picked.
-func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (field, construct, string, error) {
+// of attribute use u, or as the error the *DeclineError Decode's doc states
+// for it, item 5, naming its attribute declaration, or a plain error. The
+// field's shape is codegen's, as the package doc's "# What decodes" states,
+// and needs no xsi: test here: an xsi: use declines before its shape is
+// picked.
+func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (field, error) {
 	decl, ok := schema.ResolvedAttributeDeclaration(u)
 	if !ok {
-		return field{}, 0, "", fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName())
+		return field{}, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName())
 	}
 	subject := fmt.Sprintf("attribute %s declared at %s", decl.Name(), decl.Loc())
 	if decl.Name().Space == xsd.XMLSchemaInstanceNS {
-		return field{}, constructXsiAttribute, subject, nil
+		return field{}, decline(constructXsiAttribute, subject)
 	}
 	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
 	if !ok {
-		return field{}, 0, "", fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
+		return field{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
 	}
-	atom, d, err := simpleDecline(schema, st)
-	if err != nil || d != 0 {
-		return field{}, d, subject, err
+	g, err := simpleDecline(schema, st, subject)
+	if err != nil {
+		return field{}, err
 	}
 	shape := shapeOptional
 	vc, has := schema.EffectiveValueConstraint(u)
 	if u.Required() || has {
 		shape = shapeOne
 	}
-	return field{shape: shape, value: valueBare, scalar: newScalar(atom, st, subject, vc, has)}, 0, subject, nil
+	return field{shape: shape, value: valueBare, scalar: newScalar(g, st, subject, vc, has)}, nil
 }
 
-// simpleDecline returns the atomic Go type codegen gives the simple type st,
+// simpleDecline returns the Go type codegen gives the simple type st of the
+// item subject names (codegen/doc.go "# Simple types"), or else an error:
+// the *DeclineError Decode's doc states for st, item 5, subject naming it,
+// or a plain error. For an atomic st the decline is atomicDecline's; for a
+// list, that of its {item type definition} (Structures §3.16.2.3, a
+// restriction of a list taking its base's), which cos-st-restricts clause 2.1
+// (checkListGraph) holds to an atomic or union type, so its construct always
+// answers, the detail naming the item after subject.
+func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simpleGo, error) {
+	variety, err := st.Variety(r)
+	if err != nil {
+		return simpleGo{}, err
+	}
+	if _, isList := variety.(xsd.List); !isList {
+		atom, d, err := atomicDecline(r, st)
+		if err != nil {
+			return simpleGo{}, err
+		}
+		if d != 0 {
+			return simpleGo{}, decline(d, subject)
+		}
+		return simpleGo{atom: atom}, nil
+	}
+	item, err := st.Item(r)
+	if err != nil {
+		return simpleGo{}, err
+	}
+	if item == nil {
+		return simpleGo{}, fmt.Errorf("codec: the list type of %s has no {item type definition}", subject)
+	}
+	atom, d, err := atomicDecline(r, item)
+	if err != nil {
+		return simpleGo{}, err
+	}
+	if d != 0 {
+		return simpleGo{}, decline(d, itemSubject(subject, item))
+	}
+	return simpleGo{atom: atom, item: item}, nil
+}
+
+// itemSubject names, after subject, item, the {item type definition} of the
+// list type whose item declines, and item's schema Loc.
+func itemSubject(subject string, item *xsd.SimpleType) string {
+	if item.Name() == (xsd.QName{}) {
+		return fmt.Sprintf("%s, through the list type's anonymous {item type definition}, a type defined at %s", subject, item.Loc())
+	}
+	return fmt.Sprintf("%s, through the list type's {item type definition} %s, a type defined at %s", subject, item.Name(), item.Loc())
+}
+
+// atomicDecline returns the atomic Go type codegen gives the simple type st,
 // an atomic type whose {primitive type definition} is xs:string, xs:anyURI,
 // xs:boolean, xs:float, xs:double or xs:decimal (codegen/doc.go "# Simple
-// types"), or else the construct Decode declines st for. {variety} is a
-// closed sum, so the switch is STYLE T2's sealed-sum exception.
-func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, error) {
+// types"), or else the construct Decode declines st for: a union's, or that of
+// its primitive. A list st is a plain error: simpleDecline routes a list to its
+// {item type definition}, which cos-st-restricts clause 2.1 holds to no list.
+// {variety} is a closed sum, so the switch is STYLE T2's sealed-sum exception.
+func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
 		return 0, 0, err
 	}
 	switch variety.(type) {
-	case xsd.List:
-		return 0, constructList, nil
 	case xsd.Union:
 		return 0, constructUnion, nil
+	case xsd.List:
+		return 0, 0, fmt.Errorf("codec: the simple type defined at %s is a list where an atomic or union type is required, as a list's {item type definition} (cos-st-restricts clause 2.1)", st.Loc())
 	}
 	primitive, err := st.Primitive(r)
 	if err != nil {
@@ -1237,25 +1325,26 @@ func elementValue(r *xmltree.Reader, start *xmltree.StartElement, p *pipeline, s
 
 // simpleRoot is the type codegen emits for a document element declaration
 // whose {type definition} is a simple type Decode decodes, as Decode reads
-// it: a type over the scalar's atomic Go type.
+// it: a type over the Go type codegen gives that simple type (scalar.goType).
 type simpleRoot struct {
 	p *pipeline
 	scalar
 }
 
-// check returns s, which fills t, when t's underlying type is s's atomic Go
-// type, and otherwise the ErrTypeMismatch error Decode's doc states, item 6.
-// t's name is never compared.
+// check returns s, which fills t, when t's underlying type is the Go type
+// codegen gives s's simple type, and otherwise the ErrTypeMismatch error
+// Decode's doc states, item 6. t's name is never compared; equal Kinds and
+// ConvertibleTo mean one underlying type, as field.accepts states.
 func (s *simpleRoot) check(t reflect.Type, _ branchSets) (filler, error) {
-	bare := s.atom.bare()
-	if t.Kind() != bare.Kind() || !t.ConvertibleTo(bare) {
-		return nil, fmt.Errorf("%w: the underlying type of %s is not %s", ErrTypeMismatch, t, bare)
+	want := s.goType()
+	if t.Kind() != want.Kind() || !t.ConvertibleTo(want) {
+		return nil, fmt.Errorf("%w: the underlying type of %s is not %s", ErrTypeMismatch, t, want)
 	}
 	return s, nil
 }
 
-// fill sets out, whose underlying type is s's atomic Go type, as a filler
-// does.
+// fill sets out, whose underlying type is the Go type codegen gives s's
+// simple type, as a filler does.
 func (s *simpleRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err

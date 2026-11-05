@@ -36,9 +36,10 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // then the declining declaration, the document element's, a particle's
 // element declaration's, local or the top-level one an <element ref> names,
 // or an attribute's, and, for a construct of the document element's type,
-// that type labelled as one, each with its schema Loc, which is the zero Loc
-// for a built-in component; for xsi:type, it names the element and the type
-// the xsi:type names.
+// that type labelled as one, and, for a construct of a list type's {item type
+// definition}, that item, by its QName where it has one, each with its schema
+// Loc, which is the zero Loc for a built-in component; for xsi:type, it names
+// the element and the type the xsi:type names.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -74,10 +75,10 @@ type construct uint8
 
 // The construct values, in the order Decode finds them: the document
 // element's declaration, its type, its content, each particle in order, its
-// attribute uses in order, its attribute wildcard, and the instance. The four
-// of a simple type, constructList to constructOtherPrimitive, sit with the
-// particle's, though a document element of simple type, and an attribute
-// use, decline by them too.
+// attribute uses in order, its attribute wildcard, and the instance. The three
+// of a simple type, constructUnion to constructOtherPrimitive, sit with the
+// particle's, though a document element of simple type, an attribute use, and
+// a list type, by its {item type definition}, decline by them too.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
@@ -95,7 +96,6 @@ const (
 	constructComplexElement
 	constructSharedName
 	constructSharedBranch
-	constructList
 	constructUnion
 	constructSpecial
 	constructOtherPrimitive
@@ -122,7 +122,6 @@ var constructNames = [...]string{
 	constructComplexElement:    "a particle's element declaration of complex type",
 	constructSharedName:        "two particles sharing an expanded name",
 	constructSharedBranch:      "two choice alternatives whose branch structs have one shape",
-	constructList:              "a list simple type",
 	constructUnion:             "a union simple type",
 	constructSpecial:           "a special simple type",
 	constructOtherPrimitive:    "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal",

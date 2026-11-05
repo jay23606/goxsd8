@@ -41,7 +41,10 @@
 // xs:ID, xs:IDREF, xs:ENTITY, xs:integer and every builtin derived from it,
 // and a user restriction of any of them decode. Each decodes into the atomic
 // Go type codegen gives it, by the rules of codegen's package doc, "# Simple
-// types".
+// types". A list type decodes when its {item type definition} is such an
+// atomic type, a restriction of a list taking its base's (Structures
+// §3.16.2.3), xs:NMTOKENS among them, into []A, A its item's atomic Go type,
+// one element per list item; the empty list is a slice of length 0.
 //
 // A document element decodes when its declaration, a top-level one, has no
 // {type table} and {nillable} false, and its {type definition} is either a
@@ -55,15 +58,15 @@
 // declaration's own type, not a sealed interface over its substitution group
 // (codegen's package doc, "# Substitution groups"). Each attribute
 // use is outside the xsi namespace and is typed the same way. Each field is
-// A, a *A or a []A by its occurrence, A the atomic Go type of its simple
-// type, an <element ref>'s the same over the named type over A codegen emits
-// for the referenced declaration, an attribute's by its use's {required} and,
-// as [Decode]'s doc states, its effective value constraint (§3.5.4 key-evc).
-// No element in the instance carries xsi:type.
+// V, a *V or a []V by its occurrence, V the Go type codegen gives its simple
+// type, A or a list's []A, an <element ref>'s the same over the named type
+// over V codegen emits for the referenced declaration, an attribute's by its
+// use's {required} and, as [Decode]'s doc states, its effective value
+// constraint (§3.5.4 key-evc). No element in the instance carries xsi:type.
 //
 // A choice decodes into codegen's sealed interface, the branch of the one
 // alternative the instance matches (§3.8.4.3 cvc-model-group) holding its one
-// field: A, or a []A for an alternative whose {max occurs} is above 1 or
+// field: V, or a []V for an alternative whose {max occurs} is above 1 or
 // unbounded, its {min occurs} 0 read as 1, or, for an <element ref>
 // alternative, the same over the referenced declaration's named type.
 // The interface is T itself, or, where the type has an attribute use or one
@@ -78,9 +81,10 @@
 // <element ref> to an abstract declaration or to one whose substitution group
 // holds another declaration with {abstract} false, mixed, simple or empty
 // content, a particle's element declaration of complex type, local or
-// referenced, xs:anyType included, a nillable element, a list, a union, a
-// special type, a primitive other than those six, and an xsi:type. Two of those are
-// rulings rather than coverage still to come:
+// referenced, xs:anyType included, a nillable element, a union, a special
+// type, a primitive other than those six, a list whose {item type definition}
+// is a union or of such a primitive, declining by its item's construct, and
+// an xsi:type. Two of those are rulings rather than coverage still to come:
 //
 //   - A declaration with a {type table} declines. The slice that decodes it
 //     takes the branch from the type the validator selected
@@ -106,17 +110,19 @@
 //
 // Decode runs three stages on a value: whiteSpace, then, for an atomic Go
 // type other than string, the lexical mapping and the conversion to the Go
-// type. Pattern, facet and assertion stages are validate's, decided on the
-// same backend first, and a whiteSpace failure is a fault of the simple type,
-// a plain error. A lexical mapping or conversion that fails is the error
-// [Decode]'s doc states in item 8, naming the stage, the type, the normalized
-// value, the instance Loc and, for an element's character content, its byte
-// offset. [WithLogger] traces each stage per value under the "codec" group:
-// whiteSpace under rf-whiteSpace (Datatypes §4.3.6) with the raw text, the
-// lexical mapping under cvc-datatype-valid clause 2.1 with the normalized
-// value, and the conversion under dt-canonical-mapping (§2.3.1) with the
-// canonical form, each record naming the type and the instance Loc. No
-// package reads GOXSD_DEBUG; its scoping is #1185's.
+// type. On a list value whiteSpace runs once, under the list type, and the
+// other two on each list item, under its {item type definition}. Pattern, facet and
+// assertion stages are validate's, decided on the same backend first, and a whiteSpace
+// failure is a fault of the simple type, a plain error. A lexical mapping or conversion
+// that fails is the error [Decode]'s doc states in item 8, naming the stage, the type,
+// the normalized value or the list item and its position, the instance Loc and, for an
+// element's character content, its byte offset. [WithLogger] traces each stage per value,
+// and the lexical mapping and the conversion per list item, under the "codec" group:
+// whiteSpace under rf-whiteSpace (Datatypes §4.3.6) with the raw text, the lexical
+// mapping under cvc-datatype-valid clause 2.1 with the normalized value or the list item,
+// and the conversion under dt-canonical-mapping (§2.3.1) with the canonical form, each
+// record naming the type and the instance Loc. No package reads GOXSD_DEBUG; its scoping
+// is #1185's.
 //
 // # Planned decode paths, one semantics (M10 — not yet implemented)
 //
