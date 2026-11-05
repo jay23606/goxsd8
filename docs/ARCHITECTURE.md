@@ -99,7 +99,7 @@ Value implementations, parsing, validation, and generation live above them.
 identifier for either of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
-`codec` has left this note: it exports `Decode`/`Option`/`WithURI`,
+`codec` has left this note: it exports `Decode`/`Option`/`WithURI`/`WithLogger`,
 `DeclineError` and its `Construct`, and `ErrTypeMismatch`, and
 imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
 `xsderr` and `internal/goname` (its section says what ships).
@@ -708,10 +708,11 @@ that follow it, and its "Determinism" and "Naming" sections state what `Generate
 does not. `codec` (M10) exports `Decode`, which decodes a valid XML
 instance into the type `codegen` emits for its document element, for the
 slice `codec/doc.go`'s "What decodes" states, declining every other
-construct, `Option`/`WithURI`, `DeclineError` and its `Construct`, and `ErrTypeMismatch`. Its
-runtime path today reads no value space:
-each value is the string the whiteSpace stage leaves
-(`value.ApplyWhiteSpace`), and no `value.Mapping` runs. `value.Emitter` does
+construct, `Option`/`WithURI`/`WithLogger`, `DeclineError` and its `Construct`, and `ErrTypeMismatch`. Its
+runtime path today runs the whiteSpace stage (`value.ApplyWhiteSpace`)
+and, for a non-string atomic type, the governing `value.Mapping`'s Parse
+and Canonical (`value.GoverningMapping`); every other pipeline stage is
+`validate`'s, run first on the same backend. `value.Emitter` does
 not exist (its API freezes in M10; not declared). A bullet `codegen/doc.go`
 or `codec/doc.go` does not state as shipped is the destination, stated in
 present tense because it is a design contract; read it as "will", not
@@ -775,9 +776,9 @@ fast path that disagrees with the runtime path is wrong by definition.
 
 When a value fails to parse, the error must localize the failure without
 a debugger (extending E1–E3). These are **M10 requirements on `codec`**,
-not descriptions of shipped behaviour — `GOXSD_DEBUG=codec` traces nothing
-today, and `codec/doc.go` states which part of them `codec.Decode`
-meets:
+not descriptions of shipped behaviour — nothing reads `GOXSD_DEBUG` (#1185),
+and `codec/doc.go`'s "Debuggability" section states which part of them
+`codec.Decode` and `codec.WithLogger` meet:
 
 - every decode error carries the **pipeline stage** that rejected
   (whitespace / pattern / lexical-map / facet / assertion), the type

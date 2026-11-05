@@ -394,7 +394,7 @@ func TestDecodeTypeMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = bind(empty, start)
+	_, err = bind(&pipeline{schema: empty}, start)
 	const want = "codec: ?:1:1: the document element {urn:s}r has no top-level declaration"
 	if err == nil || err.Error() != want || errors.Is(err, ErrTypeMismatch) {
 		t.Errorf("bind(undeclared document element) = %v, want %q, no ErrTypeMismatch", err, want)

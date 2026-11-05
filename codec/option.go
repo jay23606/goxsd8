@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"log/slog"
 	"reflect"
 	"slices"
 )
@@ -13,17 +14,32 @@ type Option func(*config)
 type config struct {
 	uri      string
 	branches branchSets
+	log      *slog.Logger
 }
 
 // newConfig applies opts over the defaults: the instance is unnamed, so
-// every instance Loc Decode's errors carry renders "?" for its URI, and no
-// interface has a branch set.
+// every instance Loc Decode's errors carry renders "?" for its URI, no
+// interface has a branch set, and nothing is logged
+// ([slog.DiscardHandler]).
 func newConfig(opts []Option) config {
-	var cfg config
+	cfg := config{log: slog.New(slog.DiscardHandler)}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 	return cfg
+}
+
+// WithLogger sets the logger [Decode] traces on at debug level: it hands l
+// to package validate unchanged (validate.WithLogger), and logs one record
+// per stage it runs on each value under the "codec" group, naming the
+// stage's rule, the type, the stage's input and the instance Loc. A nil l
+// selects the silent default ([slog.DiscardHandler]), and a later WithLogger
+// replaces an earlier one.
+func WithLogger(l *slog.Logger) Option {
+	if l == nil {
+		l = slog.New(slog.DiscardHandler)
+	}
+	return func(c *config) { c.log = l }
 }
 
 // WithURI names the instance document data holds, so every instance

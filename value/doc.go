@@ -20,11 +20,11 @@
 // the primitives (directly or via composition); it MAY also map derived
 // builtins to give them their own, typically narrower, representation — derived
 // types without their own mapping inherit the nearest mapped ancestor's (see
-// package builtin). QName and NOTATION need in-scope namespace bindings at
-// parse time, so a mapping's Parse takes a [Context] (PRINCIPLES 19).
-// [Override] composes backends per type — partial's mappings where defined,
-// base otherwise — so a program can back only xs:decimal with a money type and
-// keep the rest.
+// package builtin); [GoverningMapping] names that mapping for an atomic type.
+// QName and NOTATION need in-scope namespace bindings at parse time, so a
+// mapping's Parse takes a [Context] (PRINCIPLES 19). [Override] composes
+// backends per type — partial's mappings where defined, base otherwise — so a
+// program can back only xs:decimal with a money type and keep the rest.
 //
 // # The widest-space rule (facet checks under derived mappings)
 //

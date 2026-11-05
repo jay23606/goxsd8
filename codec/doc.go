@@ -8,6 +8,7 @@
 //	type Option func(*config)
 //	func WithURI(uri string) Option
 //	func WithBranches[I any](branches ...I) Option
+//	func WithLogger(l *slog.Logger) Option
 //	type DeclineError struct{ ... }
 //	func (e *DeclineError) Loc() xsderr.Loc
 //	func (e *DeclineError) Error() string
@@ -33,9 +34,12 @@
 // # What decodes
 //
 // A simple type decodes when it is atomic with {primitive type definition}
-// xs:string or xs:anyURI. So xs:normalizedString, xs:token, xs:language,
-// xs:Name, xs:NCName, xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY, xs:anyURI and a
-// user restriction of any of them decode.
+// xs:string, xs:anyURI, xs:boolean, xs:float, xs:double or xs:decimal. So
+// xs:normalizedString, xs:token, xs:language, xs:Name, xs:NCName, xs:NMTOKEN,
+// xs:ID, xs:IDREF, xs:ENTITY, xs:integer and every builtin derived from it,
+// and a user restriction of any of them decode. Each decodes into the atomic
+// Go type codegen gives it, by the rules of codegen's package doc, "# Simple
+// types".
 //
 // A document element decodes when its declaration, a top-level one, has no
 // {type table} and {nillable} false, and its {type definition} is either a
@@ -48,18 +52,18 @@
 // <element ref> names where codegen gives the particle's field that
 // declaration's own type, not a sealed interface over its substitution group
 // (codegen's package doc, "# Substitution groups"). Each attribute
-// use is outside the xsi namespace and is typed the same way. Each field
-// is a string, a *string or a []string by its occurrence, an <element ref>'s
-// the same over the named type over string codegen emits for the referenced
-// declaration, an attribute's by its use's {required} and, as [Decode]'s doc
-// states, its effective value constraint (§3.5.4 key-evc). No element in the
-// instance carries xsi:type.
+// use is outside the xsi namespace and is typed the same way. Each field is
+// A, a *A or a []A by its occurrence, A the atomic Go type of its simple
+// type, an <element ref>'s the same over the named type over A codegen emits
+// for the referenced declaration, an attribute's by its use's {required} and,
+// as [Decode]'s doc states, its effective value constraint (§3.5.4 key-evc).
+// No element in the instance carries xsi:type.
 //
 // A choice decodes into codegen's sealed interface, the branch of the one
 // alternative the instance matches (§3.8.4.3 cvc-model-group) holding its one
-// field: a string, or a []string for an alternative whose {max occurs} is
-// above 1 or unbounded, its {min occurs} 0 read as 1, or, for an <element
-// ref> alternative, the same over the referenced declaration's named type.
+// field: A, or a []A for an alternative whose {max occurs} is above 1 or
+// unbounded, its {min occurs} 0 read as 1, or, for an <element ref>
+// alternative, the same over the referenced declaration's named type.
 // The interface is T itself, or, where the type has an attribute use or one
 // occurrence of the choice is emptiable (§3.9.6.3 cos-group-emptiable), the
 // first field of T, a struct whose further fields are the attribute uses'. An
@@ -73,7 +77,7 @@
 // holds another declaration with {abstract} false, mixed, simple or empty
 // content, a particle's element declaration of complex type, local or
 // referenced, xs:anyType included, a nillable element, a list, a union, a
-// special type, any other primitive, and an xsi:type. Two of those are
+// special type, a primitive other than those six, and an xsi:type. Two of those are
 // rulings rather than coverage still to come:
 //
 //   - A declaration with a {type table} declines. The slice that decodes it
@@ -96,11 +100,27 @@
 // declining component's schema Loc; and [DeclineError.Construct] returns its
 // construct.
 //
+// # Debuggability
+//
+// Decode runs three stages on a value: whiteSpace, then, for an atomic Go
+// type other than string, the lexical mapping and the conversion to the Go
+// type. Pattern, facet and assertion stages are validate's, decided on the
+// same backend first, and a whiteSpace failure is a fault of the simple type,
+// a plain error. A lexical mapping or conversion that fails is the error
+// [Decode]'s doc states in item 8, naming the stage, the type, the normalized
+// value, the instance Loc and, for an element's character content, its byte
+// offset. [WithLogger] traces each stage per value under the "codec" group:
+// whiteSpace under rf-whiteSpace (Datatypes §4.3.6) with the raw text, the
+// lexical mapping under cvc-datatype-valid clause 2.1 with the normalized
+// value, and the conversion under dt-canonical-mapping (§2.3.1) with the
+// canonical form, each record naming the type and the instance Loc. No
+// package reads GOXSD_DEBUG; its scoping is #1185's.
+//
 // # Planned decode paths, one semantics (M10 — not yet implemented)
 //
-// Decode reads no value space: every value in the slice is the string its
-// whiteSpace stage leaves (value.ApplyWhiteSpace). Each path below is
-// planned.
+// Decode today is the slice above, validate's facet pipeline followed by
+// the three stages the Debuggability section names; no value.Emitter
+// exists. Each path below is planned.
 //
 //   - Runtime path (always available): the facet pipeline +
 //     value.Mapping, driven by the compiled schema. General, reflective,
@@ -120,12 +140,7 @@
 //
 // # Planned debuggability (M10 — not yet implemented)
 //
-// Every decode error a pipeline stage raises carries the stage that
-// rejected (whitespace / pattern / lexical-map / facet / assertion), the
-// type QName, the offending input fragment, and the instance Loc + byte
-// offset. GOXSD_DEBUG=codec traces stage transitions per value through the
-// injected slog logger. Generated fast paths preserve all of it and map
-// back to their emitting backend and schema construct via header comments.
-// No stage of Decode rejects a value today: the validator has accepted
-// every value it reads.
+// Generated fast paths preserve what the Debuggability section states and
+// map back to their emitting backend and schema construct via header
+// comments.
 package codec

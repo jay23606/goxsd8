@@ -570,6 +570,24 @@ func governingType(b Backend, r xsd.TypeResolver, node *xsd.SimpleType) (*xsd.Si
 	return governingNode(b, r, node)
 }
 
+// GoverningMapping returns the [Mapping] that governs an atomic st's values,
+// the one the [Backend] doc names. ok is true exactly when st's {variety} is
+// atomic and b maps st or a type on its {base type definition} chain; a list, a
+// union, an absent {variety} or an unmapped chain answers false with the zero
+// Mapping. err is a fault reading st's {variety} or base chain, never a verdict
+// about any literal, so [IsDatatypeVerdict] reports false for it.
+func GoverningMapping(b Backend, r xsd.TypeResolver, st *xsd.SimpleType) (m Mapping, ok bool, err error) {
+	s, ok, err := governingType(b, r, st)
+	if err != nil {
+		return Mapping{}, false, typeFault(err)
+	}
+	if !ok {
+		return Mapping{}, false, nil
+	}
+	m, ok = b.Mapping(s.Name())
+	return m, ok, nil
+}
+
 // contextDependent reports whether t's {primitive type definition} is QName or
 // NOTATION — the two primitives whose lexical mapping needs a [Context] (§3.3.18,
 // §3.3.19). An absent {primitive type definition} (xs:anyAtomicType alone,
