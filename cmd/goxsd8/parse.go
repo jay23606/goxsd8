@@ -216,15 +216,22 @@ const (
 //
 // The line carries no rule ID, and moves no exit code unless -strict was given
 // (skipCode), because no rule charges the skip — usage's parse paragraph says
-// which rules make it legal and for which directives the spec states nothing —
-// so rendering it through violationLine's "<loc>: [<rule>] <message>" would
-// publish a spec charge no rule makes (STYLE E2). The line says the directive
-// was skipped and never that the skip was legal, which that paragraph grants
-// only some of the directives the line names — not every <include> among them:
-// the line names each directive as written, the element the operator edits,
-// not as §F.2 rewrites it. What it buys is that a summary, or an assessment,
-// answered off a SHORT assembly is distinguishable from one answered off a
-// complete one — the fact nothing but -v carried before (#1260).
+// which rules make it legal, why none charges an empty <redefine>'s, for which
+// directive no normative clause states it either way, and where this processor
+// reads past src-include's sentence — so rendering it through violationLine's
+// "<loc>: [<rule>] <message>" would publish a spec charge no rule makes (STYLE
+// E2). §4.2.1's Note, saying of an <include>, an <override> and an empty
+// <redefine> that "it is not an error for it to fail", is not read as a
+// legality grant, because §1.5 marks a Note non-normative commentary and
+// src-override clause 1 applies only "If the ·actual value· of the
+// schemaLocation [attribute] successfully resolves" and holds no rule for when
+// it does not (#3386). The line says the directive was skipped and never that
+// the skip was legal, which that paragraph grants only some of the directives
+// the line names — not every <include> among them: the line names each
+// directive as written, the element the operator edits, not as §F.2 rewrites
+// it. What it buys is that a summary, or an assessment, answered off a SHORT
+// assembly is distinguishable from one answered off a complete one — the fact
+// nothing but -v carried before (#1260).
 //
 // Only parser.UnfollowedLocationUnresolved is named. A bare <import>
 // (parser.UnfollowedNoLocation) names no document to have failed to reach:
