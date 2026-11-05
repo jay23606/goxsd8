@@ -228,7 +228,7 @@ func strayInToken(src string) bool {
 	if end < 0 || strings.HasPrefix(src, "<!") || strings.HasPrefix(src, "<?") || strings.HasPrefix(src, "</") {
 		return false
 	}
-	return slices.ContainsFunc(attrSources(src[:end]), strayAmp)
+	return slices.ContainsFunc(attrSpans(src[:end]), func(a attrSpan) bool { return strayAmp(a.value) })
 }
 
 // token reads one token of replacement text, whose source is raw, into c.
@@ -240,12 +240,11 @@ func strayInToken(src string) bool {
 func (c *content) token(tok xml.Token, raw string, at func(int) int64, depth int, loc xsderr.Loc, open []string) error {
 	switch t := tok.(type) {
 	case xml.StartElement:
-		attrs, err := c.r.expandAttrs(t, raw, false, loc, open)
+		attrs, err := c.r.expandAttrs(t, raw, false, at, loc, open)
 		if err != nil {
 			return err
 		}
-		t.Attr = attrs
-		node, err := c.r.startElement(t, loc)
+		node, err := c.r.startElement(t.Name, attrs, loc)
 		if err != nil {
 			return err
 		}
@@ -401,43 +400,60 @@ func (r *Reader) withinPE(open []string) bool {
 }
 
 // expandAttrs returns the attributes of t, the start tag whose source is raw,
-// with each value normalized per XML 1.0 §3.3.3: steps 1–3 (attrValue), then,
-// for an attribute the internal subset defines on t's element type with an
-// AttType other than CDATA (Reader.tokenized), the paragraph after step 3
+// each located where Attribute.Loc says through at (the offset of raw's i-th
+// byte, which in replacement text is the reference's for every i), and with
+// each value normalized per XML 1.0 §3.3.3: steps 1–3 (attrValue), then, for
+// an attribute the internal subset defines on t's element type with an AttType
+// other than CDATA (Reader.tokenized), the paragraph after step 3
 // (collapseSpace). An attribute it defines as CDATA, or not at all, is read as
 // CDATA (§3.3.3's last paragraph). The decoder's value is already steps 1–3's
 // for a value whose source holds neither a reference to a general entity nor a
 // literal #x9, #xA or #xD (attrSpace): the decoder resolves character
 // references and predefined entities and applies §2.11, but not step 3. Every
-// other value is re-read from raw. src reports that raw is document source
-// rather than replacement text; open names the inclusions raw is part of.
-func (r *Reader) expandAttrs(t xml.StartElement, raw string, src bool, loc xsderr.Loc, open []string) ([]xml.Attr, error) {
-	reread := strings.ContainsAny(raw, "&"+attrSpace)
-	if !reread && r.tokenized == nil {
-		return t.Attr, nil
+// other value is re-read from its source. src reports that raw is document
+// source rather than replacement text; open names the inclusions raw is part
+// of.
+//
+// The re-read of raw (attrSpans) must find the decoder's attributes, in its
+// order and under its names; a tag it reads otherwise is refused at loc,
+// wrapping errAttrScan, as a limit of this reader.
+func (r *Reader) expandAttrs(t xml.StartElement, raw string, src bool, at func(int) int64, loc xsderr.Loc, open []string) ([]rawAttr, error) {
+	spans := attrSpans(raw)
+	if len(spans) != len(t.Attr) {
+		return nil, xsderr.Wrap(xsderr.RuleXMLWellFormed, loc, fmt.Errorf("%w: found %d attribute values where the decoder read %d", errAttrScan, len(spans), len(t.Attr)))
 	}
-	var vals []string
-	if reread {
-		vals = attrSources(raw)
-		if len(vals) != len(t.Attr) {
-			return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "start tag re-read found %d attribute values where the decoder read %d", len(vals), len(t.Attr))
+	out := make([]rawAttr, len(t.Attr))
+	for i, a := range t.Attr {
+		span := spans[i]
+		if !strings.HasPrefix(raw[span.name:], rawName(a.Name)) {
+			return nil, xsderr.Wrap(xsderr.RuleXMLWellFormed, loc, fmt.Errorf("%w: the decoder read attribute %d as %s, where the source spells %q", errAttrScan, i+1, rawName(a.Name), excerpt(raw[span.name:])))
 		}
-	}
-	out := slices.Clone(t.Attr)
-	for i := range out {
-		if reread && (refersToEntity(vals[i]) || strings.ContainsAny(vals[i], attrSpace)) {
+		if refersToEntity(span.value) || strings.ContainsAny(span.value, attrSpace) {
 			var b strings.Builder
-			if err := r.attrValue(&b, vals[i], src, loc, open); err != nil {
+			if err := r.attrValue(&b, span.value, src, loc, open); err != nil {
 				return nil, err
 			}
-			out[i].Value = b.String()
+			a.Value = b.String()
 		}
-		if r.tokenized[attName{elem: rawName(t.Name), name: rawName(out[i].Name)}] {
-			out[i].Value = collapseSpace(out[i].Value)
+		if r.tokenized[attName{elem: rawName(t.Name), name: rawName(a.Name)}] {
+			a.Value = collapseSpace(a.Value)
 		}
+		out[i] = rawAttr{attr: a, loc: r.locAt(at(span.name))}
 	}
 	return out, nil
 }
+
+// rawAttr is one attribute as the decoder read it, its value normalized
+// (expandAttrs), with the Loc its Attribute reports.
+type rawAttr struct {
+	attr xml.Attr
+	loc  xsderr.Loc
+}
+
+// errAttrScan is the cause of a start tag refused because attrSpans, the
+// reader's re-read of its source, does not find the attributes the decoder
+// read: a limit of this reader, not a fault of the document.
+var errAttrScan = errors.New("start tag re-read disagrees with the decoder")
 
 // collapseSpace returns v, an attribute's normalized value after XML 1.0
 // §3.3.3's step 3, with leading and trailing #x20 discarded and each run of
@@ -452,24 +468,51 @@ func collapseSpace(v string) string {
 // leaves in an attribute value as it is: declSpace less #x20 itself.
 const attrSpace = "\t\n\r"
 
-// attrSources returns the source of each attribute value in raw, a start
-// tag's source, in document order: the text between the value's quotes. The
-// decoder has read raw as a start tag, and a quote can begin nothing else in
-// one.
-func attrSources(raw string) []string {
-	var vals []string
-	for {
-		open := strings.IndexAny(raw, `"'`)
+// attrSpan is one attribute of a start tag's source: name is the byte index
+// of the first byte of its name, prefix included, and value the text between
+// its quotes.
+type attrSpan struct {
+	name  int
+	value string
+}
+
+// attrSpans returns the attributes of raw, a start tag's source, in document
+// order. The decoder has read raw as a start tag, and a quote can begin
+// nothing else in one; the name is the run of bytes other than white space
+// that ends before the '=', and the white space around it, last preceding
+// the value's opening quote ([41] Attribute, [25] Eq). For raw the decoder
+// did not read as a start tag, only the values are meaningful.
+func attrSpans(raw string) []attrSpan {
+	var spans []attrSpan
+	for from := 0; ; {
+		open := strings.IndexAny(raw[from:], `"'`)
 		if open < 0 {
-			return vals
+			return spans
 		}
+		open += from
 		end := strings.IndexByte(raw[open+1:], raw[open])
 		if end < 0 {
-			return vals
+			return spans
 		}
-		vals = append(vals, raw[open+1:open+1+end])
-		raw = raw[open+1+end+1:]
+		end += open + 1
+		spans = append(spans, attrSpan{name: from + nameStart(raw[from:open]), value: raw[open+1 : end]})
+		from = end + 1
 	}
+}
+
+// nameStart returns the index in seg, a start tag's source from its start or
+// the end of the previous attribute value to the next value's opening quote,
+// of the first byte of that attribute's name: the run of bytes other than
+// white space before seg's last '=' and the white space before it. The
+// decoder admits no white space inside a name, and none between one value's
+// closing quote and the next name, so the run may begin at seg's first byte.
+func nameStart(seg string) int {
+	eq := strings.LastIndexByte(seg, '=')
+	if eq < 0 {
+		return 0
+	}
+	name := strings.TrimRight(seg[:eq], declSpace)
+	return strings.LastIndexAny(name, declSpace) + 1
 }
 
 // attrValue appends to b the normalized value of s, an attribute value's

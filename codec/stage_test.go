@@ -94,7 +94,7 @@ func TestDecodeStageErrors(t *testing.T) {
 		{"lexical mapping, character content", element, elementData, noContext, decodeErr[struct{ A int32 }], stageLexicalMapping,
 			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "01", a value of %s in the character content of element {urn:s}a at byte offset %d: ?: [cvc-datatype-valid] no Context`, offset+1, intQName, offset)},
 		{"lexical mapping, a present attribute", attributes, instanceOf(` b=" 2 " c="4"`, ""), noContext, decodeErr[attributed3], stageLexicalMapping,
-			`codec: ?:1:1: the lexical mapping failed on "2", a value of ` + intQName + ` in attribute b: ?: [cvc-datatype-valid] no Context`},
+			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "2", a value of %s in attribute b: ?: [cvc-datatype-valid] no Context`, bytes.Index(instanceOf(` b=" 2 " c="4"`, ""), []byte(" b="))+2, intQName)},
 		{"lexical mapping, a supplied value", attributes, instanceOf("", ""), noContext, decodeErr[attributed3], stageLexicalMapping,
 			`codec: ?:1:1: the lexical mapping failed on "3", a value of ` + intQName + ` in the value the value constraint of attribute c declared at s.xsd:1:336 supplies on element {urn:s}r: ?: [cvc-datatype-valid] no Context`},
 		{"lexical mapping, an anonymous type", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:element>`), elementData, noContext,

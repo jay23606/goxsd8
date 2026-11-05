@@ -703,7 +703,7 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 			stderrMatch: "-q stands after a positional argument"},
 		{args: []string{"validate", "-schema", orderSchema, validInstance}, code: 0},
 		{args: []string{"validate", "-schema", orderSchema, invalidInstance}, code: 1,
-			stdoutMatch: invalidInstance + ":5:3: [cvc-attribute]"},
+			stdoutMatch: invalidInstance + ":5:11: [cvc-attribute]"},
 		{args: []string{"validate", "-schema", "testdata/broken.xsd", validInstance}, code: 3,
 			stderrMatch: "[src-resolve]"},
 		{args: []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, code: 2,
@@ -712,7 +712,7 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 		{args: []string{"validate", "-format", "xml", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, validInstance), code: 0},
 		{args: []string{"validate", "-format", "xml", "-schema", orderSchema, "-"},
-			stdin: readFixture(t, invalidInstance), code: 1, stdoutMatch: "-:5:3: [cvc-attribute]"},
+			stdin: readFixture(t, invalidInstance), code: 1, stdoutMatch: "-:5:11: [cvc-attribute]"},
 		// - names no source format once xml and json are both assessed, so
 		// without -format it exits 2 asking for one, whatever it holds (#2403).
 		{args: []string{"validate", "-schema", orderSchema, "-"},

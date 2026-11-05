@@ -213,7 +213,7 @@ func (c contentSource) where() string {
 // own (xmltree.Attribute).
 type attributeSource struct{ a xmltree.Attribute }
 
-// loc returns the attribute's Loc, its owning element's start.
+// loc returns the attribute's own Loc (xmltree.Attribute.Loc).
 func (a attributeSource) loc() xsderr.Loc { return a.a.Loc() }
 
 // where names the attribute.

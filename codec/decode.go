@@ -164,7 +164,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     to and that declaration's schema Loc — the normalized value, and the
 //     value's source at its instance Loc: an element's character content, at
 //     its first character data, with that data's byte offset; a present
-//     attribute, at its element's start, with no offset; or a supplied value,
+//     attribute, at its Loc (xmltree.Attribute.Loc), with no offset; or a supplied value,
 //     at its element's start, with the declaration whose value constraint
 //     supplied it. It wraps nothing: errors.As finds no *xsderr.Error,
 //     *DeclineError or *UndecidedError in it, xsderr.RuleOf no rule, and

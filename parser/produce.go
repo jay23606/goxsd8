@@ -706,11 +706,10 @@ func rejectS4SFaults(el *Element, ids map[string]*Element) error {
 // value collapse's interior folding would change is not an NCName either way,
 // and is rejected before it reaches ids.
 //
-// Both are located at the offending element, which is the id attribute's
-// position (an xmltree.Attribute carries its owner's). The walk that reaches el
-// stops at <appinfo> and <documentation>, so an element in their lax content is
-// never judged: §5.1 lets a processor treat invalid <annotation> descendants as
-// valid (:616).
+// Both are located at the offending element's start tag, not at the id
+// attribute. The walk that reaches el stops at <appinfo> and <documentation>,
+// so an element in their lax content is never judged: §5.1 lets a processor
+// treat invalid <annotation> descendants as valid (:616).
 //
 // GAP(parser): an overridden document's ids are judged over Dold as fetched,
 // not over Dold′, which src-override clause 3's Note (xmlschema11-1.md:4171)
@@ -869,10 +868,10 @@ func derivationSetAttrs(el *Element) (string, []derivationSetAttr) {
 // validity against the schema for schema documents normative and no src-* clause
 // covers the value, so it is charged cvc-datatype-valid (Datatypes §4.1.4),
 // reached through cvc-attribute, exactly as rejectInvalidID charges an id outside
-// xs:ID. It is located at el, the attribute's position (an xmltree.Attribute
-// carries its owner's). An attribute el's production prohibits is not checked
-// here at all, whatever its value: that is its form's prohibition guard's
-// charge, and no datatype fault exists beside it.
+// xs:ID. It is located at el's start tag, not at the attribute. An attribute
+// el's production prohibits is not checked here at all, whatever its value: that
+// is its form's prohibition guard's charge, and no datatype fault exists beside
+// it.
 //
 // It is what makes effectiveDerivationSet's inputs well-typed: once it has
 // passed, a local block=/final= its form declares names only members of its own
@@ -4112,8 +4111,8 @@ func xmlSpaceFields(lexical string) []string {
 // validation against the schema for schema documents (Structures §5.1), the
 // attribute failing its declared type under cvc-attribute clause 3, charged
 // cvc-datatype-valid (§4.1.4) at assembly time whether or not any instance
-// reaches the facet. An xmltree.Attribute's position is its owning element's, so
-// el.Loc() is the attribute's location.
+// reaches the facet. It is located at el's start tag, el.Loc(), not at the
+// attribute.
 //
 // The positiveInteger fault stays cvc-datatype-valid rather than
 // totalDigits-valid-restriction: "0" is outside the attribute's own declared

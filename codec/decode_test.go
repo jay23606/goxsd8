@@ -183,7 +183,8 @@ func TestDecodeShapes(t *testing.T) {
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
-			got, err := Decode[shapes](schema, strict.New(), instanceOf(row.attrs, row.body))
+			data := instanceOf(row.attrs, row.body)
+			got, err := Decode[shapes](schema, strict.New(), data)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -209,7 +210,8 @@ func render(s shapes) string {
 // validate charges the instance: a missing required child (cvc-complex-content
 // clause 1, its first violation) and an undeclared attribute (cvc-complex-type
 // clause 2.2) each return an error carrying the validator's rule and the
-// instance Loc, and no value.
+// instance Loc — the document element's for the child, the attribute's own
+// for the attribute — and no value.
 func TestDecodeRefusesWhatValidateCharges(t *testing.T) {
 	schema := schemaOf(t, shapesSchema)
 	rows := []struct {
@@ -217,21 +219,23 @@ func TestDecodeRefusesWhatValidateCharges(t *testing.T) {
 		attrs string
 		body  string
 		rule  xsderr.Rule
+		at    string
 	}{
-		{"missing required child", ` req="r"`, "<s:one>x</s:one>", "cvc-complex-content"},
-		{"undeclared attribute", ` req="r" bogus="b"`, "<s:one>x</s:one><s:tok>t</s:tok>", "cvc-complex-type"},
+		{"missing required child", ` req="r"`, "<s:one>x</s:one>", "cvc-complex-content", "<s:r"},
+		{"undeclared attribute", ` req="r" bogus="b"`, "<s:one>x</s:one><s:tok>t</s:tok>", "cvc-complex-type", "bogus="},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
-			got, err := Decode[shapes](schema, strict.New(), instanceOf(row.attrs, row.body))
+			data := instanceOf(row.attrs, row.body)
+			got, err := Decode[shapes](schema, strict.New(), data)
 			if got != nil || err == nil {
 				t.Fatalf("Decode = (%v, %v), want no value and an error", got, err)
 			}
 			if rule, _ := xsderr.RuleOf(err); rule != row.rule {
 				t.Errorf("rule = %q, want %s: %v", rule, row.rule, err)
 			}
-			if loc, _ := xsderr.LocOf(err); loc.Line != 1 || loc.Col != 1 {
-				t.Errorf("Loc = %s, want the document element's, 1:1: %v", loc, err)
+			if loc, _ := xsderr.LocOf(err); loc.Line != 1 || loc.Col != bytes.Index(data, []byte(row.at))+1 {
+				t.Errorf("Loc = %s, want 1:%d, where %q begins: %v", loc, bytes.Index(data, []byte(row.at))+1, row.at, err)
 			}
 			if !strings.HasPrefix(err.Error(), "codec: the instance is invalid against the schema: ") {
 				t.Errorf("error %q does not open as Decode's Charged error", err)

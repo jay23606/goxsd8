@@ -93,9 +93,7 @@ func (c *CharData) Loc() xsderr.Loc { return c.loc }
 
 func (c *CharData) node() {}
 
-// Attribute is one resolved attribute of a start tag. Because encoding/xml
-// does not expose per-attribute offsets, an attribute's Loc is its owning
-// element's start position.
+// Attribute is one resolved attribute of a start tag.
 type Attribute struct {
 	name  Name
 	value string
@@ -119,5 +117,8 @@ func (a Attribute) Name() Name { return a.name }
 // none.
 func (a Attribute) Value() string { return a.value }
 
-// Loc reports the owning element's start position (see Attribute).
+// Loc reports the position of the first byte of the attribute's name as its
+// start tag spells it, prefix included, or, for a start tag in an entity's
+// replacement text, of the outermost reference that includes it (XML 1.0
+// §4.4.2). The column counts bytes, from 1.
 func (a Attribute) Loc() xsderr.Loc { return a.loc }

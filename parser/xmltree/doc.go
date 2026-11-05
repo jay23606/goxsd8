@@ -205,8 +205,9 @@
 //     and is definite there: "when `standalone="yes"`, processors MUST process these
 //     declarations" (§5.1), so that declaration binds (§4.2; #2459). One wrapping a
 //     cause — an encoding/xml syntax error, among them its refusal of an encoding
-//     declaration the reader does not decode, an I/O fault, or one of the refusals
-//     above — may be a limit of this reader.
+//     declaration the reader does not decode, an I/O fault, a start tag whose
+//     attributes the reader's re-read of its source does not find as the decoder
+//     read them, or one of the refusals above — may be a limit of this reader.
 //
 // Fuzz targets guard the reader against panics on malformed input
 // (PRINCIPLES 24); malformed XML is an error value, never a crash.

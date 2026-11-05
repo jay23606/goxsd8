@@ -102,12 +102,12 @@ func trace(t *testing.T, e validate.Element) []string {
 
 // wantTrace is the fixture's information items in document order. Every Loc
 // is the item's own first byte in the fixture text — for a CDATA section,
-// the "<" of its opener — except an attribute's, which is its owning
-// element's start, all encoding/xml exposes (xmltree's Attribute).
+// the "<" of its opener, for an attribute, the first byte of its name, prefix
+// included (xmltree's Attribute.Loc).
 var wantTrace = []string{
 	`element {urn:d}r @instance.xml:2:1`,
-	`attr id="r1" @instance.xml:2:1`,
-	`attr {urn:p}lang="en" @instance.xml:2:1`,
+	`attr id="r1" @instance.xml:2:34`,
+	`attr {urn:p}lang="en" @instance.xml:2:42`,
 	`text "top\n  " @instance.xml:2:54`,
 	`element {urn:d}a @instance.xml:3:3`,
 	`text "in " @instance.xml:3:6`,

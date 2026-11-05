@@ -142,10 +142,10 @@ func TestValidatePathRendering(t *testing.T) {
 
 	t.Run("instance", func(t *testing.T) {
 		for _, c := range []struct{ arg, opening string }{
-			{instance, instance + ":5:3: [cvc-"},
-			{"./" + instance, "./" + instance + ":5:3: [cvc-"},
-			{absInstance, absInstance + ":5:3: [cvc-"},
-			{stdinArg, stdinArg + ":5:3: [cvc-"},
+			{instance, instance + ":5:"},
+			{"./" + instance, "./" + instance + ":5:"},
+			{absInstance, absInstance + ":5:"},
+			{stdinArg, stdinArg + ":5:"},
 		} {
 			if c.arg == stdinArg {
 				r, w, err := os.Pipe()
@@ -202,7 +202,7 @@ func TestValidateRendersDelegatedVerdictWithoutPlaceholder(t *testing.T) {
 	if code := run([]string{"validate", "-schema", orderSchema, invalidInstance}, &stdout, &stderr); code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
 	}
-	const want = invalidInstance + `:5:3: [cvc-attribute] attribute sku's value "nope" is not a valid {http://example.com/order}Sku, which cvc-attribute clause 3 requires: [cvc-pattern-valid] "nope" matches no member of the pattern facet of the simple type {http://example.com/order}Sku, whose {value} holds "[A-Z]{3}-[0-9]{4}", but cvc-pattern-valid requires one to match`
+	const want = invalidInstance + `:5:11: [cvc-attribute] attribute sku's value "nope" is not a valid {http://example.com/order}Sku, which cvc-attribute clause 3 requires: [cvc-pattern-valid] "nope" matches no member of the pattern facet of the simple type {http://example.com/order}Sku, whose {value} holds "[A-Z]{3}-[0-9]{4}", but cvc-pattern-valid requires one to match`
 	if line, _, _ := strings.Cut(stdout.String(), "\n"); line != want {
 		t.Errorf("first line =\n%s\nwant\n%s", line, want)
 	}
@@ -511,7 +511,7 @@ func TestValidateUndecidedBesideInvalidIsInvalid(t *testing.T) {
 		instance string
 		first    string
 	}{
-		{"charge", assertedCharged, assertedCharged + ":4:1: [cvc-complex-type] "},
+		{"charge", assertedCharged, assertedCharged + ":4:56: [cvc-complex-type] "},
 		{"stopped walk", assertedUnclosed, assertedUnclosed + ":4:1: [xml-wf] "},
 	} {
 		var stdout, stderr bytes.Buffer
@@ -1645,8 +1645,8 @@ func TestValidateViolationsBeforeAWalkMetFaultTakeNoClause(t *testing.T) {
 		t.Errorf("run(%q) = %d, want %d (stderr %q)", args, code, exitInvalid, stderr.String())
 	}
 	mustReport(t, stdout.String(), "; -format xml read "+instance+" as xml, but its extension names json: drop -format, or pass -format json", []reportLine{
-		{instance + ":1:48: [cvc-complex-type] ", false},
-		{instance + ":1:76: [cvc-attribute] ", false},
+		{instance + ":1:65: [cvc-complex-type] ", false},
+		{instance + ":1:83: [cvc-attribute] ", false},
 		{instance + ":1:94: [xml-wf] end tag </a:wrong> does not match open element {http://example.com/asserted}boxes", true},
 		{instance + ":1:48: [cvc-assertion] undecided: ", false},
 		{instance + ":1:76: [cvc-assertion] undecided: ", false},
@@ -2008,6 +2008,34 @@ func TestValidateStrayDTDTextIsNotWellFormed(t *testing.T) {
 		}
 		if tc.want == exitInvalid && !strings.Contains(stdout.String(), "[xml-wf]") {
 			t.Errorf("%s: stdout = %q, want an [xml-wf] verdict", tc.doc, stdout.String())
+		}
+	}
+}
+
+// TestValidateLocatesAnAttributeChargeAtTheAttribute pins where a charge on an
+// attribute is located: at the first byte of the attribute's name, on
+// whatever line of the start tag it stands, while a charge on the element for
+// an attribute it lacks stays at the start tag's "<".
+func TestValidateLocatesAnAttributeChargeAtTheAttribute(t *testing.T) {
+	t.Chdir(t.TempDir())
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="r"><xs:complexType><xs:attribute name="id" type="xs:int" use="required"/></xs:complexType></xs:element></xs:schema>`
+	if err := os.WriteFile("s.xsd", []byte(schema), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ doc, opening string }{
+		{`<r id="1x"/>`, `i.xml:1:4: [cvc-attribute] attribute id's value "1x" `},
+		{"<r\n\t id = '1x'/>", `i.xml:2:3: [cvc-attribute] attribute id's value "1x" `},
+		{`<r/>`, `i.xml:1:1: [cvc-complex-type] `},
+	} {
+		if err := os.WriteFile("i.xml", []byte(c.doc), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"validate", "-schema", "s.xsd", "i.xml"}, &stdout, &stderr); code != exitInvalid {
+			t.Fatalf("%q: code = %d, want %d (stdout %q, stderr %q)", c.doc, code, exitInvalid, stdout.String(), stderr.String())
+		}
+		if line, _, _ := strings.Cut(stdout.String(), "\n"); !strings.HasPrefix(line, c.opening) {
+			t.Errorf("%q: first line = %q, want it to open %q", c.doc, line, c.opening)
 		}
 	}
 }

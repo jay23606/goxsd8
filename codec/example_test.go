@@ -45,7 +45,7 @@ func ExampleDecode() {
 	}
 	// Output:
 	// [a b] x
-	// order.xml:1:1 cvc-complex-type
+	// order.xml:1:35 cvc-complex-type
 	// order.xml:2:3 cvc-complex-content
 }
 

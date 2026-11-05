@@ -208,12 +208,11 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 		if r.ended {
 			return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "element <%s> after the document element: only comments, processing instructions and white space may follow it (XML 1.0 [1] document, [27] Misc)", rawName(t.Name))
 		}
-		attrs, err := r.expandAttrs(t, r.source(off), true, loc, nil)
+		attrs, err := r.expandAttrs(t, r.source(off), true, func(i int) int64 { return off + int64(i) }, loc, nil)
 		if err != nil {
 			return nil, false, err
 		}
-		t.Attr = attrs
-		node, err := r.startElement(t, loc)
+		node, err := r.startElement(t.Name, attrs, loc)
 		if err != nil {
 			return nil, false, err
 		}
@@ -435,32 +434,32 @@ func (r *Reader) checkDeclaration(pi xml.ProcInst, loc xsderr.Loc) error {
 	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "encoding declaration %q disagrees with the entity's actual encoding: %s", name, r.bom)
 }
 
-// startElement resolves an element's name and attributes against the scope
-// its declarations establish, pushes an open-element frame, and returns the
-// node.
-func (r *Reader) startElement(t xml.StartElement, loc xsderr.Loc) (*StartElement, error) {
-	bindings := bindingsOf(t.Attr)
+// startElement resolves an element's name, tag, and attributes, attrs, against
+// the scope its declarations establish, pushes an open-element frame, and
+// returns the node.
+func (r *Reader) startElement(tag xml.Name, attrs []rawAttr, loc xsderr.Loc) (*StartElement, error) {
+	bindings := bindingsOf(attrs)
 	if err := r.checkUndeclarations(bindings, loc); err != nil {
 		return nil, err
 	}
 	child := r.currentScope().child(bindings)
 
-	if t.Name.Space == xmlnsPrefix {
+	if tag.Space == xmlnsPrefix {
 		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "%q is a reserved prefix and cannot name an element", xmlnsPrefix)
 	}
-	space, ok := child.lookup(t.Name.Space)
+	space, ok := child.lookup(tag.Space)
 	if !ok {
-		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "unbound namespace prefix %q on element <%s>", t.Name.Space, rawName(t.Name))
+		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "unbound namespace prefix %q on element <%s>", tag.Space, rawName(tag))
 	}
-	name := Name{space: space, local: t.Name.Local}
+	name := Name{space: space, local: tag.Local}
 
-	attrs, err := resolveAttrs(t.Attr, child, loc)
+	resolved, err := resolveAttrs(attrs, child, loc)
 	if err != nil {
 		return nil, err
 	}
 
 	r.stack = append(r.stack, frame{name: name, scope: child, loc: loc})
-	return &StartElement{name: name, attrs: attrs, scope: child, loc: loc}, nil
+	return &StartElement{name: name, attrs: resolved, scope: child, loc: loc}, nil
 }
 
 // checkUndeclarations enforces Namespaces in XML 1.0's nsc-NoPrefixUndecl: "In
@@ -532,9 +531,10 @@ func (r *Reader) currentScope() *scope {
 // bindingsOf extracts the namespace declarations from an element's raw
 // attributes, in document order. RawToken reports xmlns:p as {Space:"xmlns",
 // Local:"p"} and the default xmlns as {Space:"", Local:"xmlns"}.
-func bindingsOf(attrs []xml.Attr) []binding {
+func bindingsOf(attrs []rawAttr) []binding {
 	var bs []binding
-	for _, a := range attrs {
+	for _, ra := range attrs {
+		a := ra.attr
 		if a.Name.Space == xmlnsPrefix {
 			bs = append(bs, binding{prefix: a.Name.Local, uri: a.Value})
 			continue
@@ -549,10 +549,12 @@ func bindingsOf(attrs []xml.Attr) []binding {
 // resolveAttrs resolves the non-declaration attributes of an element against
 // scope s, in document order (STYLE D2: order is preserved, no map). An
 // unprefixed attribute is in no namespace; a prefixed one whose prefix is
-// unbound is an error.
-func resolveAttrs(attrs []xml.Attr, s *scope, loc xsderr.Loc) ([]Attribute, error) {
+// unbound is an error, located at loc, the start tag. Each Attribute keeps the
+// position of its own name (rawAttr).
+func resolveAttrs(attrs []rawAttr, s *scope, loc xsderr.Loc) ([]Attribute, error) {
 	var out []Attribute
-	for _, a := range attrs {
+	for _, ra := range attrs {
+		a := ra.attr
 		if isDeclaration(a) {
 			continue
 		}
@@ -567,7 +569,7 @@ func resolveAttrs(attrs []xml.Attr, s *scope, loc xsderr.Loc) ([]Attribute, erro
 			}
 			space = resolved
 		}
-		out = append(out, Attribute{name: Name{space: space, local: a.Name.Local}, value: a.Value, loc: loc})
+		out = append(out, Attribute{name: Name{space: space, local: a.Name.Local}, value: a.Value, loc: ra.loc})
 	}
 	return out, nil
 }
