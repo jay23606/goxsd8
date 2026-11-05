@@ -46,13 +46,18 @@
 //
 // Usage:
 //
-//	go tool decodecensus [dir]
+//	go tool decodecensus [-paths] [dir]
 //
-// dir defaults to the suite at [suiteroot.Default]. An absent suite is a
-// supported mode, not a failure: the submodule is absent in a fresh container
-// (#659), so the tool says so, names the command that initializes it, and
-// exits 0. It exits 0 for a completed census whatever it finds, and 2 for an
-// operational error.
+// dir defaults to the suite at [suiteroot.Default]. -paths adds, after the
+// caveats, the IDs of the cases under each declined construct, in the
+// table's order, then under each listed count: rejected codegen's own
+// struct, decoded where validate rejects, and the placeholder's
+// ErrTypeMismatch. A case is named by its conformance.CatalogEntry ID, and
+// each list is in byte order of those IDs, whichever driver assessed each
+// case. An absent suite is a supported mode, not a failure: the submodule is
+// absent in a fresh container (#659), so the tool says so, names the command
+// that initializes it, and exits 0. It exits 0 for a completed census
+// whatever it finds, and 2 for an operational error.
 package main
 
 import (
@@ -88,7 +93,7 @@ import (
 )
 
 // usage is printed for any argument the tool cannot act on.
-const usage = "usage: decodecensus [dir]"
+const usage = "usage: decodecensus [-paths] [dir]; -paths lists the cases under each construct and each listed count"
 
 // driverModule is the temporary module's path. It lies under this module's
 // path, so that Go's internal rule lets the drivers import package assess, and
@@ -113,6 +118,7 @@ func main() {
 func run(stdout io.Writer, args []string) (err error) {
 	flags := flag.NewFlagSet("decodecensus", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	withPaths := flags.Bool("paths", false, "list the cases under each construct and each listed count")
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("%w\n%s", err, usage)
 	}
@@ -162,7 +168,7 @@ func run(stdout io.Writer, args []string) (err error) {
 		}
 		rep.merge(sum)
 	}
-	return printReport(stdout, rep)
+	return printReport(stdout, rep, *withPaths)
 }
 
 // instanceCases returns the entries the population holds, in catalog order:
@@ -288,7 +294,7 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (repor
 			groupOf[key] = i
 			groups = append(groups, groupCases{schema: c.SchemaDocs})
 		}
-		groups[i].instances = append(groups[i].instances, c.Docs[0])
+		groups[i].cases = append(groups[i].cases, c)
 	}
 	for n, g := range groups {
 		// A schema that does not assemble or generate is the census's data,
@@ -314,8 +320,9 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (repor
 		}
 		ag := assess.Group{Schema: g.schema}
 		used := false
-		for _, inst := range g.instances {
+		for _, c := range g.cases {
 			rep.generates++
+			inst := c.Docs[0]
 			name, err := documentElement(filepath.Join(abs, filepath.FromSlash(inst)))
 			if err != nil {
 				return report{}, nil, err
@@ -326,11 +333,11 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (repor
 				if decl {
 					rep.unresolved++
 				}
-				ag.Cases = append(ag.Cases, assess.Case{Instance: inst, Decoder: -1})
+				ag.Cases = append(ag.Cases, assess.Case{ID: c.ID, Instance: inst, Decoder: -1})
 				continue
 			}
 			used = true
-			ag.Cases = append(ag.Cases, assess.Case{Instance: inst, Decoder: cur.decoder(pkg + "." + typ)})
+			ag.Cases = append(ag.Cases, assess.Case{ID: c.ID, Instance: inst, Decoder: cur.decoder(pkg + "." + typ)})
 		}
 		cur.req.Groups = append(cur.req.Groups, ag)
 		if used {
@@ -340,11 +347,11 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (repor
 	return rep, batches, nil
 }
 
-// groupCases is one test group's schema documents and its cases' instance
-// documents, in catalog order.
+// groupCases is one schema-document list and the cases of every test group
+// declaring it, in catalog order.
 type groupCases struct {
-	schema    []string
-	instances []string
+	schema []string
+	cases  []conformance.CatalogEntry
 }
 
 // decoder returns the index of the decoder into typ, a qualified type,
@@ -620,7 +627,7 @@ func driverSource(b batch) []byte {
 }
 
 // report is what the census found. The declined count is not stored: it is
-// the sum of the tallies' (STYLE D3).
+// the sum of the tallies' case lists' lengths (STYLE D3).
 type report struct {
 	root       string
 	considered int
@@ -634,21 +641,22 @@ type report struct {
 
 // merge adds one driver's summary to r. A construct's tallies from two
 // drivers merge by its String, the key assess.Drive's doc states across
-// processes, every driver linking the one codec.
+// processes, every driver linking the one codec, and their case lists
+// concatenate; so do the listed counts'.
 func (r *report) merge(s assess.Summary) {
 	r.sum.Decoded += s.Decoded
 	r.sum.Undecided += s.Undecided
-	r.sum.Rejected += s.Rejected
 	r.sum.FailedOther += s.FailedOther
-	r.sum.Differential += s.Differential
-	r.sum.PlaceholderMismatch += s.PlaceholderMismatch
+	r.sum.Rejected = append(r.sum.Rejected, s.Rejected...)
+	r.sum.Differential = append(r.sum.Differential, s.Differential...)
+	r.sum.PlaceholderMismatch = append(r.sum.PlaceholderMismatch, s.PlaceholderMismatch...)
 	for _, t := range s.Declines {
 		i := slices.IndexFunc(r.sum.Declines, func(u assess.Tally) bool { return u.Construct == t.Construct })
 		if i < 0 {
 			r.sum.Declines = append(r.sum.Declines, assess.Tally{Construct: t.Construct})
 			i = len(r.sum.Declines) - 1
 		}
-		r.sum.Declines[i].Count += t.Count
+		r.sum.Declines[i].Cases = append(r.sum.Declines[i].Cases, t.Cases...)
 	}
 }
 
@@ -656,7 +664,7 @@ func (r *report) merge(s assess.Summary) {
 func (r report) declined() int {
 	n := 0
 	for _, t := range r.sum.Declines {
-		n += t.Count
+		n += len(t.Cases)
 	}
 	return n
 }
@@ -665,7 +673,7 @@ func (r report) declined() int {
 func ranked(tallies []assess.Tally) []assess.Tally {
 	r := slices.Clone(tallies)
 	slices.SortStableFunc(r, func(a, b assess.Tally) int {
-		if c := cmp.Compare(b.Count, a.Count); c != 0 {
+		if c := cmp.Compare(len(b.Cases), len(a.Cases)); c != 0 {
 			return c
 		}
 		return strings.Compare(a.Construct, b.Construct)
@@ -685,33 +693,68 @@ var caveats = []string{
 	"No count is a yield: lifting a construct exposes each of its cases' next decline, so its count bounds from above the cases lifting it alone makes decode.",
 }
 
+// The labels of the counts -paths lists the cases of, each printed on its
+// count's line and over its list.
+const (
+	rejectedLabel     = "rejected codegen's own struct"
+	differentialLabel = "decoded where validate rejects"
+	placeholderLabel  = "Decode's ErrTypeMismatch on the placeholder"
+)
+
 // printReport renders the census: the counts, the declined constructs largest
-// first, and the caveats. A bufio.Writer keeps its first write error and Flush
-// returns it, so checking Flush checks every write.
-func printReport(dst io.Writer, rep report) error {
+// first, the caveats, and with withPaths the cases under each. A bufio.Writer
+// keeps its first write error and Flush returns it, so checking Flush checks
+// every write.
+func printReport(dst io.Writer, rep report, withPaths bool) error {
 	w := bufio.NewWriter(dst)
 	_, _ = fmt.Fprintf(w, "decodecensus: %d instance case(s) under %s\n", rep.considered, rep.root)
 	_, _ = fmt.Fprintf(w, "  schema generates: %d\n", rep.generates)
 	_, _ = fmt.Fprintf(w, "  decoded: %d\n", rep.sum.Decoded)
 	_, _ = fmt.Fprintf(w, "  declined: %d\n", rep.declined())
 	_, _ = fmt.Fprintf(w, "  undecided: %d\n", rep.sum.Undecided)
-	_, _ = fmt.Fprintf(w, "  rejected codegen's own struct: %d\n", rep.sum.Rejected)
+	_, _ = fmt.Fprintf(w, "  %s: %d\n", rejectedLabel, len(rep.sum.Rejected))
 	_, _ = fmt.Fprintf(w, "  failed other: %d\n", rep.sum.FailedOther)
-	_, _ = fmt.Fprintf(w, "  decoded where validate rejects: %d\n", rep.sum.Differential)
+	_, _ = fmt.Fprintf(w, "  %s: %d\n", differentialLabel, len(rep.sum.Differential))
 	order := ranked(rep.sum.Declines)
 	_, _ = fmt.Fprintf(w, "\n=== First decline, by construct: %d construct(s) ===\n", len(order))
 	for _, t := range order {
-		_, _ = fmt.Fprintf(w, "  %6d  %s\n", t.Count, t.Construct)
+		_, _ = fmt.Fprintf(w, "  %6d  %s\n", len(t.Cases), t.Construct)
 	}
 	_, _ = fmt.Fprintln(w, "\n=== Caveats ===")
 	for _, c := range caveats {
 		_, _ = fmt.Fprintf(w, "  - %s\n", c)
 	}
 	_, _ = fmt.Fprintf(w, "  - %s\n", placeholderCaveat(rep))
+	if withPaths {
+		printPaths(w, rep, order)
+	}
 	if err := w.Flush(); err != nil {
 		return fmt.Errorf("writing the report: %w", err)
 	}
 	return nil
+}
+
+// printPaths renders the -paths sections: each construct's cases, in order's
+// order, then each listed count's, each list as the package doc's -paths
+// states.
+func printPaths(w *bufio.Writer, rep report, order []assess.Tally) {
+	_, _ = fmt.Fprintln(w, "\n=== Cases, by construct ===")
+	for _, t := range order {
+		printCases(w, t.Construct, t.Cases)
+	}
+	_, _ = fmt.Fprintln(w, "\n=== Cases, by listed count ===")
+	printCases(w, rejectedLabel, rep.sum.Rejected)
+	printCases(w, differentialLabel, rep.sum.Differential)
+	printCases(w, placeholderLabel, rep.sum.PlaceholderMismatch)
+}
+
+// printCases renders one -paths list: its heading with the case count, then
+// each case ID in byte order.
+func printCases(w *bufio.Writer, heading string, ids []string) {
+	_, _ = fmt.Fprintf(w, "%s (%d):\n", heading, len(ids))
+	for _, id := range slices.Sorted(slices.Values(ids)) {
+		_, _ = fmt.Fprintf(w, "  %s\n", id)
+	}
 }
 
 // placeholderCaveat is the caveat on the cases decoded into the placeholder.
@@ -719,5 +762,5 @@ func placeholderCaveat(rep report) string {
 	return fmt.Sprintf("Placeholder: %d case(s) decode into a placeholder struct, not codegen's type: their document element is not well-formed, "+
 		"names no top-level declaration with {abstract} false, or, for %d of them, names one the census found no single generated type for. "+
 		"Decode's ErrTypeMismatch on the placeholder, %d case(s), counts under \"failed other\", never under \"rejected codegen's own struct\".",
-		rep.placeholder, rep.unresolved, rep.sum.PlaceholderMismatch)
+		rep.placeholder, rep.unresolved, len(rep.sum.PlaceholderMismatch))
 }

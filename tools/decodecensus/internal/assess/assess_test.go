@@ -99,7 +99,8 @@ func accepting(*xsd.Schema, value.Backend, []byte, ...codec.Option) error { retu
 // placeholder mismatch each fail with their bucket's arm of classify removed,
 // and failed other, classify's last return, with its arm of tallyOutcome
 // removed; the row differential fails with assess's differential always false,
-// and the row after it with the differential set on every decoded case.
+// and the row after it with the differential set on every decoded case. Each
+// listed bucket's row names its case by the ID the Case carries.
 func TestDriveCountsEachBucket(t *testing.T) {
 	own := []Decoder{DecoderFor[a]()}
 	cases := []struct {
@@ -108,17 +109,20 @@ func TestDriveCountsEachBucket(t *testing.T) {
 		c        Case
 		want     Summary
 	}{
-		{"decoded", own, Case{"valid.xml", 0}, Summary{Decoded: 1}},
-		{"declined", []Decoder{DecoderFor[a]()}, Case{"all.xml", 0},
-			Summary{Declines: []Tally{{Construct: "all content", Count: 1}}}},
-		{"undecided", own, Case{"undecided.xml", 0}, Summary{Undecided: 1}},
-		{"rejected", []Decoder{DecoderFor[mismatched]()}, Case{"valid.xml", 0}, Summary{Rejected: 1}},
-		{"failed other", own, Case{"invalid.xml", 0}, Summary{FailedOther: 1}},
-		{"placeholder mismatch", nil, Case{"valid.xml", -1}, Summary{FailedOther: 1, PlaceholderMismatch: 1}},
-		{"differential", []Decoder{accepting}, Case{"invalid.xml", 0}, Summary{Decoded: 1, Differential: 1}},
-		{"no differential where validate accepts", []Decoder{accepting}, Case{"valid.xml", 0}, Summary{Decoded: 1}},
-		{"decoded under bound branches", []Decoder{DecoderFor[p](codec.WithBranches[p](pq{}, pr{}))}, Case{"choice.xml", 0}, Summary{Decoded: 1}},
-		{"rejected without them", []Decoder{DecoderFor[p]()}, Case{"choice.xml", 0}, Summary{Rejected: 1}},
+		{"decoded", own, Case{"S/g/instance/d", "valid.xml", 0}, Summary{Decoded: 1}},
+		{"declined", []Decoder{DecoderFor[a]()}, Case{"S/g/instance/c", "all.xml", 0},
+			Summary{Declines: []Tally{{Construct: "all content", Cases: []string{"S/g/instance/c"}}}}},
+		{"undecided", own, Case{"S/g/instance/u", "undecided.xml", 0}, Summary{Undecided: 1}},
+		{"rejected", []Decoder{DecoderFor[mismatched]()}, Case{"S/g/instance/r", "valid.xml", 0}, Summary{Rejected: []string{"S/g/instance/r"}}},
+		{"failed other", own, Case{"S/g/instance/f", "invalid.xml", 0}, Summary{FailedOther: 1}},
+		{"placeholder mismatch", nil, Case{"S/g/instance/m", "valid.xml", -1},
+			Summary{FailedOther: 1, PlaceholderMismatch: []string{"S/g/instance/m"}}},
+		{"differential", []Decoder{accepting}, Case{"S/g/instance/x", "invalid.xml", 0},
+			Summary{Decoded: 1, Differential: []string{"S/g/instance/x"}}},
+		{"no differential where validate accepts", []Decoder{accepting}, Case{"S/g/instance/v", "valid.xml", 0}, Summary{Decoded: 1}},
+		{"decoded under bound branches", []Decoder{DecoderFor[p](codec.WithBranches[p](pq{}, pr{}))}, Case{"S/g/instance/b", "choice.xml", 0},
+			Summary{Decoded: 1}},
+		{"rejected without them", []Decoder{DecoderFor[p]()}, Case{"S/g/instance/w", "choice.xml", 0}, Summary{Rejected: []string{"S/g/instance/w"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,10 +134,12 @@ func TestDriveCountsEachBucket(t *testing.T) {
 }
 
 // TestDriveTalliesDeclinesByConstruct pins the decline table's key: two
-// cases declining one construct are one Tally of 2.
+// cases declining one construct, over one instance document, are one Tally
+// listing both IDs in the order Drive met them.
 func TestDriveTalliesDeclinesByConstruct(t *testing.T) {
-	got := drive(t, []Decoder{DecoderFor[a]()}, Case{"all.xml", 0}, Case{"valid.xml", 0}, Case{"all.xml", 0})
-	want := Summary{Decoded: 1, Declines: []Tally{{Construct: "all content", Count: 2}}}
+	got := drive(t, []Decoder{DecoderFor[a]()}, Case{"S/g/instance/z", "all.xml", 0}, Case{"S/g/instance/v", "valid.xml", 0},
+		Case{"S/g/instance/a", "all.xml", 0})
+	want := Summary{Decoded: 1, Declines: []Tally{{Construct: "all content", Cases: []string{"S/g/instance/z", "S/g/instance/a"}}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Summary = %+v, want %+v", got, want)
 	}
@@ -143,7 +149,7 @@ func TestDriveTalliesDeclinesByConstruct(t *testing.T) {
 // decoders, and below the placeholder's -1, to an error.
 func TestDriveRefusesAnUnknownDecoder(t *testing.T) {
 	for _, i := range []int{1, -2} {
-		req, err := json.Marshal(Request{Root: writeSuite(t), Groups: []Group{{Schema: []string{"s.xsd"}, Cases: []Case{{"valid.xml", i}}}}})
+		req, err := json.Marshal(Request{Root: writeSuite(t), Groups: []Group{{Schema: []string{"s.xsd"}, Cases: []Case{{"S/g/instance/v", "valid.xml", i}}}}})
 		if err != nil {
 			t.Fatalf("encoding the request: %v", err)
 		}

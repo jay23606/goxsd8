@@ -105,68 +105,134 @@ const wantCounts = `decodecensus: 12 instance case(s) under %ROOT%
 === Caveats ===
 `
 
+// wantPaths is the -paths sections over censusSuite.
+const wantPaths = `
+=== Cases, by construct ===
+an atomic simple type whose primitive is neither xs:string nor xs:anyURI (2):
+  S/g/instance/simple
+  S/g/instance/simple2
+all content (1):
+  S/g/instance/all
+
+=== Cases, by listed count ===
+rejected codegen's own struct (0):
+decoded where validate rejects (0):
+Decode's ErrTypeMismatch on the placeholder (0):
+`
+
+// withCaveats returns head followed by the caveats' lines and the caveat
+// placeholderCaveat renders for rep, as printReport closes its report
+// before any -paths section.
+func withCaveats(head string, rep report) string {
+	var b strings.Builder
+	b.WriteString(head)
+	for _, c := range caveats {
+		b.WriteString("  - " + c + "\n")
+	}
+	b.WriteString("  - " + placeholderCaveat(rep) + "\n")
+	return b.String()
+}
+
 // TestCensusCounts runs the whole command over censusSuite, a driver built
-// and run included, and pins every count the report prints, the decline
-// table, every caveat and the placeholder's. It fails with instanceCases'
-// withheld test removed, with plan's generates count removed, and with the
-// decoded, declined or failed other arm of the driver's tallyOutcome removed,
-// and with driverSource's bound branch list dropped, which moves g.xml from
-// decoded to rejected; undecided, rejected and the differential, which no
-// schema document makes codec return, are TestReportPrintsEachMergedCount's
-// and package assess's.
+// and run included, without and with -paths, and compares each whole report:
+// every count the report prints, the decline table, every caveat and the
+// placeholder's, and with -paths each declined construct's case IDs in byte
+// order. Without -paths the report holds nothing after the placeholder's
+// caveat. It fails with instanceCases' withheld test removed, with plan's
+// generates count removed, and with the decoded, declined or failed other
+// arm of the driver's tallyOutcome removed, and with driverSource's bound
+// branch list dropped, which moves g.xml from decoded to rejected; undecided,
+// rejected and the differential, which no schema document makes codec
+// return, are TestReportPrintsEachMergedCount's and package assess's.
 func TestCensusCounts(t *testing.T) {
 	root := writeTree(t, censusSuite)
-	var out bytes.Buffer
-	if err := run(&out, []string{root}); err != nil {
-		t.Fatalf("run: %v", err)
+	plain := withCaveats(strings.ReplaceAll(wantCounts, "%ROOT%", root), report{placeholder: 1})
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"without -paths", []string{root}, plain},
+		{"with -paths", []string{"-paths", root}, plain + wantPaths},
 	}
-	want := strings.ReplaceAll(wantCounts, "%ROOT%", root)
-	if !strings.HasPrefix(out.String(), want) {
-		t.Errorf("report opens\n%s\nwant\n%s", out.String(), want)
-	}
-	for _, c := range caveats {
-		if !strings.Contains(out.String(), "  - "+c+"\n") {
-			t.Errorf("report lacks the caveat %q", c)
-		}
-	}
-	placeholder := placeholderCaveat(report{placeholder: 1})
-	if !strings.HasSuffix(out.String(), "  - "+placeholder+"\n") {
-		t.Errorf("report closes\n%s\nwant the caveat %q", out.String(), placeholder)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			if err := run(&out, tc.args); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if out.String() != tc.want {
+				t.Errorf("report\n%s\nwant\n%s", out.String(), tc.want)
+			}
+		})
 	}
 }
 
 // TestReportPrintsEachMergedCount merges two drivers' summaries, every count
-// of each non-zero and one construct in both, and pins each line of the
-// report's head and table: each count is the sum of the two, so a count
-// merge or printReport drops, or prints under another label, fails here.
+// of each non-zero, one construct in both and each listed count's cases split
+// across both, and compares the whole report printReport renders with
+// -paths: each count is the sum of the two, and each case ID is printed
+// under its own heading, in byte order where the merge met them in reverse,
+// so a count or list merge or printReport drops, or prints under another
+// label or unsorted, fails here.
 func TestReportPrintsEachMergedCount(t *testing.T) {
-	rep := report{root: "r", considered: 40, generates: 30}
-	rep.merge(assess.Summary{Decoded: 1, Undecided: 2, Rejected: 3, FailedOther: 4, Differential: 5, PlaceholderMismatch: 1,
-		Declines: []assess.Tally{{Construct: "x", Count: 1}, {Construct: "y", Count: 1}}})
-	rep.merge(assess.Summary{Decoded: 10, Undecided: 20, Rejected: 30, FailedOther: 40, Differential: 50, PlaceholderMismatch: 2,
-		Declines: []assess.Tally{{Construct: "y", Count: 6}}})
+	rep := report{root: "r", considered: 40, generates: 30, placeholder: 9, unresolved: 1}
+	rep.merge(assess.Summary{Decoded: 1, Undecided: 2, FailedOther: 4,
+		Rejected:            []string{"S/r/instance/2"},
+		Differential:        []string{"S/d/instance/3", "S/d/instance/2"},
+		PlaceholderMismatch: []string{"S/m/instance/4", "S/m/instance/3"},
+		Declines:            []assess.Tally{{Construct: "x", Cases: []string{"S/x/instance/1"}}, {Construct: "y", Cases: []string{"S/y/instance/3"}}}})
+	rep.merge(assess.Summary{Decoded: 10, Undecided: 20, FailedOther: 40,
+		Rejected:            []string{"S/r/instance/1"},
+		Differential:        []string{"S/d/instance/1"},
+		PlaceholderMismatch: []string{"S/m/instance/2", "S/m/instance/1"},
+		Declines:            []assess.Tally{{Construct: "y", Cases: []string{"S/y/instance/2", "S/y/instance/1"}}}})
 	var out bytes.Buffer
-	if err := printReport(&out, rep); err != nil {
+	if err := printReport(&out, rep, true); err != nil {
 		t.Fatalf("printReport: %v", err)
 	}
-	want := `decodecensus: 40 instance case(s) under r
+	want := withCaveats(`decodecensus: 40 instance case(s) under r
   schema generates: 30
   decoded: 11
-  declined: 8
+  declined: 4
   undecided: 22
-  rejected codegen's own struct: 33
+  rejected codegen's own struct: 2
   failed other: 44
-  decoded where validate rejects: 55
+  decoded where validate rejects: 3
 
 === First decline, by construct: 2 construct(s) ===
-       7  y
+       3  y
        1  x
+
+=== Caveats ===
+`, rep) + `
+=== Cases, by construct ===
+y (3):
+  S/y/instance/1
+  S/y/instance/2
+  S/y/instance/3
+x (1):
+  S/x/instance/1
+
+=== Cases, by listed count ===
+rejected codegen's own struct (2):
+  S/r/instance/1
+  S/r/instance/2
+decoded where validate rejects (3):
+  S/d/instance/1
+  S/d/instance/2
+  S/d/instance/3
+Decode's ErrTypeMismatch on the placeholder (4):
+  S/m/instance/1
+  S/m/instance/2
+  S/m/instance/3
+  S/m/instance/4
 `
-	if !strings.HasPrefix(out.String(), want) {
-		t.Errorf("report opens\n%s\nwant\n%s", out.String(), want)
+	if out.String() != want {
+		t.Errorf("report\n%s\nwant\n%s", out.String(), want)
 	}
-	if rep.sum.PlaceholderMismatch != 3 {
-		t.Errorf("merged PlaceholderMismatch = %d, want 3", rep.sum.PlaceholderMismatch)
+	if !strings.Contains(out.String(), "Decode's ErrTypeMismatch on the placeholder, 4 case(s)") {
+		t.Errorf("the placeholder's caveat in\n%s\ncounts other than the 4 merged cases", out.String())
 	}
 }
 
@@ -174,8 +240,11 @@ func TestReportPrintsEachMergedCount(t *testing.T) {
 // whose first-seen order, count order with a first-seen tie-break and count
 // order with the String tie-break the tool owes are three different orders.
 func TestRankedOrdersByCountThenString(t *testing.T) {
-	tallies := []assess.Tally{{Construct: "x", Count: 1}, {Construct: "m", Count: 2}, {Construct: "b", Count: 2}}
-	want := []assess.Tally{{Construct: "b", Count: 2}, {Construct: "m", Count: 2}, {Construct: "x", Count: 1}}
+	x := assess.Tally{Construct: "x", Cases: []string{"1"}}
+	m := assess.Tally{Construct: "m", Cases: []string{"1", "2"}}
+	b := assess.Tally{Construct: "b", Cases: []string{"1", "2"}}
+	tallies := []assess.Tally{x, m, b}
+	want := []assess.Tally{b, m, x}
 	if got := ranked(tallies); !reflect.DeepEqual(got, want) {
 		t.Errorf("ranked = %v, want %v", got, want)
 	}

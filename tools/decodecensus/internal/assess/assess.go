@@ -204,36 +204,49 @@ type Group struct {
 	Cases  []Case
 }
 
-// A Case is one instance case: its instance document, a slash path relative
-// to the suite root, and the index into Drive's decoders of the Decoder into
-// the type codegen emitted for its document element's declaration, or -1 for
-// the placeholder, which an ErrTypeMismatch is no codec defect for.
+// A Case is one instance case: its ID, the conformance.CatalogEntry's, its
+// instance document, a slash path relative to the suite root, and the index
+// into Drive's decoders of the Decoder into the type codegen emitted for its
+// document element's declaration, or -1 for the placeholder, which an
+// ErrTypeMismatch is no codec defect for. ID is exported, as every field
+// here is, because the Request crosses the driver's process boundary as
+// JSON: the census writes it and Drive copies it into the [Summary], since
+// an instance document alone names no case (two cases can share one).
 type Case struct {
+	ID       string
 	Instance string
 	Decoder  int
 }
 
-// A Summary is what [Drive] writes: each bucket's count but declined's, which
-// is the sum of Declines' counts (STYLE D3), the count of decoded cases the
-// census's validation did not accept, and of failed other the ErrTypeMismatch
-// count on the placeholder.
+// A Summary is what [Drive] writes. Decoded, Undecided and FailedOther are
+// counts; Rejected, Differential, PlaceholderMismatch and each Tally's Cases
+// hold the IDs of their cases, in the order Drive met them, and the count of
+// each is its list's length (STYLE D3), so that the census's -paths can name
+// the cases behind it. Every field is exported for the JSON the census reads.
 type Summary struct {
-	Decoded             int
-	Undecided           int
-	Rejected            int
-	FailedOther         int
-	Differential        int
-	PlaceholderMismatch int
+	Decoded     int
+	Undecided   int
+	FailedOther int
+	// Rejected holds the cases whose Decode returned ErrTypeMismatch on the
+	// type codegen emitted for the document element's declaration.
+	Rejected []string
+	// Differential holds the decoded cases the census's validation did not
+	// accept.
+	Differential []string
+	// PlaceholderMismatch holds the cases whose Decode returned
+	// ErrTypeMismatch on the placeholder; FailedOther counts them too.
+	PlaceholderMismatch []string
 	// Declines holds one Tally per declined construct, in the order the
-	// cases first met each.
+	// cases first met each; the declined count is the sum of their Cases'
+	// lengths.
 	Declines []Tally
 }
 
 // A Tally is one declined construct, by its codec.Construct's String, and
-// how many cases declined it first.
+// the cases that declined it first.
 type Tally struct {
 	Construct string
-	Count     int
+	Cases     []string
 }
 
 // Drive reads one JSON [Request] from r, assesses each of its cases with the
@@ -268,7 +281,7 @@ func Drive(r io.Reader, w io.Writer, decoders []Decoder) error {
 			if err != nil {
 				return fmt.Errorf("assess: case %s: %w", c.Instance, err)
 			}
-			tallyOutcome(&sum, index, assess(schema, backend, data, c.Instance, decode, own))
+			tallyOutcome(&sum, index, c.ID, assess(schema, backend, data, c.Instance, decode, own))
 		}
 	}
 	if err := json.NewEncoder(w).Encode(sum); err != nil {
@@ -289,11 +302,11 @@ func decoderAt(decoders []Decoder, i int) (Decoder, bool, error) {
 	return decoders[i], true, nil
 }
 
-// tallyOutcome adds o, one case's outcome, to sum, index mapping a construct
-// to its Tally's position in sum.Declines.
-func tallyOutcome(sum *Summary, index map[codec.Construct]int, o outcome) {
+// tallyOutcome adds o, the outcome of the case id, to sum, index mapping a
+// construct to its Tally's position in sum.Declines.
+func tallyOutcome(sum *Summary, index map[codec.Construct]int, id string, o outcome) {
 	if o.differential {
-		sum.Differential++
+		sum.Differential = append(sum.Differential, id)
 	}
 	switch o.bucket {
 	case decoded:
@@ -305,14 +318,14 @@ func tallyOutcome(sum *Summary, index map[codec.Construct]int, o outcome) {
 			index[o.construct] = i
 			sum.Declines = append(sum.Declines, Tally{Construct: o.construct.String()})
 		}
-		sum.Declines[i].Count++
+		sum.Declines[i].Cases = append(sum.Declines[i].Cases, id)
 	case undecided:
 		sum.Undecided++
 	case rejected:
-		sum.Rejected++
+		sum.Rejected = append(sum.Rejected, id)
 	case placeholderMismatch:
 		sum.FailedOther++
-		sum.PlaceholderMismatch++
+		sum.PlaceholderMismatch = append(sum.PlaceholderMismatch, id)
 	case failedOther:
 		sum.FailedOther++
 	}
