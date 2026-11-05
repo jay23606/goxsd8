@@ -35,15 +35,16 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 
 // Error names the instance Loc, where Loc reports one, and the construct,
 // then the declining declaration, the document element's, a particle's
-// element declaration's, local or the top-level one an <element ref> names,
-// at any depth, or an attribute's, and, for a construct of a complex type,
-// the document element's or one a particle's element declaration has at any
-// depth, or of the document element's simple type, that type labelled as
-// its declaration's {type definition}, with no path from the document element,
-// and, for a construct of a list type's {item type definition}, that item, by
-// its QName where it has one, each with its schema Loc, which is the zero Loc
-// for a built-in component; for xsi:type, it names the element and the type
-// the xsi:type names.
+// element declaration's, local or a top-level one an <element ref> names, or
+// a member of that one's substitution group, at any depth, or an attribute's,
+// and, for a construct of a complex type, the document element's or one a
+// particle's element declaration has at any depth, or of the document
+// element's simple type, that type labelled as its declaration's {type
+// definition}, with no path from the document element, and, for a construct of
+// a list type's {item type definition}, that item, by its QName where it has
+// one, each with its schema Loc, which is the zero Loc for a built-in
+// component; for xsi:type, it names the element and the type the xsi:type
+// names.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -98,7 +99,6 @@ const (
 	constructSequenceOccurs
 	constructNestedGroup
 	constructWildcardParticle
-	constructSubstitutionRef
 	constructAnyTypeElement
 	constructAbstractTypeElement
 	constructSharedName
@@ -125,11 +125,10 @@ var constructNames = [...]string{
 	constructSequenceOccurs:      "a content sequence occurring other than exactly once",
 	constructNestedGroup:         "a nested model group particle",
 	constructWildcardParticle:    "a wildcard particle",
-	constructSubstitutionRef:     "an <element ref> particle to a head with {abstract} true or a substitution group of another non-abstract declaration",
 	constructAnyTypeElement:      "a particle's element declaration of type xs:anyType",
 	constructAbstractTypeElement: "a particle's element declaration whose complex {type definition} has {abstract} true",
-	constructSharedName:          "two particles sharing an expanded name",
-	constructSharedBranch:        "two choice alternatives whose branch structs have one shape",
+	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",
+	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",
 	constructUnion:               "a union simple type",
 	constructSpecial:             "a special simple type",
 	constructOtherPrimitive:      "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal",

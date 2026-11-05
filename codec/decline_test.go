@@ -60,8 +60,6 @@ func TestDecodeDeclines(t *testing.T) {
 		{"optional content choice", root(`<xs:choice minOccurs="0"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructChoiceOccurs, 1, 1},
 		{"choice alternative of a sequence", root(`<xs:choice><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`),
 			"", a, constructNestedGroup, 1, 1},
-		{"choice alternative of an element ref to an abstract head", `<xs:element name="b" type="xs:string" abstract="true"/>` + root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element ref="s:b"/></xs:choice>`),
-			"", a, constructSubstitutionRef, 1, 1},
 		{"choice alternatives sharing a branch shape, refs to a and A", `<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/><xs:element ref="s:A"/></xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
 		{"choice alternative of another primitive", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:dateTime"/></xs:choice>`),
@@ -80,16 +78,28 @@ func TestDecodeDeclines(t *testing.T) {
 		{"nested <group ref>", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>` + sequenceOf(`<xs:group ref="s:g"/>`),
 			"", a, constructNestedGroup, 1, 1},
 		{"wildcard particle", sequenceOf(`<xs:any processContents="lax"/>`), "", a, constructWildcardParticle, 1, 1},
-		{"element ref to a head with another non-abstract member", `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:a"/>` + sequenceOf(`<xs:element ref="s:a"/>`),
-			"", a, constructSubstitutionRef, 1, 1},
-		{"element ref to an abstract head with a member", `<xs:element name="h" type="xs:string" abstract="true"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
-			"", `<s:m>x</s:m>`, constructSubstitutionRef, 1, 1},
-		{"element ref to an abstract head blocking substitution", `<xs:element name="h" type="xs:string" abstract="true" block="substitution"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>` +
-			sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:h" minOccurs="0"/>`), "", a, constructSubstitutionRef, 1, 1},
-		{"element ref to a nillable abstract head", `<xs:element name="h" type="xs:string" abstract="true" nillable="true"/>` +
-			sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:h" minOccurs="0"/>`), "", a, constructSubstitutionRef, 1, 1},
-		{"element ref to an abstract head of complex type", `<xs:complexType name="ct"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>` +
-			sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:h" minOccurs="0"/>`), "", a, constructSubstitutionRef, 1, 1},
+		{"element ref to a head whose group holds a nillable member", `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" nillable="true" substitutionGroup="s:a"/>` + sequenceOf(`<xs:element ref="s:a"/>`),
+			"", a, constructNillable, 1, 1},
+		{"element ref to an abstract head whose group holds a member of a complex type of empty content", `<xs:complexType name="ct"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
+			<xs:element name="m" type="s:ct" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`), "", `<s:m/>`, constructEmptyContent, 1, 1},
+		{"element ref to a group of two declining members, the nillable one first", `<xs:complexType name="ct"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
+			<xs:element name="m" type="s:ct" nillable="true" substitutionGroup="s:h"/><xs:element name="n" type="s:ct" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
+			"", `<s:n/>`, constructNillable, 1, 1},
+		{"element ref to a group of two declining members, the one of empty content first", `<xs:complexType name="ct"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
+			<xs:element name="n" type="s:ct" substitutionGroup="s:h"/><xs:element name="m" type="s:ct" nillable="true" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
+			"", `<s:n/>`, constructEmptyContent, 1, 1},
+		{"element ref to a group whose members share a branch shape, a and A", `<xs:element name="h" type="xs:string" abstract="true"/>
+			<xs:element name="a" type="xs:string" substitutionGroup="s:h"/><xs:element name="A" type="xs:string" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
+			"", a, constructSharedBranch, 1, 1},
+		{"a local particle sharing the expanded name of an earlier ref's member", `<xs:element name="g" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:g"/>` +
+			sequenceOf(`<xs:element ref="s:g"/><xs:element name="m" type="xs:string"/>`), "", `<s:g>x</s:g><s:m>y</s:m>`, constructSharedName, 1, 1},
+		{"a ref's member sharing the expanded name of an earlier local particle", `<xs:element name="g" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:g"/>` +
+			sequenceOf(`<xs:element name="m" type="xs:string"/><xs:element ref="s:g"/>`), "", `<s:m>x</s:m><s:g>y</s:g>`, constructSharedName, 1, 1},
+		{"a ref to a member of an earlier ref's group", `<xs:element name="g" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:g"/>` +
+			sequenceOf(`<xs:element ref="s:g"/><xs:element ref="s:m"/>`), "", `<s:g>x</s:g><s:m>y</s:m>`, constructSharedName, 1, 1},
+		{"two refs whose groups share a member, s2_2_2v01's shape", `<xs:element name="e0" type="xs:string"/><xs:element name="e1" type="xs:string"/>
+			<xs:element name="e2" type="xs:string" abstract="true" substitutionGroup="s:e0 s:e1"/><xs:element name="e3" type="xs:string" substitutionGroup="s:e2"/>` +
+			sequenceOf(`<xs:element ref="s:e0"/><xs:element ref="s:e1"/>`), "", `<s:e3>x</s:e3><s:e3>y</s:e3>`, constructSharedName, 1, 1},
 		{"element ref to a nillable head", `<xs:element name="h" type="xs:string" nillable="true"/>` + sequenceOf(`<xs:element ref="s:h"/>`), "", `<s:h>x</s:h>`, constructNillable, 1, 1},
 		{"element ref to a head of a complex type of empty content", `<xs:complexType name="ct"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
 			"", `<s:h/>`, constructEmptyContent, 1, 1},

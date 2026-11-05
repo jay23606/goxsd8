@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1095,5 +1096,322 @@ func TestChoiceSharedBranchIsCodegens(t *testing.T) {
 				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
 			}
 		}
+	}
+}
+
+// The substitution-group schemas, each declaring s:r whose particle is an
+// <element ref> to a head codegen gives the sealed interface over its
+// ·substitution group· (§3.3.6.4 key-eq): groupSchema's a, of {abstract}
+// false, with the member m; abstractOneSchema's abstract h with the member m;
+// abstractTwoSchema's abstract h with the members m, of xs:string, and n, of
+// xs:token; intGroupSchema's h, of xs:decimal, with the member m of xs:int;
+// occursGroupSchema's a, b and c, each with one member, x, y and z, in each
+// occurrence shape; complexGroupSchema's h and m of one complex type; and
+// nestedHeadSchema's abstract h, whose member m heads a group holding n, which
+// h's group holds through m (cos-equiv-derived-ok-rec clause 2.2).
+// groupChoiceSchema's choice has a local a beside a ref to an abstract head
+// with the member m, and aloneChoiceSchema's beside a ref to an abstract head
+// whose group holds no other declaration.
+const (
+	groupSchema = `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:a"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:a"/></xs:sequence></xs:complexType></xs:element>`
+	abstractOneSchema = `<xs:element name="h" type="xs:string" abstract="true"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	abstractTwoSchema = `<xs:element name="h" type="xs:string" abstract="true"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/><xs:element name="n" type="xs:token" substitutionGroup="s:h"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	intGroupSchema = `<xs:element name="h" type="xs:decimal"/><xs:element name="m" type="xs:int" substitutionGroup="s:h"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	occursGroupSchema = `<xs:element name="a" type="xs:string"/><xs:element name="x" type="xs:string" substitutionGroup="s:a"/>
+		<xs:element name="b" type="xs:string"/><xs:element name="y" type="xs:string" substitutionGroup="s:b"/>
+		<xs:element name="c" type="xs:string"/><xs:element name="z" type="xs:string" substitutionGroup="s:c"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:a"/><xs:element ref="s:b" minOccurs="0"/><xs:element ref="s:c" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>`
+	complexGroupSchema = `<xs:complexType name="ct"><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType>
+		<xs:element name="h" type="s:ct"/><xs:element name="m" type="s:ct" substitutionGroup="s:h"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	nestedHeadSchema = `<xs:element name="h" type="xs:string" abstract="true"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/><xs:element name="n" type="xs:string" substitutionGroup="s:m"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	groupChoiceSchema = `<xs:element name="b" type="xs:string" abstract="true"/><xs:element name="m" type="xs:string" substitutionGroup="s:b"/>
+		<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element ref="s:b"/></xs:choice></xs:complexType></xs:element>`
+	aloneChoiceSchema = `<xs:element name="b" type="xs:string" abstract="true"/>
+		<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element ref="s:b"/></xs:choice></xs:complexType></xs:element>`
+)
+
+// aloneSchemas are three abstract heads whose groups hold no other
+// declaration with {abstract} false, each referenced, optionally, after a
+// local a: m blocked by h's {disallowed substitutions} (cos-equiv-derived-ok-rec
+// clause 2.1), a nillable h, and an h of a complex type of empty content.
+var aloneSchemas = []struct{ name, decls string }{
+	{"an abstract head blocking substitution", `<xs:element name="h" type="xs:string" abstract="true" block="substitution"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>` +
+		sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:h" minOccurs="0"/>`)},
+	{"a nillable abstract head", `<xs:element name="h" type="xs:string" abstract="true" nillable="true"/>` +
+		sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:h" minOccurs="0"/>`)},
+	{"an abstract head of a complex type of empty content", `<xs:complexType name="ct"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>` +
+		sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:h" minOccurs="0"/>`)},
+}
+
+// The types codegen emits for the substitution-group schemas, which
+// TestGroupTypesAreCodegens pins: grp* are groupSchema's A, M, R,
+// ASubstitutionGroup, ASubstitutionGroupA and ASubstitutionGroupM; abs1* are
+// abstractOneSchema's and abs2* abstractTwoSchema's N, R, HSubstitutionGroup
+// and its branches, M as grpM; int* are intGroupSchema's H, M, R,
+// HSubstitutionGroup and its branches; occ* are occursGroupSchema's R, its
+// interfaces and their branches, each member's named type as grpA; cx* are
+// complexGroupSchema's H, M, R, HSubstitutionGroup and its branches; nh* are
+// nestedHeadSchema's R, HSubstitutionGroup and its branches, M as grpM and N
+// as abs2N; gc* are groupChoiceSchema's R, RA and RB, its BSubstitutionGroup
+// and BSubstitutionGroupM as abs1Group and abs1GroupM; alone* is each of
+// aloneSchemas' R and HSubstitutionGroup; and aloneChoice* are
+// aloneChoiceSchema's R, RA and RB, its BSubstitutionGroup as aloneGroup.
+type (
+	grpA       string
+	grpM       string
+	grpHolder  struct{ A grpAGroup }
+	grpAGroup  interface{ isGrpAGroup() }
+	grpAGroupA struct{ A grpA }
+	grpAGroupM struct{ M grpM }
+	abs1Holder struct{ H abs1Group }
+	abs1Group  interface{ isAbs1Group() }
+	abs1GroupM struct{ M grpM }
+	abs2N      string
+	abs2Holder struct{ H abs2Group }
+	abs2Group  interface{ isAbs2Group() }
+	abs2GroupM struct{ M grpM }
+	abs2GroupN struct{ N abs2N }
+	intH       big.Rat
+	intM       int32
+	intHolder  struct{ H intGroup }
+	intGroup   interface{ isIntGroup() }
+	intGroupH  struct{ H intH }
+	intGroupM  struct{ M intM }
+	occHolder  struct {
+		A occAGroup
+		B occBGroup
+		C []occCGroup
+	}
+	occAGroup   interface{ isOccAGroup() }
+	occAGroupA  struct{ A grpA }
+	occAGroupX  struct{ X grpA }
+	occBGroup   interface{ isOccBGroup() }
+	occBGroupB  struct{ B grpA }
+	occBGroupY  struct{ Y grpA }
+	occCGroup   interface{ isOccCGroup() }
+	occCGroupC  struct{ C grpA }
+	occCGroupZ  struct{ Z grpA }
+	cxH         struct{ V string }
+	cxM         struct{ V string }
+	cxHolder    struct{ H cxGroup }
+	cxGroup     interface{ isCxGroup() }
+	cxGroupH    struct{ H cxH }
+	cxGroupM    struct{ M cxM }
+	nhHolder    struct{ H nhGroup }
+	nhGroup     interface{ isNhGroup() }
+	nhGroupM    struct{ M grpM }
+	nhGroupN    struct{ N abs2N }
+	aloneHolder struct {
+		A string
+		H aloneGroup
+	}
+	gcChoice     interface{ isGcChoice() }
+	gcChoiceA    struct{ A string }
+	gcChoiceB    struct{ B abs1Group }
+	aloneGroup   interface{ isAloneGroup() }
+	aloneChoice  interface{ isAloneChoice() }
+	aloneChoiceA struct{ A string }
+	aloneChoiceB struct{ B aloneGroup }
+)
+
+func (grpAGroupA) isGrpAGroup()     {}
+func (grpAGroupM) isGrpAGroup()     {}
+func (abs1GroupM) isAbs1Group()     {}
+func (abs2GroupM) isAbs2Group()     {}
+func (abs2GroupN) isAbs2Group()     {}
+func (intGroupH) isIntGroup()       {}
+func (intGroupM) isIntGroup()       {}
+func (occAGroupA) isOccAGroup()     {}
+func (occAGroupX) isOccAGroup()     {}
+func (occBGroupB) isOccBGroup()     {}
+func (occBGroupY) isOccBGroup()     {}
+func (occCGroupC) isOccCGroup()     {}
+func (occCGroupZ) isOccCGroup()     {}
+func (cxGroupH) isCxGroup()         {}
+func (cxGroupM) isCxGroup()         {}
+func (nhGroupM) isNhGroup()         {}
+func (nhGroupN) isNhGroup()         {}
+func (gcChoiceA) isGcChoice()       {}
+func (gcChoiceB) isGcChoice()       {}
+func (aloneChoiceA) isAloneChoice() {}
+func (aloneChoiceB) isAloneChoice() {}
+
+// The branch sets of the substitution-group interfaces.
+var (
+	grpBranches  = WithBranches[grpAGroup](grpAGroupA{}, grpAGroupM{})
+	abs1Branches = WithBranches[abs1Group](abs1GroupM{})
+	abs2Branches = WithBranches[abs2Group](abs2GroupM{}, abs2GroupN{})
+	intBranches  = WithBranches[intGroup](intGroupH{}, intGroupM{})
+	occBranches  = []Option{
+		WithBranches[occAGroup](occAGroupA{}, occAGroupX{}),
+		WithBranches[occBGroup](occBGroupB{}, occBGroupY{}),
+		WithBranches[occCGroup](occCGroupC{}, occCGroupZ{}),
+	}
+	cxBranches = WithBranches[cxGroup](cxGroupH{}, cxGroupM{})
+	nhBranches = WithBranches[nhGroup](nhGroupM{}, nhGroupN{})
+)
+
+// TestGroupTypesAreCodegens pins the types above to those codegen emits for
+// each substitution-group schema, in shape, so that the rows decoding into
+// them decode into codegen's types, and that no abstract declaration gets a
+// branch.
+func TestGroupTypesAreCodegens(t *testing.T) {
+	iface := func(name string) string { return "type " + name + " interface {\n\tis" + name + "()\n}\n" }
+	branch := func(sum, member, field string) string {
+		return "type " + sum + member + " struct {\n\t" + field + "\n}\n\nfunc (" + sum + member + ") is" + sum + "() {}\n"
+	}
+	alone := []string{"type R struct {\n\tA string\n\tH HSubstitutionGroup\n}\n", iface("HSubstitutionGroup")}
+	rows := []struct {
+		decls string
+		want  []string
+		not   string
+	}{
+		{groupSchema, []string{"type A string\n", "type M string\n", "type R struct {\n\tA ASubstitutionGroup\n}\n", iface("ASubstitutionGroup"),
+			branch("ASubstitutionGroup", "A", "A A"), branch("ASubstitutionGroup", "M", "M M")}, ""},
+		{abstractOneSchema, []string{"type M string\n", "type R struct {\n\tH HSubstitutionGroup\n}\n", iface("HSubstitutionGroup"),
+			branch("HSubstitutionGroup", "M", "M M")}, "type HSubstitutionGroupH "},
+		{abstractTwoSchema, []string{"type M string\n", "type N string\n", "type R struct {\n\tH HSubstitutionGroup\n}\n", iface("HSubstitutionGroup"),
+			branch("HSubstitutionGroup", "M", "M M"), branch("HSubstitutionGroup", "N", "N N")}, "type HSubstitutionGroupH "},
+		{intGroupSchema, []string{"type H big.Rat\n", "type M int32\n", "type R struct {\n\tH HSubstitutionGroup\n}\n", iface("HSubstitutionGroup"),
+			branch("HSubstitutionGroup", "H", "H H"), branch("HSubstitutionGroup", "M", "M M")}, ""},
+		{occursGroupSchema, []string{"type R struct {\n\tA ASubstitutionGroup\n\tB BSubstitutionGroup\n\tC []CSubstitutionGroup\n}\n",
+			iface("ASubstitutionGroup"), branch("ASubstitutionGroup", "A", "A A"), branch("ASubstitutionGroup", "X", "X X"),
+			iface("BSubstitutionGroup"), branch("BSubstitutionGroup", "B", "B B"), branch("BSubstitutionGroup", "Y", "Y Y"),
+			iface("CSubstitutionGroup"), branch("CSubstitutionGroup", "C", "C C"), branch("CSubstitutionGroup", "Z", "Z Z")}, ""},
+		{complexGroupSchema, []string{"type H struct {\n\tV string\n}\n", "type M struct {\n\tV string\n}\n", "type R struct {\n\tH HSubstitutionGroup\n}\n",
+			iface("HSubstitutionGroup"), branch("HSubstitutionGroup", "H", "H H"), branch("HSubstitutionGroup", "M", "M M")}, ""},
+		{nestedHeadSchema, []string{"type M string\n", "type N string\n", "type R struct {\n\tH HSubstitutionGroup\n}\n", iface("HSubstitutionGroup"),
+			branch("HSubstitutionGroup", "M", "M M"), branch("HSubstitutionGroup", "N", "N N")}, "type MSubstitutionGroup "},
+		{aloneSchemas[0].decls, alone, "type HSubstitutionGroupM "},
+		{aloneSchemas[1].decls, alone, "type HSubstitutionGroupH "},
+		{aloneSchemas[2].decls, alone, "type HSubstitutionGroupH "},
+		{groupChoiceSchema, []string{"type M string\n", "type R interface {\n\tisR()\n}\n", "type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
+			"type RB struct {\n\tB BSubstitutionGroup\n}\n\nfunc (RB) isR() {}\n", iface("BSubstitutionGroup"), branch("BSubstitutionGroup", "M", "M M")}, "type BSubstitutionGroupB "},
+		{aloneChoiceSchema, []string{"type R interface {\n\tisR()\n}\n", "type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
+			"type RB struct {\n\tB BSubstitutionGroup\n}\n\nfunc (RB) isR() {}\n", iface("BSubstitutionGroup")}, "type BSubstitutionGroupB "},
+	}
+	for _, row := range rows {
+		gen := generated(t, schemaOf(t, row.decls))
+		for _, decl := range row.want {
+			if !bytes.Contains(gen, []byte(decl)) {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+			}
+		}
+		if row.not != "" && bytes.Contains(gen, []byte(row.not)) {
+			t.Errorf("codegen emits\n%s\nwhich declares %q", gen, row.not)
+		}
+	}
+}
+
+// TestDecodeSubstitutionGroup pins the substitution-group lift: an <element
+// ref> to a head codegen gives the sealed interface over its ·substitution
+// group· decodes into the branch of the member the child's expanded name
+// resolves to (§3.9.4.3 cvc-accept clause 2.3.2), the head's own among them
+// when it has {abstract} false and an abstract head's never (cvc-elt clause
+// 2); the branch holds the member's own named type, a member of xs:int under
+// a head of xs:decimal its int32, a complex member its struct, a member
+// heading a group of its own its own named type, never that group's
+// interface, with its group's members branches of the outer one; the field is I
+// exactly once, the bare I, nil when absent, for {min occurs} 0, and []I, one
+// interface value per child, for {max occurs} above 1, a choice's ref
+// alternative's branch holding it, each member's child selecting that
+// alternative; and an abstract head whose group holds no other declaration with
+// {abstract} false gives the interface alone, nil, with no WithBranches, as a
+// struct's field or a choice's alternative.
+func TestDecodeSubstitutionGroup(t *testing.T) {
+	type row struct {
+		name  string
+		decls string
+		body  string
+		into  target
+		want  any
+	}
+	rows := []row{
+		{"a head of {abstract} false, the head's branch", groupSchema, "<s:a> x </s:a>", into[grpHolder](grpBranches), grpHolder{A: grpAGroupA{A: " x "}}},
+		{"a head of {abstract} false, the member's branch", groupSchema, "<s:m>y</s:m>", into[grpHolder](grpBranches), grpHolder{A: grpAGroupM{M: "y"}}},
+		{"an abstract head with one member", abstractOneSchema, "<s:m>x</s:m>", into[abs1Holder](abs1Branches), abs1Holder{H: abs1GroupM{M: "x"}}},
+		{"an abstract head with two members, the first", abstractTwoSchema, "<s:m> x </s:m>", into[abs2Holder](abs2Branches), abs2Holder{H: abs2GroupM{M: " x "}}},
+		{"an abstract head with two members, the second", abstractTwoSchema, "<s:n> 1  2 </s:n>", into[abs2Holder](abs2Branches), abs2Holder{H: abs2GroupN{N: "1 2"}}},
+		{"a member of xs:int under a head of xs:decimal", intGroupSchema, "<s:m> 7 </s:m>", into[intHolder](intBranches), intHolder{H: intGroupM{M: 7}}},
+		{"each occurrence present, by members", occursGroupSchema, "<s:x>1</s:x><s:y>2</s:y><s:c>3</s:c><s:z>4</s:z><s:c>5</s:c>", into[occHolder](occBranches...),
+			occHolder{A: occAGroupX{X: "1"}, B: occBGroupY{Y: "2"}, C: []occCGroup{occCGroupC{C: "3"}, occCGroupZ{Z: "4"}, occCGroupC{C: "5"}}}},
+		{"the optional present by its head, the repeated absent", occursGroupSchema, "<s:a>1</s:a><s:b>2</s:b>", into[occHolder](occBranches...),
+			occHolder{A: occAGroupA{A: "1"}, B: occBGroupB{B: "2"}}},
+		{"the optional and the repeated absent", occursGroupSchema, "<s:a>1</s:a>", into[occHolder](occBranches...), occHolder{A: occAGroupA{A: "1"}}},
+		{"a member of complex type", complexGroupSchema, "<s:m><s:v>q</s:v></s:m>", into[cxHolder](cxBranches), cxHolder{H: cxGroupM{M: cxM{V: "q"}}}},
+		{"a head of complex type", complexGroupSchema, "<s:h><s:v>p</s:v></s:h>", into[cxHolder](cxBranches), cxHolder{H: cxGroupH{H: cxH{V: "p"}}}},
+		{"a member heading a group of its own, its own branch", nestedHeadSchema, "<s:m>x</s:m>", into[nhHolder](nhBranches), nhHolder{H: nhGroupM{M: "x"}}},
+		{"a member heading a group of its own, its member's branch", nestedHeadSchema, "<s:n>y</s:n>", into[nhHolder](nhBranches), nhHolder{H: nhGroupN{N: "y"}}},
+		{"a choice's ref alternative to a group, by its member", groupChoiceSchema, "<s:m>x</s:m>",
+			into[gcChoice](WithBranches[gcChoice](gcChoiceA{}, gcChoiceB{}), abs1Branches), gcChoice(gcChoiceB{B: abs1GroupM{M: "x"}})},
+		{"a choice's local alternative beside a ref to a group", groupChoiceSchema, "<s:a>x</s:a>",
+			into[gcChoice](WithBranches[gcChoice](gcChoiceA{}, gcChoiceB{}), abs1Branches), gcChoice(gcChoiceA{A: "x"})},
+		{"the interface alone as a choice's alternative", aloneChoiceSchema, "<s:a>x</s:a>",
+			into[aloneChoice](WithBranches[aloneChoice](aloneChoiceA{}, aloneChoiceB{})), aloneChoice(aloneChoiceA{A: "x"})},
+	}
+	for _, s := range aloneSchemas {
+		rows = append(rows, row{"the interface alone, " + s.name, s.decls, "<s:a>x</s:a>", into[aloneHolder](), aloneHolder{A: "x"}})
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf("", row.body)
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
+			}
+		})
+	}
+}
+
+// TestDecodeSubstitutionGroupTypeMismatch pins item 6 of Decode's doc for a
+// substitution group's interface field: no branch set, a short one, and a
+// field of the head's named type where codegen emits the interface, are each
+// ErrTypeMismatch, no decline, from Decode and CheckDecode alike.
+func TestDecodeSubstitutionGroupTypeMismatch(t *testing.T) {
+	type headTyped struct{ A grpA }
+	data := instanceOf("", "<s:m>x</s:m>")
+	rows := []struct {
+		name string
+		into target
+		want string
+	}{
+		{"no WithBranches", into[grpHolder](),
+			"no WithBranches supplies the branches of codec.grpAGroup, the interface of field A of codec.grpHolder, where codegen emits 2"},
+		{"one branch short", into[grpHolder](WithBranches[grpAGroup](grpAGroupA{})),
+			"WithBranches supplies 1 branches of codec.grpAGroup where codegen emits 2"},
+		{"the head's named type", into[headTyped](),
+			"field 0 of codec.headTyped is A codec.grpA where codegen emits A I for a substitution group's sealed interface I"},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, groupSchema)
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if got != nil || err == nil {
+				t.Fatalf("Decode = (%v, %v), want no value and an error", got, err)
+			}
+			if want := ErrTypeMismatch.Error() + ": " + row.want; err.Error() != want {
+				t.Errorf("error = %q, want %q", err, want)
+			}
+			var de *DeclineError
+			if !errors.Is(err, ErrTypeMismatch) || errors.As(err, &de) {
+				t.Errorf("error %v: want ErrTypeMismatch alone", err)
+			}
+			assertProbeMismatch(t, row.into.check(schema), err)
+		})
 	}
 }
