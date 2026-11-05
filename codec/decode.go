@@ -261,11 +261,14 @@ func (e *chargedError) Unwrap() []error {
 // Result (Decode's doc, item 4): the validator reached a check it did not
 // perform, so the instance is not proven valid. It wraps
 // errors.ErrUnsupported, as a [*DeclineError] does; errors.As to each type
-// tells the two apart.
+// tells the two apart. It carries only the first, in document order, of the
+// Result's validate.Unevaluated checks; the full list is
+// validate.Result.Unevaluated, which a caller reaches by validating with
+// package validate directly (validate.New, then validate/xmlsrc.Validate).
 type UndecidedError struct{ u validate.Unevaluated }
 
-// Unevaluated returns the first of the Result's validate.Unevaluated checks,
-// in document order: its rule, its instance Loc and its message.
+// Unevaluated returns the one check e carries: its rule, its instance Loc and
+// its message.
 func (e *UndecidedError) Unevaluated() validate.Unevaluated { return e.u }
 
 // Error names the Unevaluated's instance Loc and rule.

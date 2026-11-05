@@ -210,9 +210,27 @@ func readmeDecode(schema *xsd.Schema, backend value.Backend) {
 	// order.Order is the generated type for order.xml's document element.
 	o, err := codec.Decode[order.Order](schema, backend, data, codec.WithURI("order.xml"))
 	if err != nil {
-		// Every violation of a rejected instance, as Decode's item 3 reaches them.
-		for _, v := range codec.ViolationsOf(err) {
-			fmt.Println(v.Loc, v.Rule)
+		var ue *codec.UndecidedError
+		var de *codec.DeclineError
+		switch vs := codec.ViolationsOf(err); {
+		case vs != nil:
+			// Item 3: every violation of a rejected instance.
+			for _, v := range vs {
+				fmt.Println(v.Loc, v.Rule)
+			}
+		case errors.As(err, &ue):
+			// Item 4: the check the validator left undecided.
+			fmt.Println(ue.Unevaluated().Loc(), ue.Unevaluated().Rule())
+		case errors.As(err, &de):
+			// Items 5 and 7: the construct codec declined.
+			fmt.Println(de.Loc(), de.Construct())
+		case errors.Is(err, codec.ErrTypeMismatch):
+			// Item 6: T does not match the declaration.
+			fmt.Println(err)
+		default:
+			// A source fault, a backend fault, or a nil schema's plain error.
+			// For a source fault, xsderr.RuleOf(err) returns its rule.
+			fmt.Println(err)
 		}
 		log.Fatal(err)
 	}
