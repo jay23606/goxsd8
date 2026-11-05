@@ -29,7 +29,8 @@ func TestDecodeURI(t *testing.T) {
 		if !errors.As(err, &de) {
 			return "", false
 		}
-		return de.Loc().String(), true
+		loc, charged := de.Loc()
+		return loc.String(), charged
 	}
 	// viaUndecided reads the Loc of the *UndecidedError err wraps.
 	viaUndecided := func(err error) (string, bool) {

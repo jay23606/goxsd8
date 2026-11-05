@@ -348,26 +348,28 @@ func TestDecodeTypeMismatch(t *testing.T) {
 	}
 	rows := []struct {
 		name   string
-		decode func() (any, error)
+		schema *xsd.Schema
+		data   []byte
+		into   target
 		want   string
 	}{
-		{"renamed field", func() (any, error) { return Decode[renamed](schema, strict.New(), data) },
+		{"renamed field", schema, data, into[renamed](),
 			ErrTypeMismatch.Error() + ": field 5 of codec.renamed is Opt3 *string where codegen emits Opt2 *string"},
-		{"retyped field", func() (any, error) { return Decode[retyped](schema, strict.New(), data) },
+		{"retyped field", schema, data, into[retyped](),
 			ErrTypeMismatch.Error() + ": field 1 of codec.retyped is Opt string where codegen emits Opt *string"},
-		{"field count", func() (any, error) { return Decode[short](schema, strict.New(), data) },
+		{"field count", schema, data, into[short](),
 			ErrTypeMismatch.Error() + ": codec.short has 1 fields where codegen emits 6"},
-		{"no struct", func() (any, error) { return Decode[string](schema, strict.New(), data) },
+		{"no struct", schema, data, into[string](),
 			ErrTypeMismatch.Error() + ": string is no struct"},
-		{"a struct for a simple root", func() (any, error) { return Decode[struct{ A string }](simple, strict.New(), simpleData) },
+		{"a struct for a simple root", simple, simpleData, into[struct{ A string }](),
 			ErrTypeMismatch.Error() + ": the underlying type of struct { A string } is not string"},
-		{"a type over int for a simple root", func() (any, error) { return Decode[count](simple, strict.New(), simpleData) },
+		{"a type over int for a simple root", simple, simpleData, into[count](),
 			ErrTypeMismatch.Error() + ": the underlying type of codec.count is not string"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
-			got, err := row.decode()
-			if !reflect.ValueOf(got).IsNil() || err == nil {
+			got, err := row.into.decode(row.schema, row.data)
+			if got != nil || err == nil {
 				t.Fatalf("Decode = (%v, %v), want no value and an error", got, err)
 			}
 			if err.Error() != row.want {
@@ -380,6 +382,7 @@ func TestDecodeTypeMismatch(t *testing.T) {
 			if _, isRule := xsderr.RuleOf(err); isRule || errors.Is(err, errors.ErrUnsupported) || errors.As(err, &de) {
 				t.Errorf("error %v is a rule or a decline, want ErrTypeMismatch alone", err)
 			}
+			assertProbeMismatch(t, row.into.check(row.schema), err)
 		})
 	}
 	// A document element with no top-level declaration and no xsi:type is
@@ -678,19 +681,19 @@ func TestChoiceTypesAreCodegens(t *testing.T) {
 func TestDecodeChoice(t *testing.T) {
 	str := func(s string) *string { return &s }
 	rows := []struct {
-		name   string
-		decls  string
-		attrs  string
-		body   string
-		decode func(*xsd.Schema, []byte) (any, error)
-		want   any
+		name  string
+		decls string
+		attrs string
+		body  string
+		into  target
+		want  any
 	}{
-		{"bare interface, first branch", pickSchema, "", "<s:a> x </s:a>", decodeInto[pick](pickBranches), pick(pickA{A: " x "})},
-		{"bare interface, repeated branch", pickSchema, "", "<s:b> 1  2 </s:b><s:b>3</s:b><s:b/>", decodeInto[pick](pickBranches), pick(pickB{B: []string{"1 2", "3", ""}})},
-		{"emptiable choice, empty match", optSchema, "", "", decodeInto[opt](optBranches), opt{}},
-		{"emptiable choice, its optional alternative present", optSchema, "", "<s:b>v</s:b>", decodeInto[opt](optBranches), opt{Choice: optB{B: "v"}}},
-		{"emptiable choice, its required alternative", optSchema, "", "<s:a>w</s:a>", decodeInto[opt](optBranches), opt{Choice: optA{A: "w"}}},
-		{"attributes beside the choice", attributedSchema, ` tag="t" choice="c"`, "<s:b>v</s:b>", decodeInto[attributed](attributedBranches),
+		{"bare interface, first branch", pickSchema, "", "<s:a> x </s:a>", into[pick](pickBranches), pick(pickA{A: " x "})},
+		{"bare interface, repeated branch", pickSchema, "", "<s:b> 1  2 </s:b><s:b>3</s:b><s:b/>", into[pick](pickBranches), pick(pickB{B: []string{"1 2", "3", ""}})},
+		{"emptiable choice, empty match", optSchema, "", "", into[opt](optBranches), opt{}},
+		{"emptiable choice, its optional alternative present", optSchema, "", "<s:b>v</s:b>", into[opt](optBranches), opt{Choice: optB{B: "v"}}},
+		{"emptiable choice, its required alternative", optSchema, "", "<s:a>w</s:a>", into[opt](optBranches), opt{Choice: optA{A: "w"}}},
+		{"attributes beside the choice", attributedSchema, ` tag="t" choice="c"`, "<s:b>v</s:b>", into[attributed](attributedBranches),
 			attributed{Choice: attributedB{B: "v"}, Choice2: str("c"), Tag: "t"}},
 	}
 	for _, row := range rows {
@@ -698,26 +701,54 @@ func TestDecodeChoice(t *testing.T) {
 			schema := schemaOf(t, row.decls)
 			data := instanceOf(row.attrs, row.body)
 			mustAccept(t, schema, data)
-			got, err := row.decode(schema, data)
+			got, err := row.into.decode(schema, data)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !reflect.DeepEqual(got, row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
+			}
 		})
 	}
 }
 
-// decodeInto returns a function decoding data against schema into T under
-// opts and returning the value T holds, or nil with Decode's error.
-func decodeInto[T any](opts ...Option) func(*xsd.Schema, []byte) (any, error) {
-	return func(schema *xsd.Schema, data []byte) (any, error) {
-		v, err := Decode[T](schema, strict.New(), data, opts...)
-		if err != nil {
-			return nil, err
-		}
-		return *v, nil
+// A target is one T and option list, which a row both decodes into and
+// probes: decode decodes data against schema into T under the options and
+// returns the value T holds, or nil with Decode's error, and check returns
+// CheckDecode's error for schema's s:r, the document element instanceOf
+// writes, under the same T and options.
+type target struct {
+	decode func(*xsd.Schema, []byte) (any, error)
+	check  func(*xsd.Schema) error
+}
+
+// into returns the target of T under opts.
+func into[T any](opts ...Option) target {
+	return target{
+		decode: func(schema *xsd.Schema, data []byte) (any, error) {
+			v, err := Decode[T](schema, strict.New(), data, opts...)
+			if err != nil {
+				return nil, err
+			}
+			return *v, nil
+		},
+		check: func(schema *xsd.Schema) error { return CheckDecode[T](schema, rootName, opts...) },
+	}
+}
+
+// rootName is the expanded name of the document element instanceOf writes.
+var rootName = xsd.QName{Space: "urn:s", Local: "r"}
+
+// assertProbeMismatch fails the test unless probe, CheckDecode's error for a
+// row, is decoded, Decode's item-6 error for it: an error errors.Is reports as
+// ErrTypeMismatch, of the same text, which carries no instance Loc.
+func assertProbeMismatch(t *testing.T, probe, decoded error) {
+	t.Helper()
+	if probe == nil || !errors.Is(probe, ErrTypeMismatch) || probe.Error() != decoded.Error() {
+		t.Errorf("CheckDecode = %v, want Decode's %v", probe, decoded)
 	}
 }
 
@@ -748,48 +779,48 @@ func TestDecodeChoiceTypeMismatch(t *testing.T) {
 	pickData := instanceOf("", "<s:a>x</s:a>")
 	tagged := instanceOf(` tag="t"`, "<s:a>x</s:a>")
 	rows := []struct {
-		name   string
-		decls  string
-		data   []byte
-		decode func(*xsd.Schema, []byte) (any, error)
-		want   string
+		name  string
+		decls string
+		data  []byte
+		into  target
+		want  string
 	}{
-		{"no WithBranches", pickSchema, pickData, decodeInto[pick](),
+		{"no WithBranches", pickSchema, pickData, into[pick](),
 			"no WithBranches supplies the branches of codec.pick, the interface of T, where codegen emits 2"},
-		{"one branch short", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{})),
+		{"one branch short", pickSchema, pickData, into[pick](WithBranches[pick](pickA{})),
 			"WithBranches supplies 1 branches of codec.pick where codegen emits 2"},
-		{"one extra branch", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{}, pickB{}, pickC{})),
+		{"one extra branch", pickSchema, pickData, into[pick](WithBranches[pick](pickA{}, pickB{}, pickC{})),
 			"WithBranches supplies 3 branches of codec.pick where codegen emits 2"},
-		{"a pointer branch", pickSchema, pickData, decodeInto[pick](WithBranches[pick](&pickA{}, pickB{})),
+		{"a pointer branch", pickSchema, pickData, into[pick](WithBranches[pick](&pickA{}, pickB{})),
 			"WithBranches supplies *codec.pickA, no struct, as a branch of codec.pick"},
-		{"a nil branch", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{}, nil)),
+		{"a nil branch", pickSchema, pickData, into[pick](WithBranches[pick](pickA{}, nil)),
 			"WithBranches supplies a nil branch of codec.pick"},
-		{"a branch twice", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{}, pickA{})),
+		{"a branch twice", pickSchema, pickData, into[pick](WithBranches[pick](pickA{}, pickA{})),
 			"WithBranches supplies codec.pickA twice as a branch of codec.pick"},
-		{"a branch of no alternative's shape", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{}, pickC{})),
+		{"a branch of no alternative's shape", pickSchema, pickData, into[pick](WithBranches[pick](pickA{}, pickC{})),
 			"branch codec.pickC of codec.pick has the shape of no branch struct codegen emits that an earlier branch did not match"},
-		{"two branches of one alternative's shape", pickSchema, pickData, decodeInto[pick](WithBranches[pick](pickA{}, pickA2{})),
+		{"two branches of one alternative's shape", pickSchema, pickData, into[pick](WithBranches[pick](pickA{}, pickA2{})),
 			"branch codec.pickA2 of codec.pick has the shape of no branch struct codegen emits that an earlier branch did not match"},
-		{"a struct where codegen emits the bare interface", pickSchema, pickData, decodeInto[opt](optBranches),
+		{"a struct where codegen emits the bare interface", pickSchema, pickData, into[opt](optBranches),
 			"T is codec.opt, no interface, where codegen emits a sealed interface"},
-		{"the bare interface where codegen emits a struct", optSchema, pickData, decodeInto[optChoice](optBranches),
+		{"the bare interface where codegen emits a struct", optSchema, pickData, into[optChoice](optBranches),
 			"codec.optChoice is no struct"},
-		{"an interface whose method is exported", pickSchema, pickData, decodeInto[exported](),
+		{"an interface whose method is exported", pickSchema, pickData, into[exported](),
 			"T is codec.exported, which is not an interface of one unexported method, codegen's sealed interface"},
-		{"an interface of two methods", pickSchema, pickData, decodeInto[twoMethods](),
+		{"an interface of two methods", pickSchema, pickData, into[twoMethods](),
 			"T is codec.twoMethods, which is not an interface of one unexported method, codegen's sealed interface"},
-		{"the choice's field not an interface", attributedSchema, tagged, decodeInto[stringChoice](),
+		{"the choice's field not an interface", attributedSchema, tagged, into[stringChoice](),
 			"field Choice of codec.stringChoice is string, no interface, where codegen emits a sealed interface"},
-		{"the choice's field misnamed", attributedSchema, tagged, decodeInto[misnamed](attributedBranches),
+		{"the choice's field misnamed", attributedSchema, tagged, into[misnamed](attributedBranches),
 			"field 0 of codec.misnamed is C codec.attributedChoice where codegen emits Choice, a sealed interface"},
-		{"an attribute field after the choice's", attributedSchema, tagged, decodeInto[attributeShort](attributedBranches),
+		{"an attribute field after the choice's", attributedSchema, tagged, into[attributeShort](attributedBranches),
 			"field 1 of codec.attributeShort is Tag string where codegen emits Choice2 *string"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
 			schema := schemaOf(t, row.decls)
 			mustAccept(t, schema, row.data)
-			got, err := row.decode(schema, row.data)
+			got, err := row.into.decode(schema, row.data)
 			if got != nil || err == nil {
 				t.Fatalf("Decode = (%v, %v), want no value and an error", got, err)
 			}
@@ -800,6 +831,7 @@ func TestDecodeChoiceTypeMismatch(t *testing.T) {
 			if !errors.Is(err, ErrTypeMismatch) || errors.As(err, &de) {
 				t.Errorf("error %v: want ErrTypeMismatch alone", err)
 			}
+			assertProbeMismatch(t, row.into.check(schema), err)
 		})
 	}
 }
@@ -829,6 +861,9 @@ func TestWithBranches(t *testing.T) {
 			}
 			if !reflect.DeepEqual(*got, want) {
 				t.Errorf("Decode = %#v, want %#v", *got, want)
+			}
+			if err := CheckDecode[pick](schema, rootName, row.opts...); err != nil {
+				t.Errorf("CheckDecode = %v, want nil under the options Decode decoded with", err)
 			}
 		})
 	}
@@ -930,33 +965,36 @@ func TestRefTypesAreCodegens(t *testing.T) {
 func TestDecodeElementRef(t *testing.T) {
 	str := func(s string) *refB { b := refB(s); return &b }
 	rows := []struct {
-		name   string
-		decls  string
-		body   string
-		decode func(*xsd.Schema, []byte) (any, error)
-		want   any
+		name  string
+		decls string
+		body  string
+		into  target
+		want  any
 	}{
-		{"one, optional and repeated, present", refSchema, "<s:a> x </s:a><s:b> 1  2 </s:b><s:c>p</s:c><s:c>q</s:c>", decodeInto[refs](),
+		{"one, optional and repeated, present", refSchema, "<s:a> x </s:a><s:b> 1  2 </s:b><s:c>p</s:c><s:c>q</s:c>", into[refs](),
 			refs{A: " x ", B: str("1 2"), C: []refC{"p", "q"}}},
-		{"optional and repeated absent", refSchema, "<s:a>x</s:a>", decodeInto[refs](), refs{A: "x"}},
-		{"a head blocking substitution", blockedSchema, "<s:h>x</s:h>", decodeInto[refHolder](), refHolder{H: "x"}},
-		{"a head blocking its member's derivation", derivationBlockedSchema, "<s:h> x </s:h>", decodeInto[refHolder](), refHolder{H: " x "}},
-		{"a head whose one member is abstract", abstractMemberSchema, "<s:h>x</s:h>", decodeInto[refHolder](), refHolder{H: "x"}},
-		{"a choice's local alternative beside a ref of its Go name and shape", refChoiceSchema, "<s:a>v</s:a>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceA{A: "v"})},
-		{"a choice's ref alternative", refChoiceSchema, "<s:A>v</s:A>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceA2{A: "v"})},
-		{"a choice's repeated ref alternative", refChoiceSchema, "<s:k> u  v </s:k><s:k>w</s:k>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceK{K: []refK{"u v", "w"}})},
+		{"optional and repeated absent", refSchema, "<s:a>x</s:a>", into[refs](), refs{A: "x"}},
+		{"a head blocking substitution", blockedSchema, "<s:h>x</s:h>", into[refHolder](), refHolder{H: "x"}},
+		{"a head blocking its member's derivation", derivationBlockedSchema, "<s:h> x </s:h>", into[refHolder](), refHolder{H: " x "}},
+		{"a head whose one member is abstract", abstractMemberSchema, "<s:h>x</s:h>", into[refHolder](), refHolder{H: "x"}},
+		{"a choice's local alternative beside a ref of its Go name and shape", refChoiceSchema, "<s:a>v</s:a>", into[refChoice](refChoiceBranches), refChoice(refChoiceA{A: "v"})},
+		{"a choice's ref alternative", refChoiceSchema, "<s:A>v</s:A>", into[refChoice](refChoiceBranches), refChoice(refChoiceA2{A: "v"})},
+		{"a choice's repeated ref alternative", refChoiceSchema, "<s:k> u  v </s:k><s:k>w</s:k>", into[refChoice](refChoiceBranches), refChoice(refChoiceK{K: []refK{"u v", "w"}})},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
 			schema := schemaOf(t, row.decls)
 			data := instanceOf("", row.body)
 			mustAccept(t, schema, data)
-			got, err := row.decode(schema, data)
+			got, err := row.into.decode(schema, data)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !reflect.DeepEqual(got, row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
 			}
 		})
 	}
@@ -992,26 +1030,26 @@ func TestDecodeElementRefTypeMismatch(t *testing.T) {
 	}
 	refData := instanceOf("", "<s:a>x</s:a>")
 	rows := []struct {
-		name   string
-		decls  string
-		data   []byte
-		decode func(*xsd.Schema, []byte) (any, error)
-		want   string
+		name  string
+		decls string
+		data  []byte
+		into  target
+		want  string
 	}{
-		{"string at a ref", refSchema, refData, decodeInto[plainOne](),
+		{"string at a ref", refSchema, refData, into[plainOne](),
 			"field 0 of codec.plainOne is A string where codegen emits A N for a named type N over string"},
-		{"*string at an optional ref", refSchema, refData, decodeInto[plainOptional](),
+		{"*string at an optional ref", refSchema, refData, into[plainOptional](),
 			"field 1 of codec.plainOptional is B *string where codegen emits B *N for a named type N over string"},
-		{"[]string at a repeated ref", refSchema, refData, decodeInto[plainRepeated](),
+		{"[]string at a repeated ref", refSchema, refData, into[plainRepeated](),
 			"field 2 of codec.plainRepeated is C []string where codegen emits C []N for a named type N over string"},
-		{"a named type at a local element", shapesSchema, instanceOf(` req="r"`, "<s:one>x</s:one><s:tok>t</s:tok>"), decodeInto[namedLocal](),
+		{"a named type at a local element", shapesSchema, instanceOf(` req="r"`, "<s:one>x</s:one><s:tok>t</s:tok>"), into[namedLocal](),
 			"field 0 of codec.namedLocal is One codec.refA where codegen emits One string"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
 			schema := schemaOf(t, row.decls)
 			mustAccept(t, schema, row.data)
-			got, err := row.decode(schema, row.data)
+			got, err := row.into.decode(schema, row.data)
 			if got != nil || err == nil {
 				t.Fatalf("Decode = (%v, %v), want no value and an error", got, err)
 			}
@@ -1022,6 +1060,7 @@ func TestDecodeElementRefTypeMismatch(t *testing.T) {
 			if !errors.Is(err, ErrTypeMismatch) || errors.As(err, &de) {
 				t.Errorf("error %v: want ErrTypeMismatch alone", err)
 			}
+			assertProbeMismatch(t, row.into.check(schema), err)
 		})
 	}
 }

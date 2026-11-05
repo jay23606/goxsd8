@@ -8,10 +8,12 @@ import (
 )
 
 // A DeclineError is a construct [Decode] does not decode; it wraps
-// errors.ErrUnsupported, and Decode's doc states when it is returned.
+// errors.ErrUnsupported, and Decode's and [CheckDecode]'s docs state when
+// each returns one.
 type DeclineError struct {
 	construct construct
-	loc       xsderr.Loc
+	// loc is the instance Loc the decline is charged to, nil for none.
+	loc *xsderr.Loc
 	// detail is the text Error's doc states after the construct.
 	detail string
 }
@@ -21,19 +23,29 @@ func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 
 // Loc returns the instance Loc of the element the decline is charged to: the
 // document element for a construct of its declaration or its type, and the
-// element carrying it for xsi:type.
-func (e *DeclineError) Loc() xsderr.Loc { return e.loc }
+// element carrying it for xsi:type, and true. For a decline [CheckDecode]
+// returns, which reads no instance, it returns the zero Loc and false.
+func (e *DeclineError) Loc() (xsderr.Loc, bool) {
+	if e.loc == nil {
+		return xsderr.Loc{}, false
+	}
+	return *e.loc, true
+}
 
-// Error names the instance Loc and the construct, then the declining
-// declaration, the document element's, a particle's element declaration's,
-// local or the top-level one an <element ref> names, or an attribute's, and,
-// for a construct of the document element's type, that type
-// labelled as one, each with its schema Loc, which is the zero Loc for a
-// built-in component; for xsi:type, it names the element and the type the
-// xsi:type names.
+// Error names the instance Loc, where Loc reports one, and the construct,
+// then the declining declaration, the document element's, a particle's
+// element declaration's, local or the top-level one an <element ref> names,
+// or an attribute's, and, for a construct of the document element's type,
+// that type labelled as one, each with its schema Loc, which is the zero Loc
+// for a built-in component; for xsi:type, it names the element and the type
+// the xsi:type names.
 func (e *DeclineError) Error() string {
-	return e.loc.String() + ": codec does not decode " + e.construct.name() + ": " + e.detail +
+	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
+	if e.loc == nil {
+		return text
+	}
+	return e.loc.String() + ": " + text
 }
 
 // Unwrap returns errors.ErrUnsupported.
@@ -127,9 +139,16 @@ func (c construct) name() string {
 	return constructNames[c]
 }
 
-// decline returns the *DeclineError for construct c at the instance Loc loc,
-// detail the text Error's doc states after the construct. No schema or
+// decline returns the *DeclineError for construct c, charged to no instance
+// Loc, detail the text Error's doc states after the construct. No schema or
 // instance rule is violated, so it carries no xsderr rule (STYLE E2).
-func decline(loc xsderr.Loc, c construct, detail string) *DeclineError {
-	return &DeclineError{construct: c, loc: loc, detail: detail}
+func decline(c construct, detail string) *DeclineError {
+	return &DeclineError{construct: c, detail: detail}
+}
+
+// at returns a copy of e charged to the instance Loc loc.
+func (e *DeclineError) at(loc xsderr.Loc) *DeclineError {
+	charged := *e
+	charged.loc = &loc
+	return &charged
 }

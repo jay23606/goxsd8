@@ -5,12 +5,13 @@
 // # Decode (M10's first slice)
 //
 //	func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error)
+//	func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) error
 //	type Option func(*config)
 //	func WithURI(uri string) Option
 //	func WithBranches[I any](branches ...I) Option
 //	func WithLogger(l *slog.Logger) Option
 //	type DeclineError struct{ ... }
-//	func (e *DeclineError) Loc() xsderr.Loc
+//	func (e *DeclineError) Loc() (xsderr.Loc, bool)
 //	func (e *DeclineError) Error() string
 //	func (e *DeclineError) Unwrap() error
 //	func (e *DeclineError) Construct() Construct
@@ -25,7 +26,8 @@
 //
 // [Decode] decodes a valid XML instance into the type package codegen emits
 // for its document element's declaration, and [Decode]'s doc states what it
-// returns in every other case. It reads the schema, not T:
+// returns in every other case; [CheckDecode]'s states what it returns for a
+// declaration before an instance arrives. It reads the schema, not T:
 // codegen's structs carry no tags, so Decode derives each field's name, order
 // and Go type from the declaration by codegen's own rules and refuses a T
 // that differs, and reads a sealed interface's branch types from

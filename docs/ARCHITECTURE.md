@@ -99,8 +99,8 @@ Value implementations, parsing, validation, and generation live above them.
 identifier for either of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
-`codec` has left this note: it exports `Decode`/`Option`/`WithURI`/`WithLogger`,
-`DeclineError` and its `Construct`, and `ErrTypeMismatch`, and
+`codec` has left this note: it exports `Decode`/`CheckDecode`/`Option`/`WithURI`/`WithBranches`/`WithLogger`,
+`DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
 imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
 `xsderr` and `internal/goname` (its section says what ships).
 `codegen` has left this note: it exports `Generate`, `CheckTargets` and
@@ -708,7 +708,8 @@ that follow it, and its "Determinism" and "Naming" sections state what `Generate
 does not. `codec` (M10) exports `Decode`, which decodes a valid XML
 instance into the type `codegen` emits for its document element, for the
 slice `codec/doc.go`'s "What decodes" states, declining every other
-construct, `Option`/`WithURI`/`WithLogger`, `DeclineError` and its `Construct`, and `ErrTypeMismatch`. Its
+construct, `CheckDecode`, which returns `Decode`'s schema-level declines and T mismatches
+for a declaration before an instance arrives, `Option`/`WithURI`/`WithBranches`/`WithLogger`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf`, and `ErrTypeMismatch`. Its
 runtime path today runs the whiteSpace stage (`value.ApplyWhiteSpace`)
 and, for a non-string atomic type, the governing `value.Mapping`'s Parse
 and Canonical (`value.GoverningMapping`); every other pipeline stage is

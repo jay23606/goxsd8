@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
-	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -236,23 +235,23 @@ func TestDecodeAtomicTypeMismatch(t *testing.T) {
 	rows := []struct {
 		name, decls string
 		data        []byte
-		decode      func(*xsd.Schema, []byte) (any, error)
+		into        target
 		want        string
 	}{
 		{"a field's width", sequenceOf(`<xs:element name="a" type="xs:int"/>`), instanceOf("", "<s:a>1</s:a>"),
-			decodeInto[width](), "field 0 of codec.width is A int64 where codegen emits A int32"},
+			into[width](), "field 0 of codec.width is A int64 where codegen emits A int32"},
 		{"a simple root's width", `<xs:element name="r" type="xs:int"/>`, instanceOf("", "1"),
-			decodeInto[int64](), "the underlying type of int64 is not int32"},
+			into[int64](), "the underlying type of int64 is not int32"},
 		{"a ref's named type's width", `<xs:element name="h" type="xs:int"/>` + sequenceOf(`<xs:element ref="s:h"/>`), instanceOf("", "<s:h>1</s:h>"),
-			decodeInto[refWidth](), "field 0 of codec.refWidth is H codec.wideH where codegen emits H N for a named type N over int32"},
+			into[refWidth](), "field 0 of codec.refWidth is H codec.wideH where codegen emits H N for a named type N over int32"},
 		{"a ref's named type's underlying type", `<xs:element name="d" type="xs:decimal"/>` + sequenceOf(`<xs:element ref="s:d"/>`), instanceOf("", "<s:d>1</s:d>"),
-			decodeInto[refUnderlying](), "field 0 of codec.refUnderlying is D codec.intD where codegen emits D N for a named type N over big.Rat"},
+			into[refUnderlying](), "field 0 of codec.refUnderlying is D codec.intD where codegen emits D N for a named type N over big.Rat"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
 			schema := schemaOf(t, row.decls)
 			mustAccept(t, schema, row.data)
-			got, err := row.decode(schema, row.data)
+			got, err := row.into.decode(schema, row.data)
 			if got != nil {
 				t.Errorf("Decode = %v, want no value", got)
 			}
@@ -266,6 +265,7 @@ func TestDecodeAtomicTypeMismatch(t *testing.T) {
 			if _, isRule := xsderr.RuleOf(err); isRule {
 				t.Errorf("error %v carries a rule", err)
 			}
+			assertProbeMismatch(t, row.into.check(schema), err)
 		})
 	}
 }

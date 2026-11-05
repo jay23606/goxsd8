@@ -222,8 +222,10 @@ func readmeDecode(schema *xsd.Schema, backend value.Backend) {
 			// Item 4: the check the validator left undecided.
 			fmt.Println(ue.Unevaluated().Loc(), ue.Unevaluated().Rule())
 		case errors.As(err, &de):
-			// Items 5 and 7: the construct codec declined.
-			fmt.Println(de.Loc(), de.Construct())
+			// Items 5 and 7: the construct codec declined, charged to an
+			// instance Loc.
+			loc, _ := de.Loc()
+			fmt.Println(loc, de.Construct())
 		case errors.Is(err, codec.ErrTypeMismatch):
 			// Item 6: T does not match the declaration.
 			fmt.Println(err)

@@ -119,7 +119,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     field of the name and Go type, as item 6 reads it, an earlier
 //     alternative's has, which declines as two choice alternatives whose
 //     branch structs have one shape — each of its attribute uses in order,
-//     and its {attribute wildcard}.
+//     and its {attribute wildcard}. A component of the declaration or its
+//     type that does not resolve, or a particle with {max occurs} 0, is a
+//     plain error in place of a decline, at its point in this order.
 //  6. T does not match the type codegen emits for the declaration, as Decode
 //     derives it from the schema: for a complex {type definition}, T is not a
 //     struct whose fields are exactly those codegen emits, in name, order and
@@ -169,6 +171,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     errors.Is neither errors.ErrUnsupported nor [ErrTypeMismatch]; and
 //     [ViolationsOf] returns nil for it.
 //
+// Items 5 and 6 read no instance; [CheckDecode] returns them for a
+// declaration before an instance arrives.
+//
 // Items 7 and 8 are both found while filling T, and the first in document
 // order is returned: an element's xsi:type, then its attributes' values,
 // present attributes in start-tag order and then the supplied values of
@@ -205,6 +210,48 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 		return nil, err
 	}
 	return out, nil
+}
+
+// CheckDecode returns, reading no instance, the error items 5 and 6 of
+// [Decode]'s doc state for a document element of the top-level element
+// declaration name in schema decoded into T under opts, or nil when neither
+// applies. Of opts it reads only the sets [WithBranches] supplies. The first
+// of these that applies is returned:
+//
+//  1. A nil schema: a plain error.
+//  2. No top-level element declaration of schema has the expanded name name:
+//     a plain error naming name.
+//  3. The declaration has {abstract} true: a plain error, since no document
+//     element validates against it (Structures §3.3.4.3 cvc-elt clause 2).
+//  4. Item 5 of Decode's doc: its *DeclineError, charged to no instance Loc
+//     ([DeclineError.Loc]), or the plain error it states in a decline's
+//     place.
+//  5. Item 6 of Decode's doc: its error, which errors.Is reports as
+//     [ErrTypeMismatch].
+//
+// A plain error is no *DeclineError, wraps neither [ErrTypeMismatch] nor
+// errors.ErrUnsupported, and carries no xsderr rule. nil means Decode returns
+// neither its item 5 nor its item 6 for a document element of name; Decode's
+// items 2 to 4, 7 and 8 depend on the instance.
+func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) error {
+	if schema == nil {
+		return errors.New("codec: CheckDecode: nil *xsd.Schema")
+	}
+	decl, ok := schema.Element(name)
+	if !ok {
+		return fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.String())
+	}
+	// An answer about the schema, no violation of an instance, so it carries
+	// no xsderr rule (STYLE E2).
+	if decl.Abstract() {
+		return fmt.Errorf("codec: %s has {abstract} true, so no document element validates against it (cvc-elt clause 2)", declSubject(decl))
+	}
+	b, err := bindDecl(&pipeline{schema: schema}, decl)
+	if err != nil {
+		return err
+	}
+	_, err = b.check(reflect.TypeFor[T](), newConfig(opts).branches)
+	return err
 }
 
 // verdict returns nil for a Result Decode decodes, and otherwise the error
@@ -452,37 +499,52 @@ type contentFiller interface {
 }
 
 // bind returns the binder of root's declaration in p's schema, or the first
-// decline Decode's doc states for it, item 5, at root's instance Loc.
+// decline Decode's doc states for it, item 5, charged to root's instance Loc.
+// Item 5 is bindDecl's, which CheckDecode calls too.
 func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
-	schema := p.schema
-	loc := root.Loc()
 	name := expanded(root.Name())
-	decl, ok := schema.Element(name)
+	decl, ok := p.schema.Element(name)
 	if !ok {
 		// Only an xsi:type lets such a document element be assessed
 		// (cvc-assess-elt), so it declines as one, in place of item 5.
 		if err := checkXsiType(root); err != nil {
 			return nil, err
 		}
-		return nil, fmt.Errorf("codec: %s: the document element %s has no top-level declaration", loc, name)
+		return nil, fmt.Errorf("codec: %s: the document element %s has no top-level declaration", root.Loc(), name)
 	}
+	b, err := bindDecl(p, decl)
+	// bindDecl returns its declines unwrapped and uncharged, and no other
+	// error of its wraps one, so the charged copy replaces err whole.
+	var de *DeclineError
+	if errors.As(err, &de) {
+		return nil, de.at(root.Loc())
+	}
+	return b, err
+}
+
+// bindDecl returns the binder of decl, a top-level element declaration in p's
+// schema, or the first decline Decode's doc states for it, item 5, charged to
+// no instance Loc, or the plain error item 5 states in a decline's place. It
+// reads only p's schema.
+func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
+	schema := p.schema
 	if d := declarationDecline(decl); d != 0 {
-		return nil, decline(loc, d, declSubject(decl))
+		return nil, decline(d, declSubject(decl))
 	}
 	td, ok := schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
-		return nil, fmt.Errorf("codec: %s: the {type definition} of %s does not resolve", loc, declSubject(decl))
+		return nil, fmt.Errorf("codec: the {type definition} of %s does not resolve", declSubject(decl))
 	}
 	typeSubject := fmt.Sprintf("the {type definition} of %s, a type defined at %s", declSubject(decl), td.Loc())
 	// TypeDefinition is a closed sum of the two, so the assertions are STYLE
 	// T2's sealed-sum exception.
 	if st, ok := td.(*xsd.SimpleType); ok {
-		return bindSimpleRoot(p, decl, st, loc, typeSubject)
+		return bindSimpleRoot(p, decl, st, typeSubject)
 	}
 	ct, _ := td.(xsd.ComplexType)
 	content, group, d := contentGroup(ct)
 	if d != 0 {
-		return nil, decline(loc, d, typeSubject)
+		return nil, decline(d, typeSubject)
 	}
 	b := &binding{p: p, attributes: map[xsd.QName]int{}}
 	// names is the struct's Namer: the content's fields claim from it in
@@ -493,7 +555,7 @@ func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
 	// sealed interface can bind.
 	var ch *choice
 	var err error
-	b.content, ch, err = bindContent(p, group, names, loc, typeSubject)
+	b.content, ch, err = bindContent(p, group, names, typeSubject)
 	if err != nil {
 		return nil, err
 	}
@@ -503,14 +565,14 @@ func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
 			return nil, err
 		}
 		if d != 0 {
-			return nil, decline(loc, d, subject)
+			return nil, decline(d, subject)
 		}
 		f.name = names.Claim(u.DeclarationName().Local)
 		b.attributes[u.DeclarationName()] = len(b.attrs)
 		b.attrs = append(b.attrs, f)
 	}
 	if _, has := ct.AttributeWildcard(); has {
-		return nil, decline(loc, constructAttributeWildcard, typeSubject)
+		return nil, decline(constructAttributeWildcard, typeSubject)
 	}
 	// codegen/emit.go's shape: a choice occurring once, in a type with no
 	// attribute field, is the type itself unless it has {particles} and one
@@ -523,17 +585,17 @@ func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
 
 // bindContent returns the elementContent of group, a content sequence or
 // choice, its fields named from names, and for a choice that choice, or the
-// first decline Decode's doc states for its particles, item 5, at the instance
-// Loc loc, typeSubject naming the type.
-func bindContent(p *pipeline, group xsd.ModelGroup, names *goname.Namer, loc xsderr.Loc, typeSubject string) (elementContent, *choice, error) {
+// first decline Decode's doc states for its particles, item 5, typeSubject
+// naming the type.
+func bindContent(p *pipeline, group xsd.ModelGroup, names *goname.Namer, typeSubject string) (elementContent, *choice, error) {
 	if group.Compositor() == xsd.CompositorChoice {
-		ch, err := bindChoice(p, group.Particles(), names, loc, typeSubject)
+		ch, err := bindChoice(p, group.Particles(), names, typeSubject)
 		if err != nil {
 			return nil, nil, err
 		}
 		return ch, ch, nil
 	}
-	s, err := bindSequence(p, group.Particles(), names, loc, typeSubject)
+	s, err := bindSequence(p, group.Particles(), names, typeSubject)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -552,9 +614,9 @@ type sequence struct {
 
 // bindSequence returns the sequence of particles, a content sequence's, each
 // field named from names by its element's local name in particle order, or the
-// first decline Decode's doc states for them, item 5, at the instance Loc loc,
-// typeSubject naming the type.
-func bindSequence(pl *pipeline, particles []xsd.Particle, names *goname.Namer, loc xsderr.Loc, typeSubject string) (*sequence, error) {
+// first decline Decode's doc states for them, item 5, typeSubject naming the
+// type.
+func bindSequence(pl *pipeline, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*sequence, error) {
 	s := &sequence{p: pl, children: map[xsd.QName]int{}}
 	for _, p := range particles {
 		el, d, err := particleElement(pl.schema, p)
@@ -562,14 +624,14 @@ func bindSequence(pl *pipeline, particles []xsd.Particle, names *goname.Namer, l
 			return nil, err
 		}
 		if d != 0 {
-			return nil, decline(loc, d, "a particle of "+typeSubject)
+			return nil, decline(d, "a particle of "+typeSubject)
 		}
 		f, d, err := elementField(pl.schema, s.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
 		}
 		if d != 0 {
-			return nil, decline(loc, d, declSubject(el))
+			return nil, decline(d, declSubject(el))
 		}
 		f.name = names.Claim(el.Name().Local)
 		s.children[el.Name()] = len(s.fields)
@@ -627,11 +689,11 @@ type choice struct {
 // bindChoice returns the choice of particles, a content choice's, its field
 // named from names by the local name choice before any alternative is read
 // (codegen/doc.go "# Particles"), or the first decline Decode's doc states for
-// them, item 5, at the instance Loc loc, typeSubject naming the type: each
-// alternative's as a sequence's particle declines, then an alternative whose
-// branch struct has an earlier one's shape, which no branch type could tell
-// apart: one of the same name, shape, value type and atomic Go type.
-func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, loc xsderr.Loc, typeSubject string) (*choice, error) {
+// them, item 5, typeSubject naming the type: each alternative's as a
+// sequence's particle declines, then an alternative whose branch struct has an
+// earlier one's shape, which no branch type could tell apart: one of the same
+// name, shape, value type and atomic Go type.
+func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*choice, error) {
 	c := &choice{p: pl, name: names.Claim("choice"), children: map[xsd.QName]int{}}
 	for _, p := range particles {
 		el, d, err := particleElement(pl.schema, p)
@@ -639,14 +701,14 @@ func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, loc
 			return nil, err
 		}
 		if d != 0 {
-			return nil, decline(loc, d, "a particle of "+typeSubject)
+			return nil, decline(d, "a particle of "+typeSubject)
 		}
 		f, d, err := elementField(pl.schema, c.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
 		}
 		if d != 0 {
-			return nil, decline(loc, d, declSubject(el))
+			return nil, decline(d, declSubject(el))
 		}
 		// A branch's {min occurs} 0 reads as 1: the empty match is the nil
 		// interface, so no branch holds an absent value (cos-group-emptiable).
@@ -656,7 +718,7 @@ func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, loc
 		f.name = goname.NewNamer().Claim(el.Name().Local)
 		for _, earlier := range c.alts {
 			if earlier.name == f.name && earlier.shape == f.shape && earlier.value == f.value && earlier.atom == f.atom {
-				return nil, decline(loc, constructSharedBranch, declSubject(el))
+				return nil, decline(constructSharedBranch, declSubject(el))
 			}
 		}
 		c.children[el.Name()] = len(c.alts)
@@ -803,14 +865,14 @@ func (c boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out
 
 // bindSimpleRoot returns the simpleRoot of decl, a top-level element
 // declaration whose {type definition} is st, or the decline Decode's doc
-// states for st, item 5, at the instance Loc loc, subject naming st.
-func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType, loc xsderr.Loc, subject string) (binder, error) {
+// states for st, item 5, subject naming st.
+func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType, subject string) (binder, error) {
 	atom, d, err := simpleDecline(p.schema, st)
 	if err != nil {
 		return nil, err
 	}
 	if d != 0 {
-		return nil, decline(loc, d, subject)
+		return nil, decline(d, subject)
 	}
 	vc, has := decl.ValueConstraint()
 	return &simpleRoot{p: p, scalar: newScalar(atom, st, declSubject(decl), vc, has)}, nil
@@ -1231,7 +1293,7 @@ func unattributed(a xmltree.Attribute) error {
 func checkXsiType(start *xmltree.StartElement) error {
 	for _, a := range start.Attributes() {
 		if a.Name().Space() == xsd.XMLSchemaInstanceNS && a.Name().Local() == "type" {
-			return decline(start.Loc(), constructXsiType, fmt.Sprintf("element %s with xsi:type %q", expanded(start.Name()), a.Value()))
+			return decline(constructXsiType, fmt.Sprintf("element %s with xsi:type %q", expanded(start.Name()), a.Value())).at(start.Loc())
 		}
 	}
 	return nil

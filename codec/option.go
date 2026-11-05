@@ -6,7 +6,7 @@ import (
 	"slices"
 )
 
-// Option configures [Decode]. The zero set of options is a complete,
+// Option configures [Decode] and [CheckDecode]. The zero set of options is a complete,
 // usable configuration: options only replace defaults.
 type Option func(*config)
 
