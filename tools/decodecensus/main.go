@@ -51,7 +51,7 @@
 // dir defaults to the suite at [suiteroot.Default]. -paths adds, after the
 // caveats, the IDs of the cases under each declined construct, in the
 // table's order, then under each listed count: rejected codegen's own
-// struct, decoded where validate rejects, and the placeholder's
+// type, decoded where validate rejects, and the placeholder's
 // ErrTypeMismatch. A case is named by its conformance.CatalogEntry ID, and
 // each list is in byte order of those IDs, whichever driver assessed each
 // case. An absent suite is a supported mode, not a failure: the submodule is
@@ -684,8 +684,8 @@ func ranked(tallies []assess.Tally) []assess.Tally {
 // caveats are the limits on reading any figure the census prints; the
 // report adds the placeholder's, which carries its counts.
 var caveats = []string{
-	"Defects: \"rejected codegen's own struct\" and \"decoded where validate rejects\" are defects in codec, and any count other than 0 is one to file.",
-	"\"failed other\" is no defect count: it holds every Decode error that is no decline, no undecided validation and no type mismatch on codegen's struct: a source fault, every instance validate charges, as the suite's invalid instances are meant to be, and an error of Decode's second read after validation.",
+	"Defects: \"" + rejectedLabel + "\" and \"" + differentialLabel + "\" are defects in codec, and any count other than 0 is one to file.",
+	"\"failed other\" is no defect count: it holds every Decode error that is no decline, no undecided validation and no type mismatch on codegen's type: a source fault, every instance validate charges, as the suite's invalid instances are meant to be, and an error of Decode's second read after validation.",
 	"One decline per case: Decode returns its first decline, so a case counts once, under that construct.",
 	"Cases, not documents: each instance case counts once, however many cases name its instance document or share its schema.",
 	"Assembly: the instance lane's schema is wider. It also serves the suite's own XLink schema, declines an assembly outside the parser's decidable subset, widens the group's schema by the hints on the instance's document element for namespaces it leaves uncovered, and builds a schema from the instance's hints or the built-ins for a group declaring other than one schemaTest, whose cases the census counts as not generating.",
@@ -696,7 +696,7 @@ var caveats = []string{
 // The labels of the counts -paths lists the cases of, each printed on its
 // count's line and over its list.
 const (
-	rejectedLabel     = "rejected codegen's own struct"
+	rejectedLabel     = "rejected codegen's own type"
 	differentialLabel = "decoded where validate rejects"
 	placeholderLabel  = "Decode's ErrTypeMismatch on the placeholder"
 )
@@ -761,6 +761,6 @@ func printCases(w *bufio.Writer, heading string, ids []string) {
 func placeholderCaveat(rep report) string {
 	return fmt.Sprintf("Placeholder: %d case(s) decode into a placeholder struct, not codegen's type: their document element is not well-formed, "+
 		"names no top-level declaration with {abstract} false, or, for %d of them, names one the census found no single generated type for. "+
-		"Decode's ErrTypeMismatch on the placeholder, %d case(s), counts under \"failed other\", never under \"rejected codegen's own struct\".",
+		"Decode's ErrTypeMismatch on the placeholder, %d case(s), counts under \"failed other\", never under \""+rejectedLabel+"\".",
 		rep.placeholder, rep.unresolved, len(rep.sum.PlaceholderMismatch))
 }

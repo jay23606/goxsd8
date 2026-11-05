@@ -94,7 +94,7 @@ const wantCounts = `decodecensus: 12 instance case(s) under %ROOT%
   decoded: 4
   declined: 3
   undecided: 0
-  rejected codegen's own struct: 0
+  rejected codegen's own type: 0
   failed other: 2
   decoded where validate rejects: 0
 
@@ -115,7 +115,7 @@ all content (1):
   S/g/instance/all
 
 === Cases, by listed count ===
-rejected codegen's own struct (0):
+rejected codegen's own type (0):
 decoded where validate rejects (0):
 Decode's ErrTypeMismatch on the placeholder (0):
 `
@@ -196,7 +196,7 @@ func TestReportPrintsEachMergedCount(t *testing.T) {
   decoded: 11
   declined: 4
   undecided: 22
-  rejected codegen's own struct: 2
+  rejected codegen's own type: 2
   failed other: 44
   decoded where validate rejects: 3
 
@@ -215,7 +215,7 @@ x (1):
   S/x/instance/1
 
 === Cases, by listed count ===
-rejected codegen's own struct (2):
+rejected codegen's own type (2):
   S/r/instance/1
   S/r/instance/2
 decoded where validate rejects (3):
