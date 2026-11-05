@@ -411,7 +411,7 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 				"goxsd8: gen: -schema " + flat + " -out " + at("file") + ": the output directory " + at("file") + " exists and is not a directory",
 				[]string{at("ok")}},
 			{"existing file not generated", []string{"-schema", flat, "-out", at("ok"), "-schema", flat, "-out", at("keep")},
-				"goxsd8: gen: -schema " + flat + " -out " + at("keep") + ": " + filepath.Join(at("keep"), "xsd_gen.go") + " exists and its first line does not mark it generated, so it is never overwritten",
+				"goxsd8: gen: -schema " + flat + " -out " + at("keep") + ": " + filepath.Join(at("keep"), "xsd_gen.go") + " exists and its first line does not mark it generated, so it is never overwritten: move or delete it, or choose another output directory",
 				[]string{at("ok")}},
 			// Phase 2: the dangling symlink passes every check and fails
 			// creating the directory, after the first pair was written.
@@ -611,11 +611,15 @@ func TestReportGenerateOSFaultNotDecline(t *testing.T) {
 // any pair compiles or declines, its own pair's decline included: each refusal
 // prints its one line, with no synopsis or helpPointer under it, in argument
 // order, before any line a -schema's compilation prints, and nothing is
-// written. Every row runs in a fresh working directory holding dec.xsd, a
+// written. The noted rows pin usage's gen block on what a refusal does not
+// stop: the refused pair's own unresolved-directive line, with and without
+// -strict. Every row runs in a fresh working directory holding dec.xsd, a
 // schema the generator declines, and its -out paths are relative to it.
 func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 	flat := absFixture(t, flatFixture)
 	broken := absFixture(t, "testdata/broken.xsd")
+	short := absFixture(t, shortSchema)
+	note := "goxsd8: gen: " + short + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document and was skipped; the compiled schema is short of whatever that document declares` + "\n"
 	refusal := func(schema, out, msg string) string {
 		return "goxsd8: gen: -schema " + schema + " -out " + out + ": " + msg + "\n"
 	}
@@ -624,25 +628,33 @@ func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 		name string
 		args []string
 		// refusals is stderr's opening; rejected, when set, is the location of
-		// the one rejection line that follows it, and nothing follows when not.
+		// the one rejection line that follows it, noted, when set, the whole
+		// rest of stderr, and nothing follows when neither is.
 		refusals string
 		rejected string
+		noted    string
 		absent   []string
 	}{
 		{"behind a rejected schema", []string{"-schema", broken, "-out", "my-pkg"},
-			refusal(broken, "my-pkg", notIdentifier), broken, []string{"my-pkg"}},
+			refusal(broken, "my-pkg", notIdentifier), broken, "", []string{"my-pkg"}},
 		{"after a declining pair", []string{"-schema", "dec.xsd", "-out", "gen/x1", "-schema", flat, "-out", "my-pkg"},
-			refusal(flat, "my-pkg", notIdentifier), "", []string{"gen", "my-pkg"}},
+			refusal(flat, "my-pkg", notIdentifier), "", "", []string{"gen", "my-pkg"}},
 		{"before a declining pair", []string{"-schema", flat, "-out", "my-pkg", "-schema", "dec.xsd", "-out", "gen/q"},
-			refusal(flat, "my-pkg", notIdentifier), "", []string{"gen", "my-pkg"}},
+			refusal(flat, "my-pkg", notIdentifier), "", "", []string{"gen", "my-pkg"}},
 		{"hand-written xsd_gen.go behind its own decline", []string{"-schema", "dec.xsd", "-out", "hw/q"},
-			refusal("dec.xsd", "hw/q", "hw/q/xsd_gen.go exists and its first line does not mark it generated, so it is never overwritten"), "", nil},
+			refusal("dec.xsd", "hw/q", "hw/q/xsd_gen.go exists and its first line does not mark it generated, so it is never overwritten: move or delete it, or choose another output directory"), "", "", nil},
 		{"duplicate -out behind a decline", []string{"-schema", "dec.xsd", "-out", "d", "-schema", flat, "-out", "d/"},
-			refusal(flat, "d/", "the output directory d/ is also the output directory of -schema dec.xsd -out d"), "", []string{"d"}},
+			refusal(flat, "d/", "the output directory d/ is also the output directory of -schema dec.xsd -out d"), "", "", []string{"d"}},
 		{"-out a regular file behind a decline", []string{"-schema", "dec.xsd", "-out", "ok", "-schema", flat, "-out", "file"},
-			refusal(flat, "file", "the output directory file exists and is not a directory"), "", []string{"ok"}},
+			refusal(flat, "file", "the output directory file exists and is not a directory"), "", "", []string{"ok"}},
+		{"-out two levels under a regular file behind a decline", []string{"-schema", "dec.xsd", "-out", "ok", "-schema", flat, "-out", "file/q/r"},
+			refusal(flat, "file/q/r", "the output directory file/q/r needs file to be a directory, and file exists and is not one"), "", "", []string{"ok"}},
+		{"unresolved directive of the refused pair", []string{"-schema", short, "-out", "file", "-schema", flat, "-out", "ok"},
+			refusal(short, "file", "the output directory file exists and is not a directory"), "", note, []string{"ok"}},
+		{"unresolved directive of the refused pair under -strict", []string{"-strict", "-schema", short, "-out", "file", "-schema", flat, "-out", "ok"},
+			refusal(short, "file", "the output directory file exists and is not a directory"), "", note, []string{"ok"}},
 		{"every refusal in argument order", []string{"-schema", "dec.xsd", "-out", "my-pkg", "-schema", flat, "-out", "ok", "-schema", broken, "-out", "type"},
-			refusal("dec.xsd", "my-pkg", notIdentifier) + refusal(broken, "type", `the package name "type" is a Go keyword`+packageClause), broken, []string{"my-pkg", "ok", "type"}},
+			refusal("dec.xsd", "my-pkg", notIdentifier) + refusal(broken, "type", `the package name "type" is a Go keyword`+packageClause), broken, "", []string{"my-pkg", "ok", "type"}},
 	}
 	dec := "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" +
 		`<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>` +
@@ -676,8 +688,8 @@ func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 			if !ok {
 				t.Fatalf("gen %q stderr = %q, want it to open %q", r.args, stderr.String(), r.refusals)
 			}
-			if r.rejected == "" && rest != "" {
-				t.Errorf("gen %q stderr after the refusals = %q, want nothing", r.args, rest)
+			if r.rejected == "" && rest != r.noted {
+				t.Errorf("gen %q stderr after the refusals = %q, want %q", r.args, rest, r.noted)
 			}
 			if r.rejected != "" && (!strings.HasPrefix(rest, r.rejected+":") || !strings.Contains(rest, ": [src-resolve] ") || strings.Count(rest, "\n") != 1) {
 				t.Errorf("gen %q stderr after the refusals = %q, want one line %s:<line>:<col>: [src-resolve] <message>", r.args, rest, r.rejected)

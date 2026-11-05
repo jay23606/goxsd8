@@ -65,14 +65,16 @@ const (
 // (STYLE D3/T4).
 var sourceFormats = []sourceFormat{formatXML, formatJSON, formatBER}
 
-// formatVocabulary renders the valid -format values for a diagnosis, in
-// sourceFormats order.
+// formatVocabulary renders the valid -format values for a diagnosis as the
+// alternatives they are, in sourceFormats order: "xml, json or ber", which a
+// caller follows "one of" with.
 func formatVocabulary() string {
 	spellings := make([]string, 0, len(sourceFormats))
 	for _, f := range sourceFormats {
 		spellings = append(spellings, string(f))
 	}
-	return strings.Join(spellings, ", ")
+	last := len(spellings) - 1
+	return strings.Join(spellings[:last], ", ") + " or " + spellings[last]
 }
 
 // runValidate implements `goxsd8 validate`: it compiles the -schema arguments
@@ -662,7 +664,7 @@ func forcedFormat(token string) (sourceFormat, error) {
 	if slices.Contains(sourceFormats, sourceFormat(token)) {
 		return sourceFormat(token), nil
 	}
-	return "", fmt.Errorf("-format %q is not a source format; the values are %s", token, formatVocabulary())
+	return "", fmt.Errorf("-format %q is not a source format; pass one of %s", token, formatVocabulary())
 }
 
 // formatOf reports the source format of one instance argument: the -format
@@ -679,7 +681,7 @@ func formatOf(instance string, forced sourceFormat) (sourceFormat, error) {
 		return forced, nil
 	}
 	if instance == stdinArg {
-		return "", fmt.Errorf("%s: standard input has no extension to name a source format; pass -format %s", instance, formatVocabulary())
+		return "", fmt.Errorf("%s: standard input has no extension to name a source format; pass -format with one of %s", instance, formatVocabulary())
 	}
 	ext := filepath.Ext(instance)
 	for _, f := range sourceFormats {
@@ -687,7 +689,7 @@ func formatOf(instance string, forced sourceFormat) (sourceFormat, error) {
 			return f, nil
 		}
 	}
-	return "", fmt.Errorf("%s: the extension %q names no source format; pass -format %s", instance, ext, formatVocabulary())
+	return "", fmt.Errorf("%s: the extension %q names no source format; pass -format with one of %s", instance, ext, formatVocabulary())
 }
 
 // compileSet assembles roots into ONE schema set and returns it finalized,

@@ -1140,10 +1140,10 @@ func TestValidateFormatVocabulary(t *testing.T) {
 		// alone (#3333).
 		shape bool
 	}{
-		{"unrecognized token", []string{"-format", "yaml"}, `-format "yaml" is not a source format; the values are xml, json, ber`, true},
+		{"unrecognized token", []string{"-format", "yaml"}, `-format "yaml" is not a source format; pass one of xml, json or ber`, true},
 		{"wrong case", []string{"-format", "XML"}, `-format "XML" is not a source format`, true},
 		{"forced ber is reserved", []string{"-format", "ber"}, "-format ber is reserved by the contract and not yet implemented", false},
-		{"extension is the default", []string{}, "the extension \".txt\" names no source format; pass -format xml, json, ber", true},
+		{"extension is the default", []string{}, "the extension \".txt\" names no source format; pass -format with one of xml, json or ber", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -1711,7 +1711,7 @@ func TestValidateUsageErrors(t *testing.T) {
 		{"missing instance", []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, "no such file or directory", false},
 		// - names no source format, and xml and json are both assessed, so
 		// standard input needs -format (#2403).
-		{"stdin without -format", []string{"validate", "-schema", orderSchema, "-"}, "goxsd8: validate: -: standard input has no extension to name a source format; pass -format xml, json, ber", true},
+		{"stdin without -format", []string{"validate", "-schema", orderSchema, "-"}, "goxsd8: validate: -: standard input has no extension to name a source format; pass -format with one of xml, json or ber", true},
 		// A directory instance is charged as a directory before formatOf reads
 		// its extension, whatever its name and whatever -format forced (#2403):
 		// "." and the extension-less directory answered with the extension
@@ -1906,7 +1906,7 @@ func TestValidateExtensionCaseSensitive(t *testing.T) {
 	if code := run([]string{"validate", "-schema", orderSchema, "a.XML"}, &stdout, &stderr); code != exitUsage {
 		t.Fatalf("code = %d, want %d (stderr %q)", code, exitUsage, stderr.String())
 	}
-	want := `goxsd8: validate: a.XML: the extension ".XML" names no source format; pass -format xml, json, ber` + "\n"
+	want := `goxsd8: validate: a.XML: the extension ".XML" names no source format; pass -format with one of xml, json or ber` + "\n"
 	if !strings.HasPrefix(stderr.String(), want) {
 		t.Errorf("stderr = %q, want it to begin %q", stderr.String(), want)
 	}

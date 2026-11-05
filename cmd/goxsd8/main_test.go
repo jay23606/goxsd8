@@ -248,7 +248,7 @@ func TestArgumentFaultPrintsOneLine(t *testing.T) {
 // subcommandFault line.
 func TestFormatlessInstanceRefusesTheInvocation(t *testing.T) {
 	const (
-		pass    = "; pass -format xml, json, ber\n"
+		pass    = "; pass -format with one of xml, json or ber\n"
 		txtLine = `goxsd8: validate: testdata/order.txt: the extension ".txt" names no source format` + pass
 		stdLine = "goxsd8: validate: -: standard input has no extension to name a source format" + pass
 	)

@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/kud360/goxsd8/xsd"
 )
@@ -259,14 +260,14 @@ func prepare(t Target, earlier []Target) (u *unit, declines []*DeclineError, err
 // Package breaks its field's rule; when its Dir equals an earlier target's
 // non-empty Dir after filepath.Clean, the earlier target refused or not; when
 // filepath.Abs cannot make its Dir absolute; and when its Dir exists and is not a
-// directory, or holds an xsd_gen.go that is not a regular file or that Generate's
-// overwrite rule does not let it replace, or either cannot be checked or read;
-// when no go.mod lies in its Dir or any directory above it; when the nearest
-// one cannot be checked or read, or holds no module directive; and when the
-// import path Dir's doc derives for it equals the one derived for an earlier
-// target, the earlier target refused or not. Generate states how the
-// duplicate-Dir and duplicate-import-path refusals name the earlier target,
-// and the overwrite rule.
+// directory, or runs through a path that exists and is not one, or holds an
+// xsd_gen.go that is not a regular file or that Generate's overwrite rule does
+// not let it replace, or either cannot be checked or read; when no go.mod lies in
+// its Dir or any directory above it; when the nearest one cannot be checked or
+// read, or holds no module directive; and when the import path Dir's doc derives
+// for it equals the one derived for an earlier target, the earlier target refused
+// or not. Generate states how the duplicate-Dir and duplicate-import-path
+// refusals name the earlier target, and the overwrite rule.
 func CheckTargets(targets []Target) []*TargetError {
 	var errs []*TargetError
 	for i, t := range targets {
@@ -413,11 +414,16 @@ func moduleDirective(data string) (string, bool) {
 
 // checkDestination fails unless phase 2 may write xsd_gen.go into dir: dir is
 // absent or a directory, and the file is absent or a regular file whose first
-// line marks it generated.
+// line marks it generated. A dir whose path runs through an existing path that
+// is not a directory fails naming that path, the one nonDirectoryAncestor
+// finds.
 func checkDestination(dir string) error {
 	info, err := os.Stat(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
+	}
+	if ancestor, ok := nonDirectoryAncestor(dir, err); ok {
+		return fmt.Errorf("the output directory %s needs %s to be a directory, and %s exists and is not one", dir, ancestor, ancestor)
 	}
 	if err != nil {
 		return fmt.Errorf("checking %s: %w", dir, err)
@@ -441,9 +447,31 @@ func checkDestination(dir string) error {
 		return err
 	}
 	if !generated {
-		return fmt.Errorf("%s exists and its first line does not mark it generated, so it is never overwritten", path)
+		return fmt.Errorf("%s exists and its first line does not mark it generated, so it is never overwritten: move or delete it, or choose another output directory", path)
 	}
 	return nil
+}
+
+// nonDirectoryAncestor returns the nearest of dir's lexical parents, by
+// filepath.Dir, that exists and is not a directory, when err, dir's stat
+// error, is syscall.ENOTDIR: the error a path through a regular file gets. It
+// returns false for any other err, and when no parent below the root or "."
+// stats as an existing non-directory.
+func nonDirectoryAncestor(dir string, err error) (string, bool) {
+	if !errors.Is(err, syscall.ENOTDIR) {
+		return "", false
+	}
+	for p := filepath.Dir(dir); p != filepath.Dir(p); p = filepath.Dir(p) {
+		info, err := os.Stat(p)
+		if errors.Is(err, syscall.ENOTDIR) {
+			continue
+		}
+		if err != nil || info.IsDir() {
+			return "", false
+		}
+		return p, true
+	}
+	return "", false
 }
 
 // isGenerated reports whether the first line of the file at path matches

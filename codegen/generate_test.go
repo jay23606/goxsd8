@@ -223,8 +223,8 @@ func TestGenerateDestination(t *testing.T) {
 
 // TestGenerateRefusalPrecedesDecline pins that a target's own refusal is the
 // error Generate returns even when its Schema also holds a construct the
-// generator declines: a plain error naming the destination, or the Dir that
-// cannot be checked, not a decline.
+// generator declines: a plain error naming the destination, or the existing
+// non-directory a Dir runs through, not a decline.
 func TestGenerateRefusalPrecedesDecline(t *testing.T) {
 	declined := declinedSchema(t)
 	tests := []struct {
@@ -238,7 +238,7 @@ func TestGenerateRefusalPrecedesDecline(t *testing.T) {
 			}
 			write(t, filepath.Join(dir, "q", fileName), "package q\n")
 			return filepath.Join(dir, "q")
-		}, "codegen: target 0: %DIR%/q/xsd_gen.go exists and its first line does not mark it generated, so it is never overwritten"},
+		}, "codegen: target 0: %DIR%/q/xsd_gen.go exists and its first line does not mark it generated, so it is never overwritten: move or delete it, or choose another output directory"},
 		{"xsd_gen.go a directory", func(t *testing.T, dir string) string {
 			if err := os.MkdirAll(filepath.Join(dir, "q", fileName), 0o755); err != nil {
 				t.Fatal(err)
@@ -248,7 +248,15 @@ func TestGenerateRefusalPrecedesDecline(t *testing.T) {
 		{"Dir under a file", func(t *testing.T, dir string) string {
 			write(t, filepath.Join(dir, "f"), "")
 			return filepath.Join(dir, "f", "q")
-		}, "codegen: target 0: checking %DIR%/f/q: stat %DIR%/f/q: not a directory"},
+		}, "codegen: target 0: the output directory %DIR%/f/q needs %DIR%/f to be a directory, and %DIR%/f exists and is not one"},
+		{"Dir two levels under a file", func(t *testing.T, dir string) string {
+			write(t, filepath.Join(dir, "f"), "")
+			return filepath.Join(dir, "f", "q", "r")
+		}, "codegen: target 0: the output directory %DIR%/f/q/r needs %DIR%/f to be a directory, and %DIR%/f exists and is not one"},
+		{"Dir a file spelled with a slash", func(t *testing.T, dir string) string {
+			write(t, filepath.Join(dir, "f"), "")
+			return filepath.Join(dir, "f") + "/"
+		}, "codegen: target 0: the output directory %DIR%/f/ needs %DIR%/f to be a directory, and %DIR%/f exists and is not one"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -288,7 +296,7 @@ func TestCheckTargets(t *testing.T) {
 	want := []string{
 		`codegen: target 1: the package name "type" is a Go keyword`,
 		"dup: the output directory %DIR%/b/ is also the output directory of target 1",
-		"codegen: target 3: %DIR%/keep/xsd_gen.go exists and its first line does not mark it generated, so it is never overwritten",
+		"codegen: target 3: %DIR%/keep/xsd_gen.go exists and its first line does not mark it generated, so it is never overwritten: move or delete it, or choose another output directory",
 		"file: the output directory %DIR%/file exists and is not a directory",
 		"codegen: target 5: no output directory given",
 	}

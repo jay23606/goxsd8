@@ -336,14 +336,19 @@
 //	    as -schema <s> -out <d>, in argument order: among them a last
 //	    path element that is not a Go package name, as with -out
 //	    my-pkg or -out ., an -out repeating an earlier pair's, an -out
-//	    that exists and is not a directory, an existing xsd_gen.go
-//	    whose first line does not mark it generated, which gen never
-//	    overwrites, an -out with no go.mod in it or any directory above
-//	    it, one whose nearest go.mod cannot be read or declares no
-//	    module, and an -out whose import path repeats an earlier
-//	    pair's. Then every pair is compiled, and every failure to
-//	    compile reported after those lines, before anything is
-//	    written; then either every pair is generated or none is,
+//	    that exists and is not a directory or whose path runs through
+//	    a non-directory, an existing xsd_gen.go whose first line does not mark
+//	    it generated, which gen never overwrites, an -out with no
+//	    go.mod in it or any directory above it, one whose nearest
+//	    go.mod cannot be read or declares no module, and an -out whose
+//	    import path repeats an earlier pair's. A refusal stops no
+//	    compilation: every pair is then compiled, a refused pair's
+//	    -schema included, and each line a compilation prints follows
+//	    the refusal lines, every failure to compile and every
+//	    unresolved-directive line, with or without -strict; after a
+//	    refusal nothing is written. Without one, every failure to
+//	    compile is reported before anything is written; then either
+//	    every pair is generated or none is,
 //	    except that a fault while writing can leave some pairs written
 //	    and others not. A fault creating or writing the output exits
 //	    2, named against its pair the same way.
