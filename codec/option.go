@@ -54,10 +54,11 @@ func WithURI(uri string) Option {
 // implementers. Pass one value of each branch, in any order, such as
 // codec.WithBranches[order.Pay](order.PayCard{}, order.PayCash{}); only each
 // value's dynamic type is read. A later WithBranches for the same I replaces
-// an earlier one's set. Decode uses the set wherever T holds I, and ignores a
-// set for any type T does not hold, so one option list may serve every
-// document element of a package; a set for a type that is no interface is
-// never used. With no WithBranches for I, I's set is empty. Decode's doc,
+// an earlier one's set. Decode uses the set wherever T holds I, at any depth:
+// T itself, a field, a nested element's struct or interface, or a branch, and
+// ignores a set for any type T does not hold, so one option list may serve
+// every document element of a package; a set for a type that is no interface
+// is never used. With no WithBranches for I, I's set is empty. Decode's doc,
 // item 6, states when a set is [ErrTypeMismatch].
 func WithBranches[I any](branches ...I) Option {
 	set := branchSet{iface: reflect.TypeFor[I](), branches: make([]reflect.Type, len(branches))}

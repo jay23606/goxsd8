@@ -48,43 +48,57 @@
 //
 // A document element decodes when its declaration, a top-level one, has no
 // {type table} and {nillable} false, and its {type definition} is either a
-// simple type that decodes, its value T's own, or a complex type with
-// element-only content and no {open content} or {attribute wildcard}, whose
-// {particle} is an inline sequence or choice occurring exactly once. Each
-// particle of that sequence or choice is an element declaration with no {type
-// table} and {nillable} false, of a simple type that decodes, no two
-// particles sharing an expanded name: a local one, or the top-level one an
-// <element ref> names where codegen gives the particle's field that
-// declaration's own type, not a sealed interface over its substitution group
-// (codegen's package doc, "# Substitution groups"). Each attribute
-// use is outside the xsi namespace and is typed the same way. Each field is
-// V, a *V or a []V by its occurrence, V the Go type codegen gives its simple
-// type, A or a list's []A, an <element ref>'s the same over the named type
-// over V codegen emits for the referenced declaration, an attribute's by its
-// use's {required} and, as [Decode]'s doc states, its effective value
-// constraint (§3.5.4 key-evc). No element in the instance carries xsi:type.
+// simple type that decodes, its value T's own, or a complex type that
+// decodes: one with element-only content and no {open content} or {attribute
+// wildcard}, whose {particle} is an inline sequence or choice occurring
+// exactly once. Each particle of that sequence or choice is an element
+// declaration with no {type table} and {nillable} false, of a simple type
+// that decodes or of a complex type that decodes, other than xs:anyType and
+// with {abstract} false, by these same rules at any depth, no two particles
+// sharing an expanded name: a local one, or the top-level one an <element
+// ref> names where codegen gives the particle's field that declaration's own
+// type, not a sealed interface over its substitution group (codegen's package
+// doc, "# Substitution groups"). Each attribute use is outside the xsi
+// namespace and is typed the same way. Each field of a particle or attribute
+// use of simple type is V, a *V or a []V by its occurrence, V the Go type
+// codegen gives its simple type, A or a list's []A, an <element ref>'s the
+// same over the named type over V codegen emits for the referenced
+// declaration, an attribute's by its use's {required} and, as [Decode]'s doc
+// states, its effective value constraint (§3.5.4 key-evc). The field of a
+// particle of complex type holds the type codegen emits for that type, local
+// or referenced: a struct S, *S or []S by its occurrence, or, where codegen
+// emits the type's choice's sealed interface as the type itself, that
+// interface I or []I, the bare interface for an optional one, nil meaning
+// absent; it is filled from the child element as T is from the document
+// element, so a type that reaches itself through an optional or repeated
+// particle decodes to the instance's depth. No element in the instance
+// carries xsi:type.
 //
 // A choice decodes into codegen's sealed interface, the branch of the one
 // alternative the instance matches (§3.8.4.3 cvc-model-group) holding its one
 // field: V, or a []V for an alternative whose {max occurs} is above 1 or
 // unbounded, its {min occurs} 0 read as 1, or, for an <element ref>
-// alternative, the same over the referenced declaration's named type.
+// alternative, the same over the referenced declaration's named type, or, for
+// an alternative of complex type, the same over its S or I.
 // The interface is T itself, or, where the type has an attribute use or one
 // occurrence of the choice is emptiable (§3.9.6.3 cos-group-emptiable), the
 // first field of T, a struct whose further fields are the attribute uses'. An
-// empty match is the nil interface.
+// empty match is the nil interface. A particle's complex type gets its
+// interface or struct by the same rule.
 //
 // Every other construct is a [*DeclineError], never a zero value: a content
 // choice occurring other than exactly once, two choice alternatives whose
-// branch structs have one shape, an all group, a nested model group or
-// <group ref>, a choice's model-group alternative included, a wildcard, an
-// <element ref> to an abstract declaration or to one whose substitution group
-// holds another declaration with {abstract} false, mixed, simple or empty
-// content, a particle's element declaration of complex type, local or
-// referenced, xs:anyType included, a nillable element, a union, a special
-// type, a primitive other than those six, a list whose {item type definition}
-// is a union or of such a primitive, declining by its item's construct, and
-// an xsi:type. Two of those are rulings rather than coverage still to come:
+// branch structs have one shape or which share a name where either is of
+// complex type, an all group, a nested model group or <group ref>, a
+// choice's model-group alternative included, a wildcard, an <element ref> to
+// an abstract declaration or to one whose substitution group holds another
+// declaration with {abstract} false, mixed, simple or empty content, a
+// particle's element declaration of type xs:anyType or of a complex type
+// with {abstract} true, local or referenced, a nillable element, a union, a
+// special type, a primitive other than those six, a list whose {item type
+// definition} is a union or of such a primitive, declining by its item's
+// construct, and an xsi:type. Two of those are rulings rather than coverage
+// still to come:
 //
 //   - A declaration with a {type table} declines. The slice that decodes it
 //     takes the branch from the type the validator selected

@@ -22,9 +22,10 @@ type DeclineError struct {
 func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 
 // Loc returns the instance Loc of the element the decline is charged to: the
-// document element for a construct of its declaration or its type, and the
-// element carrying it for xsi:type, and true. For a decline [CheckDecode]
-// returns, which reads no instance, it returns the zero Loc and false.
+// document element for a construct [Decode]'s item 5 finds, of its declaration or type
+// or of a declaration or type its particles reach at any depth, and the element carrying
+// it for xsi:type, and true. For a decline [CheckDecode] returns, which reads no
+// instance, it returns the zero Loc and false.
 func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 	if e.loc == nil {
 		return xsderr.Loc{}, false
@@ -35,11 +36,14 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // Error names the instance Loc, where Loc reports one, and the construct,
 // then the declining declaration, the document element's, a particle's
 // element declaration's, local or the top-level one an <element ref> names,
-// or an attribute's, and, for a construct of the document element's type,
-// that type labelled as one, and, for a construct of a list type's {item type
-// definition}, that item, by its QName where it has one, each with its schema
-// Loc, which is the zero Loc for a built-in component; for xsi:type, it names
-// the element and the type the xsi:type names.
+// at any depth, or an attribute's, and, for a construct of a complex type,
+// the document element's or one a particle's element declaration has at any
+// depth, or of the document element's simple type, that type labelled as
+// its declaration's {type definition}, with no path from the document element,
+// and, for a construct of a list type's {item type definition}, that item, by
+// its QName where it has one, each with its schema Loc, which is the zero Loc
+// for a built-in component; for xsi:type, it names the element and the type
+// the xsi:type names.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -75,10 +79,12 @@ type construct uint8
 
 // The construct values, in the order Decode finds them: the document
 // element's declaration, its type, its content, each particle in order, its
-// attribute uses in order, its attribute wildcard, and the instance. The three
-// of a simple type, constructUnion to constructOtherPrimitive, sit with the
-// particle's, though a document element of simple type, an attribute use, and
-// a list type, by its {item type definition}, decline by them too.
+// attribute uses in order, its attribute wildcard, and the instance. A
+// particle's complex type, examined at the particle, declines by the same
+// constructs from constructEmptyContent on. The three of a simple type,
+// constructUnion to constructOtherPrimitive, sit with the particle's, though
+// a document element of simple type, an attribute use, and a list type, by
+// its {item type definition}, decline by them too.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
@@ -93,7 +99,8 @@ const (
 	constructNestedGroup
 	constructWildcardParticle
 	constructSubstitutionRef
-	constructComplexElement
+	constructAnyTypeElement
+	constructAbstractTypeElement
 	constructSharedName
 	constructSharedBranch
 	constructUnion
@@ -106,28 +113,29 @@ const (
 
 // constructNames holds, indexed by construct, each construct's name.
 var constructNames = [...]string{
-	constructTypeTable:         "an element declaration with a {type table}",
-	constructNillable:          "an element declaration with {nillable} true",
-	constructEmptyContent:      "empty content",
-	constructSimpleContent:     "simple content",
-	constructMixedContent:      "mixed content",
-	constructOpenContent:       "{open content}",
-	constructGroupRefContent:   "a <group ref> content particle",
-	constructChoiceOccurs:      "a content choice occurring other than exactly once",
-	constructAllContent:        "all content",
-	constructSequenceOccurs:    "a content sequence occurring other than exactly once",
-	constructNestedGroup:       "a nested model group particle",
-	constructWildcardParticle:  "a wildcard particle",
-	constructSubstitutionRef:   "an <element ref> particle to a head with {abstract} true or a substitution group of another non-abstract declaration",
-	constructComplexElement:    "a particle's element declaration of complex type",
-	constructSharedName:        "two particles sharing an expanded name",
-	constructSharedBranch:      "two choice alternatives whose branch structs have one shape",
-	constructUnion:             "a union simple type",
-	constructSpecial:           "a special simple type",
-	constructOtherPrimitive:    "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal",
-	constructXsiAttribute:      "an attribute use in the xsi namespace",
-	constructAttributeWildcard: "an {attribute wildcard}",
-	constructXsiType:           "an element carrying xsi:type",
+	constructTypeTable:           "an element declaration with a {type table}",
+	constructNillable:            "an element declaration with {nillable} true",
+	constructEmptyContent:        "empty content",
+	constructSimpleContent:       "simple content",
+	constructMixedContent:        "mixed content",
+	constructOpenContent:         "{open content}",
+	constructGroupRefContent:     "a <group ref> content particle",
+	constructChoiceOccurs:        "a content choice occurring other than exactly once",
+	constructAllContent:          "all content",
+	constructSequenceOccurs:      "a content sequence occurring other than exactly once",
+	constructNestedGroup:         "a nested model group particle",
+	constructWildcardParticle:    "a wildcard particle",
+	constructSubstitutionRef:     "an <element ref> particle to a head with {abstract} true or a substitution group of another non-abstract declaration",
+	constructAnyTypeElement:      "a particle's element declaration of type xs:anyType",
+	constructAbstractTypeElement: "a particle's element declaration whose complex {type definition} has {abstract} true",
+	constructSharedName:          "two particles sharing an expanded name",
+	constructSharedBranch:        "two choice alternatives whose branch structs have one shape",
+	constructUnion:               "a union simple type",
+	constructSpecial:             "a special simple type",
+	constructOtherPrimitive:      "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal",
+	constructXsiAttribute:        "an attribute use in the xsi namespace",
+	constructAttributeWildcard:   "an {attribute wildcard}",
+	constructXsiType:             "an element carrying xsi:type",
 }
 
 // name returns the construct's name.
