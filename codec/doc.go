@@ -52,22 +52,22 @@
 //
 // A document element decodes when its declaration, a top-level one, has no
 // {type table} and {nillable} false, and its {type definition} is either a
-// simple type that decodes, its value T's own, or a complex type that
-// decodes: one with element-only content and no {open content} or {attribute
-// wildcard}, whose {particle} is an inline sequence or choice occurring
-// exactly once. Each particle of that sequence or choice is an element
-// declaration with no {type table} and {nillable} false, of a simple type
-// that decodes or of a complex type that decodes, other than xs:anyType and
-// with {abstract} false, by these same rules at any depth: a local one, or the
-// top-level one an <element ref> names where codegen gives the particle's
-// field that declaration's own type; or the particle is an <element ref>
-// where codegen gives its field a sealed interface over the referenced
+// simple type that decodes, its value T's own, or a complex type that decodes:
+// one with {abstract} false and no {attribute wildcard}, and either empty
+// content or element-only content with no {open content} whose {particle} is
+// an inline sequence or choice occurring exactly once. Each particle of that
+// sequence or choice is an element declaration with no {type table} and
+// {nillable} false, of a simple type that decodes or of a complex type that
+// decodes, other than xs:anyType, by these same rules at any depth: a local
+// one, or the top-level one an <element ref> names where codegen gives the
+// particle's field that declaration's own type; or the particle is an <element
+// ref> where codegen gives its field a sealed interface over the referenced
 // declaration's substitution group (codegen's package doc, "# Substitution
-// groups"), and each declaration of the group with {abstract} false is such
-// a declaration, an abstract head's own properties never read. No two
-// particles share an expanded name, such an interface's particle taking each
-// of those declarations'. Each attribute use is outside the xsi namespace and
-// is typed the same way. No element in the instance carries xsi:type.
+// groups"), and each declaration of the group with {abstract} false is such a
+// declaration, an abstract head's own properties never read. No two particles
+// share an expanded name, such an interface's particle taking each of those
+// declarations'. Each attribute use is outside the xsi namespace and is typed
+// the same way. No element in the instance carries xsi:type.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
@@ -98,9 +98,9 @@
 // whose structs have one shape or which share a name where either is of
 // complex type, holds a substitution group's interface or holds a datatype
 // struct or a list of one, an all group, a nested model group or <group ref>,
-// a choice's model-group alternative included, a wildcard, mixed, simple or
-// empty content, a particle's element declaration of type xs:anyType or of a
-// complex type with {abstract} true, local or referenced, a nillable element,
+// a choice's model-group alternative included, a wildcard, mixed or simple
+// content, a particle's element declaration of type xs:anyType, local or
+// referenced, a complex type with {abstract} true, a nillable element,
 // a union, a special type, a primitive other than those fifteen, a list whose
 // {item type definition} is a union or of such a primitive, declining by its
 // item's construct, and an xsi:type. Two of those are rulings rather than

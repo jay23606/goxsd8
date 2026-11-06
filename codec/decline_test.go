@@ -48,7 +48,12 @@ func TestDecodeDeclines(t *testing.T) {
 			"", "", constructMixedContent, 1, 1},
 		{"simple root of another primitive", `<xs:element name="r" type="xs:hexBinary"/>`, "", "0A", constructOtherPrimitive, 1, 1},
 		{"simple root of a list of another primitive", `<xs:element name="r"><xs:simpleType><xs:list itemType="xs:hexBinary"/></xs:simpleType></xs:element>`, "", "0A 0B", constructOtherPrimitive, 1, 1},
-		{"empty content", root(``), "", "", constructEmptyContent, 1, 1},
+		{"document element of an abstract complex type of empty content, under xsi:type", `<xs:complexType name="ab" abstract="true"/>
+			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, "", constructAbstractTypeElement, 1, 1},
+		{"document element of an abstract complex type of element-only content, under xsi:type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>
+			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, `<s:a>x</s:a>`, constructAbstractTypeElement, 1, 1},
 		{"simple content", root(`<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`), "", "x", constructSimpleContent, 1, 1},
 		{"mixed content", `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
 			"", a, constructMixedContent, 1, 1},
@@ -82,14 +87,12 @@ func TestDecodeDeclines(t *testing.T) {
 		{"wildcard particle", sequenceOf(`<xs:any processContents="lax"/>`), "", a, constructWildcardParticle, 1, 1},
 		{"element ref to a head whose group holds a nillable member", `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" nillable="true" substitutionGroup="s:a"/>` + sequenceOf(`<xs:element ref="s:a"/>`),
 			"", a, constructNillable, 1, 1},
-		{"element ref to an abstract head whose group holds a member of a complex type of empty content", `<xs:complexType name="ct"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
-			<xs:element name="m" type="s:ct" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`), "", `<s:m/>`, constructEmptyContent, 1, 1},
-		{"element ref to a group of two declining members, the nillable one first", `<xs:complexType name="ct"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
+		{"element ref to a group of two declining members, the nillable one first", `<xs:complexType name="ct" mixed="true"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
 			<xs:element name="m" type="s:ct" nillable="true" substitutionGroup="s:h"/><xs:element name="n" type="s:ct" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
 			"", `<s:n/>`, constructNillable, 1, 1},
-		{"element ref to a group of two declining members, the one of empty content first", `<xs:complexType name="ct"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
+		{"element ref to a group of two declining members, the one of mixed content first", `<xs:complexType name="ct" mixed="true"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
 			<xs:element name="n" type="s:ct" substitutionGroup="s:h"/><xs:element name="m" type="s:ct" nillable="true" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
-			"", `<s:n/>`, constructEmptyContent, 1, 1},
+			"", `<s:n/>`, constructMixedContent, 1, 1},
 		{"element ref to a group whose members share a branch shape, a and A", `<xs:element name="h" type="xs:string" abstract="true"/>
 			<xs:element name="a" type="xs:string" substitutionGroup="s:h"/><xs:element name="A" type="xs:string" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
 			"", a, constructSharedBranch, 1, 1},
@@ -103,13 +106,9 @@ func TestDecodeDeclines(t *testing.T) {
 			<xs:element name="e2" type="xs:string" abstract="true" substitutionGroup="s:e0 s:e1"/><xs:element name="e3" type="xs:string" substitutionGroup="s:e2"/>` +
 			sequenceOf(`<xs:element ref="s:e0"/><xs:element ref="s:e1"/>`), "", `<s:e3>x</s:e3><s:e3>y</s:e3>`, constructSharedName, 1, 1},
 		{"element ref to a nillable head", `<xs:element name="h" type="xs:string" nillable="true"/>` + sequenceOf(`<xs:element ref="s:h"/>`), "", `<s:h>x</s:h>`, constructNillable, 1, 1},
-		{"element ref to a head of a complex type of empty content", `<xs:complexType name="ct"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
-			"", `<s:h/>`, constructEmptyContent, 1, 1},
 		{"element ref to a head of another primitive", `<xs:element name="h" type="xs:QName"/>` + sequenceOf(`<xs:element ref="s:h"/>`), "", `<s:h>s:x</s:h>`, constructOtherPrimitive, 1, 1},
 		{"element ref sharing a local particle's expanded name", `<xs:element name="a" type="xs:string"/>` + sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:a"/>`),
 			"", a + a, constructSharedName, 1, 1},
-		{"local element of a complex type of empty content", `<xs:complexType name="ct"><xs:sequence/></xs:complexType>` + sequenceOf(`<xs:element name="a" type="s:ct"/>`),
-			"", `<s:a/>`, constructEmptyContent, 1, 1},
 		{"local element of xs:anyType", sequenceOf(`<xs:element name="a"/>`), "", a, constructAnyTypeElement, 1, 1},
 		{"local element of emptiable mixed content with a default", sequenceOf(`<xs:element name="a" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`),
 			"", `<s:a/>`, constructMixedContent, 1, 1},

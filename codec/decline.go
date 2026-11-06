@@ -82,14 +82,15 @@ type construct uint8
 // element's declaration, its type, its content, each particle in order, its
 // attribute uses in order, its attribute wildcard, and the instance. A
 // particle's complex type, examined at the particle, declines by the same
-// constructs from constructEmptyContent on. The three of a simple type,
-// constructUnion to constructOtherPrimitive, sit with the particle's, though
-// a document element of simple type, an attribute use, and a list type, by
-// its {item type definition}, decline by them too.
+// constructs from constructSimpleContent on, and by
+// constructAbstractTypeElement, which sits with the particle's though the
+// document element's type declines by it too, ahead of its content. The three
+// of a simple type, constructUnion to constructOtherPrimitive, sit with the
+// particle's, though a document element of simple type, an attribute use, and
+// a list type, by its {item type definition}, decline by them too.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
-	constructEmptyContent
 	constructSimpleContent
 	constructMixedContent
 	constructOpenContent
@@ -115,7 +116,6 @@ const (
 var constructNames = [...]string{
 	constructTypeTable:           "an element declaration with a {type table}",
 	constructNillable:            "an element declaration with {nillable} true",
-	constructEmptyContent:        "empty content",
 	constructSimpleContent:       "simple content",
 	constructMixedContent:        "mixed content",
 	constructOpenContent:         "{open content}",
@@ -126,7 +126,7 @@ var constructNames = [...]string{
 	constructNestedGroup:         "a nested model group particle",
 	constructWildcardParticle:    "a wildcard particle",
 	constructAnyTypeElement:      "a particle's element declaration of type xs:anyType",
-	constructAbstractTypeElement: "a particle's element declaration whose complex {type definition} has {abstract} true",
+	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
 	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",
 	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",
 	constructUnion:               "a union simple type",

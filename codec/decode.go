@@ -165,18 +165,18 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - Its {type definition}: a simple type's {variety} and {primitive type
 //     definition}, for a list its {item type definition}'s, whose construct
 //     the list declines by, after which nothing further is examined; or a
-//     complex type's content, then the occurrence of its sequence or choice.
+//     complex type's {abstract}, then its content, then, for element-only
+//     content, the occurrence of its sequence or choice.
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next. A nested model group or wildcard declines first. Then
 //     the particle's element declaration's {type table} and {nillable}, and
 //     its {type definition}: a simple one is examined as the document
-//     element's is; a complex one declines when it is xs:anyType, then when it
-//     has {abstract} true, and is otherwise examined as the document element's
-//     complex type is, from its content to its {attribute wildcard}. Then the
-//     particle declines by an expanded name an earlier particle's field takes,
-//     a particle's field taking its element's expanded name, or, for a
-//     substitution group's interface, each declaration the next bullet
-//     examines.
+//     element's is; a complex one declines when it is xs:anyType, and is
+//     otherwise examined as the document element's complex type is, from its
+//     {abstract} to its {attribute wildcard}. Then the particle declines by an
+//     expanded name an earlier particle's field takes, a particle's field
+//     taking its element's expanded name, or, for a substitution group's
+//     interface, each declaration the next bullet examines.
 //   - Of an <element ref> particle whose field holds a substitution group's
 //     sealed interface (item 6), in place of the referenced declaration's own
 //     properties and type: each declaration of the group with {abstract}
@@ -888,10 +888,10 @@ type binding struct {
 // field returns the field of shape s whose V is b's struct.
 func (b *binding) field(s shape) field { return field{shape: s, arm: structArm{unit: b}} }
 
-// elementContent is the element content of the struct a *binding binds, the
-// fields that precede its attribute fields, a closed sum: a *sequence, the
-// fields of a sequence's particles, or a *choice, the one field holding a
-// choice's sealed interface.
+// elementContent is the content of the struct a *binding binds, the fields
+// that precede its attribute fields, a closed sum: a *sequence, the fields of
+// a sequence's particles, or of none for empty content, or a *choice, the one
+// field holding a choice's sealed interface.
 type elementContent interface {
 	// width is how many of the struct's fields the content's are.
 	width() int
@@ -987,47 +987,68 @@ type unitIndex map[xsd.QName]complexUnit
 
 // complex returns the complex unit of ct, labelled by typeSubject, the one
 // index already holds for key where it holds one, or else the first decline
-// Decode's doc states for ct, item 5, in its order: ct's content, the
-// occurrence of its sequence or choice, each particle in order, each
-// attribute use in order, and its {attribute wildcard}. A nil index binds an
-// inline anonymous ct under no key.
+// Decode's doc states for ct, item 5, in its order: {abstract} true, ct's
+// content, for element-only content the occurrence of its sequence or choice
+// and each particle in order, then each attribute use in order, and its
+// {attribute wildcard}. Empty content binds the struct codegen emits for it, with no
+// field ahead of the attribute fields (codegen/doc.go "# Complex types"). A
+// nil index binds an inline anonymous ct under no key.
 func (run *bindRun) complex(ct xsd.ComplexType, typeSubject string, index unitIndex, key xsd.QName) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
 	}
-	content, group, d := contentGroup(ct)
-	if d != 0 {
-		return nil, decline(d, typeSubject)
+	// Codegen emits no struct for an abstract type: an element of one holds
+	// its governing types' interface, or the struct of its one member type
+	// (codegen/doc.go "# Element declarations").
+	if ct.Abstract() {
+		return nil, decline(constructAbstractTypeElement, typeSubject)
 	}
 	// names is the struct's Namer: the content's fields claim from it in
 	// particle order, then the attribute fields (codegen/doc.go "# Particles").
 	// A bare sealed interface has no struct and discards it.
 	names := goname.NewNamer()
-	// codegen/emit.go's shape: a choice occurring once, in a type with no
-	// attribute field, is the type itself unless it has {particles} and one
-	// occurrence of it is emptiable (cos-group-emptiable). Every attribute use
-	// gives a field or declines, and so does every particle an alternative, so
-	// the counts decide before either is bound.
-	if group.Compositor() == xsd.CompositorChoice && len(ct.AttributeUses()) == 0 &&
-		(len(group.Particles()) == 0 || !run.p.schema.ParticleEmptiable(content)) {
-		c := &choiceRoot{}
-		index.store(key, c)
-		ch, err := bindChoice(run, group.Particles(), names, typeSubject)
+	b := &binding{p: run.p, attributes: map[xsd.QName]int{}}
+	// ContentType is a closed sum, so the switch is STYLE T2's sealed-sum
+	// exception.
+	switch c := ct.ContentType().(type) {
+	case xsd.SimpleContent:
+		return nil, decline(constructSimpleContent, typeSubject)
+	case xsd.EmptyContent:
+		// A valid instance has no character or element child here
+		// (cvc-complex-type clause 1.1), so the sequence of no particle reads
+		// none.
+		index.store(key, b)
+		b.content = &sequence{p: run.p, children: map[xsd.QName]int{}}
+	case xsd.ElementContent:
+		content, group, d := contentGroup(c)
+		if d != 0 {
+			return nil, decline(d, typeSubject)
+		}
+		// codegen/emit.go's shape: a choice occurring once, in a type with no
+		// attribute field, is the type itself unless it has {particles} and one
+		// occurrence of it is emptiable (cos-group-emptiable). Every attribute
+		// use gives a field or declines, and so does every particle an
+		// alternative, so the counts decide before either is bound.
+		if group.Compositor() == xsd.CompositorChoice && len(ct.AttributeUses()) == 0 &&
+			(len(group.Particles()) == 0 || !run.p.schema.ParticleEmptiable(content)) {
+			root := &choiceRoot{}
+			index.store(key, root)
+			ch, err := bindChoice(run, group.Particles(), names, typeSubject)
+			if err != nil {
+				return nil, err
+			}
+			if _, has := ct.AttributeWildcard(); has {
+				return nil, decline(constructAttributeWildcard, typeSubject)
+			}
+			root.sealed = ch.sealed
+			return root, nil
+		}
+		index.store(key, b)
+		var err error
+		b.content, err = bindContent(run, group, names, typeSubject)
 		if err != nil {
 			return nil, err
 		}
-		if _, has := ct.AttributeWildcard(); has {
-			return nil, decline(constructAttributeWildcard, typeSubject)
-		}
-		c.sealed = ch.sealed
-		return c, nil
-	}
-	b := &binding{p: run.p, attributes: map[xsd.QName]int{}}
-	index.store(key, b)
-	var err error
-	b.content, err = bindContent(run, group, names, typeSubject)
-	if err != nil {
-		return nil, err
 	}
 	for _, u := range ct.AttributeUses() {
 		a, err := attributeUse(run.p.schema, u)
@@ -1053,22 +1074,16 @@ func (index unitIndex) store(key xsd.QName, u complexUnit) {
 
 // nested returns the complex unit of ct, the {type definition} of el, a
 // particle's element declaration, or the first decline Decode's doc states
-// for it, item 5: xs:anyType, then {abstract} true, then the constructs of ct
-// in the order complex states, keyed by el's expanded name for a top-level
-// el, by ct's QName for a local el whose {type definition} names it, and
-// under no key for an inline one.
+// for it, item 5: xs:anyType, then the constructs of ct in the order complex
+// states, keyed by el's expanded name for a top-level el, by ct's QName for
+// a local el whose {type definition} names it, and under no key for an
+// inline one.
 func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (complexUnit, error) {
 	subject := typeSubject(el, ct)
 	// xs:anyType is known by name, as codegen's isAnyType knows it: its
 	// AnyType holds raw content, no struct the slice fills.
 	if ct.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}) {
 		return nil, decline(constructAnyTypeElement, subject)
-	}
-	// Codegen emits no struct for an abstract type: an element of one holds
-	// its governing types' interface, or the struct of its one member type
-	// (codegen/doc.go "# Element declarations").
-	if ct.Abstract() {
-		return nil, decline(constructAbstractTypeElement, subject)
 	}
 	if el.ScopeVariety() == xsd.ScopeGlobal {
 		return run.complex(ct, subject, run.elements, el.Name())
@@ -1452,20 +1467,12 @@ func declarationDecline(decl xsd.ElementDeclaration) construct {
 	return 0
 }
 
-// contentGroup returns the {particle} of ct's content and its model group, an
-// inline sequence or choice occurring exactly once, or the construct Decode
-// declines in its place. ContentType and the particle term are closed sums, so
-// the switches are STYLE T2's sealed-sum exception.
-func contentGroup(ct xsd.ComplexType) (xsd.Particle, xsd.ModelGroup, construct) {
-	var content xsd.ElementContent
-	switch c := ct.ContentType().(type) {
-	case xsd.EmptyContent:
-		return xsd.Particle{}, xsd.ModelGroup{}, constructEmptyContent
-	case xsd.SimpleContent:
-		return xsd.Particle{}, xsd.ModelGroup{}, constructSimpleContent
-	case xsd.ElementContent:
-		content = c
-	}
+// contentGroup returns the {particle} of content, a complex type's
+// element-only or mixed content, and its model group, an inline sequence or
+// choice occurring exactly once, or the construct Decode declines in its
+// place. The particle term is a closed sum, so the assertions are STYLE T2's
+// sealed-sum exception.
+func contentGroup(content xsd.ElementContent) (xsd.Particle, xsd.ModelGroup, construct) {
 	if content.Mixed {
 		return xsd.Particle{}, xsd.ModelGroup{}, constructMixedContent
 	}
