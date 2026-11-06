@@ -44,17 +44,33 @@ marshalling code.
 
 ## Quickstart
 
+Install the binary alone:
+
+```sh
+# needs Go 1.26 or newer, as go.mod sets; an older go downloads Go 1.26
+# rather than failing under the default GOTOOLCHAIN=auto, and fails under
+# GOTOOLCHAIN=local
+go install github.com/kud360/goxsd8/cmd/goxsd8@main   # needs no clone
+```
+
+Or clone the repository to build, test and install it from source:
+
 ```sh
 git clone https://github.com/kud360/goxsd8
 cd goxsd8
 git submodule update --init testdata/xsdtests   # W3C suite, ~215 MB
 go build ./... && go test ./...
-go install ./cmd/goxsd8                         # needs Go 1.26 or newer, as go.mod sets
+go install ./cmd/goxsd8
+```
+
+Then, after either `go install` line:
+
+```sh
 export PATH="$(go env GOPATH)/bin:$PATH"
 command -v goxsd8                               # prints the binary's path
 ```
 
-`go build ./...` compiles every package and writes no executable; the
+`go build ./...` compiles every package and writes no executable; either
 `go install` line is what produces the `goxsd8` binary the CLI section below
 invokes. It writes the binary to `go env GOBIN`, or to `$(go env GOPATH)/bin`
 when that is empty, and neither is on `$PATH` by default: the `export` line
