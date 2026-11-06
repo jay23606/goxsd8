@@ -2,7 +2,7 @@
 // decode of instance data into Go values and canonical encode back out —
 // built for minimal allocation.
 //
-// # Decode (M10's first slice)
+// # Decode
 //
 //	func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error)
 //	func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) error
@@ -63,21 +63,13 @@
 // a declaration, an abstract head's own properties never read. No two
 // particles share an expanded name, such an interface's particle taking each
 // of those declarations'. Each attribute use is outside the xsi namespace and
-// is typed the same way. Each field of a particle or attribute use of simple
-// type is V, a *V or a []V by its occurrence, V the Go type codegen gives its
-// simple type, A or a list's []A, an <element ref>'s the same over the named
-// type over V codegen emits for the referenced declaration, an attribute's by
-// its use's {required} and, as [Decode]'s doc states, its effective value
-// constraint (§3.5.4 key-evc). The field of a particle of complex type holds
-// the type codegen emits for that type, local or referenced: a struct S, *S
-// or []S by its occurrence, or, where codegen emits the type's choice's
-// sealed interface as the type itself, that interface I or []I, the bare
-// interface for an optional one, nil meaning absent; it is filled from the
-// child element as T is from the document element, so a type that reaches
-// itself through an optional or repeated particle decodes to the instance's
-// depth. The field of an <element ref> holding a substitution group's
-// interface is that I or []I, the bare interface for an optional one, nil
-// meaning absent. No element in the instance carries xsi:type.
+// is typed the same way. No element in the instance carries xsi:type.
+//
+// Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
+// or I as the next paragraph does. The field of a particle of complex type
+// is filled from the child element as T is from the document element, so a
+// type that reaches itself through an optional or repeated particle decodes
+// to the instance's depth.
 //
 // A choice decodes into codegen's sealed interface, the branch of the one
 // alternative the instance matches (§3.8.4.3 cvc-model-group) holding its one
@@ -93,11 +85,8 @@
 //
 // A substitution group's interface holds, for each child, the branch of the
 // group's declaration the child's expanded name resolves to (§3.9.4.3
-// cvc-accept clause 2.3.2), holding its one field: what the field of an
-// <element ref> occurring once to that declaration holds were its own group
-// that declaration alone, the named type over V, S or I. A group with no
-// declaration of {abstract} false gives the interface no branch, so it is
-// nil.
+// cvc-accept clause 2.3.2), whose field and alternatives item 6 of
+// [Decode]'s doc states.
 //
 // Every other construct is a [*DeclineError], never a zero value: a content
 // choice occurring other than exactly once, two branches of a sealed
@@ -137,44 +126,32 @@
 // Decode runs three stages on a value: whiteSpace, then, for an atomic Go
 // type other than string, the lexical mapping and the conversion to the Go
 // type. On a list value whiteSpace runs once, under the list type, and the
-// other two on each list item, under its {item type definition}. Pattern, facet and
-// assertion stages are validate's, decided on the same backend first, and a whiteSpace
-// failure is a fault of the simple type, a plain error. A lexical mapping or conversion
-// that fails is the error [Decode]'s doc states in item 8, naming the stage, the type,
-// the normalized value or the list item and its position, the instance Loc and, for an
-// element's character content, its byte offset. [WithLogger] traces each stage per value,
-// and the lexical mapping and the conversion per list item, under the "codec" group:
-// whiteSpace under rf-whiteSpace (Datatypes §4.3.6) with the raw text, the lexical
-// mapping under cvc-datatype-valid clause 2.1 with the normalized value or the list item,
-// and the conversion under dt-canonical-mapping (§2.3.1) with the canonical form, each
-// record naming the type and the instance Loc. No package reads GOXSD_DEBUG; its scoping
-// is #1185's.
+// other two on each list item, under its {item type definition}. Pattern,
+// facet and assertion stages are validate's, decided on the same backend
+// first, and a whiteSpace failure is a fault of the simple type, a plain
+// error. A lexical mapping or conversion that fails is the error [Decode]'s
+// doc states in item 8, naming the stage, the type, the normalized value or
+// the list item and its position, the instance Loc and, for an element's
+// character content, its byte offset. Decode traces each stage it runs on the
+// logger [WithLogger] sets, whose doc states each record. No package reads
+// GOXSD_DEBUG.
 //
-// # Planned decode paths, one semantics (M10 — not yet implemented)
+// # Planned decode paths
 //
-// Decode today is the slice above, validate's facet pipeline followed by
-// the three stages the Debuggability section names; no value.Emitter
-// exists. Each path below is planned.
-//
-//   - Runtime path (always available): the facet pipeline +
-//     value.Mapping, driven by the compiled schema. General, reflective,
-//     allocation-tolerant. Hot-path APIs follow the appender convention
-//     (AppendCanonical(dst []byte, v) []byte; ParseBytes([]byte)) so
-//     even this path is allocation-frugal.
-//   - Generated fast path: code emitted at codegen time via
-//     value.Emitter — no intermediate strings, no boxed values, facet
-//     checks inlined, zero-allocation scalar decode on the native
-//     backend.
-//
-// Both paths implement the SAME pipeline stages with the SAME spec rule
-// IDs. Differential tests feed identical input to both and require
-// identical values and identical error rule IDs; testing.AllocsPerRun
-// benchmarks pin the fast path's budget. A fast path that disagrees with
-// the runtime path is wrong by definition.
-//
-// # Planned debuggability (M10 — not yet implemented)
-//
-// Generated fast paths preserve what the Debuggability section states and
-// map back to their emitting backend and schema construct via header
-// comments.
+// Decode today is the slice above, validate's facet pipeline followed by the
+// three stages the Debuggability section names; no value.Emitter exists. Two
+// paths are planned, neither implemented: a runtime path, always available,
+// of the facet pipeline and value.Mapping driven by the compiled schema,
+// general, reflective and allocation-tolerant, whose hot-path APIs follow the
+// appender convention (AppendCanonical(dst []byte, v) []byte;
+// ParseBytes([]byte)) so that it too is allocation-frugal; and a generated
+// fast path, code emitted at codegen time via value.Emitter, with no
+// intermediate strings, no boxed values, facet checks inlined and
+// zero-allocation scalar decode on the native backend. Both implement the
+// SAME pipeline stages with the SAME spec rule IDs: differential tests feed
+// identical input to both and require identical values and identical error
+// rule IDs, testing.AllocsPerRun benchmarks pin the fast path's budget, and a
+// fast path that disagrees with the runtime path is wrong by definition.
+// Generated fast paths preserve what the Debuggability section states and map
+// back to their emitting backend and schema construct via header comments.
 package codec

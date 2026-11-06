@@ -401,9 +401,9 @@ the generated type, here `order.Order`; `go doc
 github.com/kud360/goxsd8/codec Decode` states every error it returns. Once
 `Generate` has written `gen/order`, a program in the same module with
 `schema` and `backend` as above decodes `order.xml` into it, importing
-`github.com/kud360/goxsd8/codec` and the generated package, whose import
-path is the one `Target.Dir`'s doc derives for the `Dir` that `Generate` was
-given:
+`github.com/kud360/goxsd8/codec`, `github.com/kud360/goxsd8/xsderr` and the
+generated package, whose import path is the one `Target.Dir`'s doc derives
+for the `Dir` that `Generate` was given:
 
 ```go
 data, err := os.ReadFile("order.xml")
@@ -415,12 +415,16 @@ o, err := codec.Decode[order.Order](schema, backend, data, codec.WithURI("order.
 if err != nil {
 	var ue *codec.UndecidedError
 	var de *codec.DeclineError
+	rule, _ := xsderr.RuleOf(err)
 	switch vs := codec.ViolationsOf(err); {
 	case vs != nil:
 		// Item 3: every violation of a rejected instance.
 		for _, v := range vs {
 			fmt.Println(v.Loc, v.Rule)
 		}
+	case rule == xsderr.RuleXMLWellFormed:
+		// Item 2: the instance's source fault.
+		fmt.Println(err)
 	case errors.As(err, &ue):
 		// Item 4: the check the validator left undecided.
 		fmt.Println(ue.Unevaluated().Loc(), ue.Unevaluated().Rule())
@@ -433,8 +437,8 @@ if err != nil {
 		// Item 6: T does not match the declaration.
 		fmt.Println(err)
 	default:
-		// A source fault, a backend fault, or a nil schema's plain error.
-		// For a source fault, xsderr.RuleOf(err) returns its rule.
+		// Item 1's and item 5's plain errors, and item 8's fault of the
+		// backend.
 		fmt.Println(err)
 	}
 	log.Fatal(err)

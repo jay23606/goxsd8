@@ -29,12 +29,30 @@ func newConfig(opts []Option) config {
 	return cfg
 }
 
-// WithLogger sets the logger [Decode] traces on at debug level: it hands l
-// to package validate unchanged (validate.WithLogger), and logs one record
-// per stage it runs on each value under the "codec" group, naming the
-// stage's rule, the type, the stage's input and the instance Loc. A nil l
+// WithLogger sets the logger [Decode] traces on at debug level. A nil l
 // selects the silent default ([slog.DiscardHandler]), and a later WithLogger
-// replaces an earlier one.
+// replaces an earlier one. Decode hands l to package validate unchanged
+// (validate.WithLogger), and the records validate logs on it are that
+// package's, none of those below.
+//
+// Decode logs one Debug record per stage it runs on a value: whiteSpace, then,
+// for an atomic Go type other than string, the lexical mapping and the
+// conversion, which on a list value run on each list item. A value of a
+// string Go type therefore logs its whiteSpace record alone. Each record's
+// attributes sit in the "codec" group, its message outside it:
+//
+//   - "whiteSpace": rule "rf-whiteSpace" (Datatypes §4.3.6), input the
+//     characters Decode reads the value from, before whiteSpace.
+//   - "lexical mapping": rule "cvc-datatype-valid" and clause "2.1" (§4.1.4),
+//     input the normalized value, or for a list the list item, as handed to
+//     the governing mapping's Parse, logged before Parse runs, so none where
+//     no mapping of the backend governs the type.
+//   - "conversion": rule "dt-canonical-mapping" (§2.3.1), input the canonical
+//     form the governing mapping's Canonical rendered, logged once it has.
+//
+// Every record also carries type, the type as item 8 of Decode's doc names it,
+// and loc, the instance Loc of the value's source item 8 names, the whole
+// value's for a list item.
 func WithLogger(l *slog.Logger) Option {
 	if l == nil {
 		l = slog.New(slog.DiscardHandler)

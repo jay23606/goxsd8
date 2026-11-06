@@ -26,25 +26,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // returns it. A value is returned exactly when the error is nil.
 //
 // T is the caller's choice: nothing dispatches a document element to its
-// generated type, and item 6 below never compares T's own name. For a complex
-// {type definition} item 6 compares T's fields with those codegen emits for
-// the declaration in name, order and Go type alone, a field's type as item 6
-// reads it, so a T whose fields differ returns [ErrTypeMismatch] where item 6
-// is the first that applies, but a T of the same shape, such as the struct
-// codegen emits for another top-level element of the same type, passes item 6
-// and decodes as the declaration's own struct does, an error only where that
-// one's is. For a simple one item 6 reads T's underlying type alone, so any T
-// over the Go type codegen gives that simple type, its atomic Go type A or,
-// for a list, []A, passes it, such as the type codegen emits for another
-// document element of the same simple type. A caller decoding documents of
-// several roots therefore reads the document element's name itself, through
-// parser/xmltree or encoding/xml, before choosing T.
-//
-// T may be codegen's sealed interface for a choice, as the package doc's
-// "# What decodes" states, and Decode then returns a *T pointing at it. The
-// branch types of every sealed interface, T's or a field's, reach Decode only
-// through [WithBranches], and item 6 holds them to the alternatives by shape:
-// neither T's, the interface's nor a branch's name is compared.
+// generated type, and item 6 below states which T match. A caller decoding
+// documents of several roots therefore reads the document element's name
+// itself, through parser/xmltree or encoding/xml, before choosing T.
 //
 // The slice Decode covers is the package doc's "# What decodes". Decode
 // first assesses data against schema with package validate and decodes only
@@ -69,22 +53,27 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // and converted to the Go type: a boolean's canonical form exactly "true" or
 // "false" (§E.4 f-booleanCanmap), a float's and a double's by
 // strconv.ParseFloat at the Go type's width, and a decimal's into big.Rat,
-// big.Int or a bounded Go integer at its width. backend's governing mapping of
-// each such type must therefore have a non-nil Canonical, as builtin/strict's
-// do; item 8 states the error where one fails. For a list type, whose
-// whiteSpace is collapse (Datatypes §4.3.6, §2.4.1.2), the normalized string
-// is split at each U+0020 into its list items before any is mapped, an empty
-// one into none (§4.1.1 dt-list), and each item is read as above under the
-// list's {item type definition}, a restriction of a list taking its base's
-// (Structures §3.16.2.3); the value is the []A of the items in order. So the
-// value is the instance's own even where a fixed value constraint holds it to
-// an equal one that is not identical (§3.5.4 cvc-au, cvc-elt clause 5.2.2.2.2):
-// -0 against fixed 0 on xs:double decodes to negative zero. The field of an
-// optional attribute use with an effective value constraint is the Go type
-// codegen gives its simple type itself, as codegen emits it, holding the
-// supplied value when the attribute is absent; a whitespace-only element has a
-// character child and holds its own value; and an element absent from the
-// instance supplies nothing, its field nil or not appended to.
+// big.Int or one of the bounded Go integers int64, int32, int16, int8, uint64,
+// uint32, uint16 and uint8 at its width. A float or double literal beyond the
+// type's range is the INF or -INF its mapping rounds it to
+// (·floatingPointRound·, Datatypes §E.1), so it decodes as ±Inf where the
+// backend's Canonical renders that, as builtin/strict's does, and is no item 8
+// error. backend's governing mapping of each such type must therefore have a
+// non-nil Canonical, as builtin/strict's do; item 8 states the error where one
+// fails. For a list type, whose whiteSpace is collapse (Datatypes §4.3.6,
+// §2.4.1.2), the normalized string is split at each U+0020 into its list items
+// before any is mapped, an empty one into none (§4.1.1 dt-list), and each item
+// is read as above under the list's {item type definition}, a restriction of a
+// list taking its base's (Structures §3.16.2.3); the value is the []A of the
+// items in order. So the value is the instance's own even where a fixed value
+// constraint holds it to an equal one that is not identical (§3.5.4 cvc-au,
+// cvc-elt clause 5.2.2.2.2): -0 against fixed 0 on xs:double decodes to
+// negative zero. The field of an optional attribute use with an effective value
+// constraint is the Go type codegen gives its simple type itself, as codegen
+// emits it, holding the supplied value when the attribute is absent; a
+// whitespace-only element has a character child and holds its own value; and an
+// element absent from the instance supplies nothing, its field nil or not
+// appended to.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -111,90 +100,16 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //  5. A construct outside the slice of the document element's declaration or
 //     type, or of a declaration or type its particles reach at any depth: a
 //     *DeclineError at the document element's instance Loc, whose
-//     [DeclineError.Construct] is that construct's. Each is found in this
-//     order: the declaration's {type table} and {nillable}, then its {type
-//     definition}: a simple type's {variety} and {primitive type definition},
-//     for a list its {item type definition}'s, whose construct the list
-//     declines by, after which nothing further is examined, or a complex
-//     type's content, then the occurrence of its sequence or choice, each
-//     particle of its content in order — a nested model group or wildcard,
-//     then the particle's element declaration's {type table} and {nillable},
-//     its {type definition}, a simple one examined as the document element's
-//     is and a complex one declining when it is xs:anyType, then when it has
-//     {abstract} true, and otherwise examined as the document element's
-//     complex type is, from its content to its {attribute wildcard}, before
-//     anything after it, and then an expanded name an earlier particle's
-//     field takes; of an <element ref> whose field holds a substitution
-//     group's sealed interface (item 6), in place of the referenced
-//     declaration's own properties and type, each declaration of the group
-//     with {abstract} false in group order, the head among them only where it
-//     has {abstract} false, examined so, each then declining by a branch field
-//     of an earlier one's shape as a choice's alternatives do, and then the
-//     first of their expanded names in group order an earlier particle's field
-//     takes, a particle's field taking its element's expanded name, or each of
-//     those declarations' for such an interface; of a choice, each
-//     alternative's own constructs, then a branch field of the name an earlier
-//     alternative's has where either alternative is of complex type or holds
-//     a substitution group's interface, and otherwise of the name and Go type,
-//     as item 6 reads it, which declines as two branches of a sealed interface
-//     whose structs have one shape — each of its attribute uses in order, and
-//     its {attribute wildcard}. The complex type of a top-level declaration,
-//     the document element's, one an <element ref> names, or a member of that
-//     one's substitution group, and a local declaration's named complex {type
-//     definition}, are each examined at the first reach of that declaration or
-//     that name only, and contribute nothing when reached again, so a type
-//     that reaches itself is examined once. A component of a declaration or
-//     type this item examines that does not resolve, or a particle with {max
-//     occurs} 0, is a plain error in place of a decline, at its point in this
-//     order.
+//     [DeclineError.Construct] is that construct's, the first in the order
+//     the list "Item 5 examines" below states. A component of a declaration
+//     or type this item examines that does not resolve, or a particle with
+//     {max occurs} 0, is a plain error in place of a decline, at its point in
+//     that order.
 //  6. T does not match the type codegen emits for the declaration, as Decode
-//     derives it from the schema: for a complex {type definition}, T is not a
-//     struct whose fields are exactly those codegen emits, in name, order and
-//     Go type, or, where codegen emits the choice's sealed interface as the
-//     type itself, T is not an interface; for a simple one, T's underlying
-//     type is not the Go type codegen gives it (the Simple types section of
-//     codegen's package doc): its atomic Go type A, string, bool, float32,
-//     float64, big.Rat, big.Int or a bounded Go integer, or for a list []A,
-//     A its {item type definition}'s. The Go type of the field of a particle
-//     or attribute use of simple type is V, *V or []V, V the Go type codegen
-//     gives that simple type, A or []A, for a local element declaration's
-//     particle and an attribute use; for an <element ref> particle it is N, *N
-//     or []N, N the named type codegen emits for the referenced declaration,
-//     matched as any type other than V whose underlying type is V, never by
-//     name; V itself, a local particle's type, does not pass, so a ref's field
-//     of simple type and a local one's never accept one Go type. The field of
-//     a particle whose element declaration, local or referenced, has a complex
-//     {type definition} is S, *S or []S, S a struct held to that type as T is
-//     to the document element's, its fields exactly codegen's and its name
-//     never compared, or, where codegen emits the type's choice's sealed
-//     interface as the type itself, I or []I, I that interface, held as T is
-//     and never a pointer, nil meaning absent. The field of an <element ref>
-//     particle that codegen gives a sealed interface over the referenced
-//     declaration's substitution group (§3.3.6.4 key-eq; codegen's package
-//     doc, "# Substitution groups" states which) is in place of all these I
-//     or []I, I that interface, never a pointer, nil meaning absent, one
-//     interface value per child for []I; its alternatives are the group's
-//     declarations with {abstract} false, in group order, each one's branch
-//     field named from its local name and holding what the field of an
-//     <element ref> particle occurring once to that declaration would hold
-//     were its own substitution group that declaration alone: N, S or I, so a
-//     group with no such declaration has no alternative. A sealed interface,
-//     T, a struct's first field or a nested element's, a choice's or a
-//     substitution group's, does not match when it is not an interface whose
-//     one method is unexported, or when its branch set, as [WithBranches]
-//     supplied it, is not one struct of one field per alternative, that field
-//     the name and Go type of the alternative's branch field, a branch whose
-//     field is named like an alternative of complex type, or of a substitution
-//     group's interface, held to that alternative alone: when no WithBranches
-//     supplies it for an interface with alternatives, or its count differs, or
-//     it holds a nil value, a type that is no struct, a type twice, or a
-//     branch matching no alternative an earlier branch did not match. It is an
-//     error errors.Is reports as [ErrTypeMismatch], no *DeclineError, so that
-//     a T that does not match the schema is never filled. Decode never reads
-//     the fields from T, so for a type codegen emitted from this schema the
-//     error is a defect of Decode's, or a branch set WithBranches did not
-//     supply as codegen emitted it, and for any other T it is a T that does
-//     not match.
+//     derives it from the schema by the comparisons the list "Item 6
+//     compares" below states: an error errors.Is reports as
+//     [ErrTypeMismatch], no *DeclineError, so that a T that does not match
+//     the schema is never filled.
 //  7. An element carrying xsi:type, the document element or any descendant: a
 //     *DeclineError at that element's instance Loc, the first in document
 //     order, whose [DeclineError.Construct] is xsi:type's. A document element
@@ -204,25 +119,22 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //  8. The lexical mapping or the conversion to the Go type failing on a value
 //     validate accepted on the same backend: no mapping of backend governs
 //     the type, its Parse rejects the normalized value, or its Canonical is
-//     nil, fails, or renders a form the Go type does not read; for a list,
-//     the type is its {item type definition} and the value one list item. It
-//     is a fault of the backend, not of the instance. The error names the
-//     stage, the type — its QName, or for an anonymous type the declaration
-//     it is local to and that declaration's schema Loc, and for a list's item
-//     type the list's too — the normalized value, or the list item and its
-//     1-based position among the value's items, and the value's source at its
-//     instance Loc, for a list the whole value's and never an item's: an
-//     element's character content, at its first character data, with that
-//     data's byte offset; a present attribute, at its Loc
-//     (xmltree.Attribute.Loc), with no offset; or a supplied value, at its
-//     element's start, with the declaration whose value constraint supplied
-//     it. It wraps nothing: errors.As finds no *xsderr.Error, *DeclineError or
-//     *UndecidedError in it, xsderr.RuleOf no rule, and errors.Is neither
-//     errors.ErrUnsupported nor [ErrTypeMismatch]; and [ViolationsOf] returns
-//     nil for it.
-//
-// Items 5 and 6 read no instance; [CheckDecode] returns them for a
-// declaration before an instance arrives.
+//     nil, fails, or renders a form the Go type does not read or a finite
+//     form beyond the Go type's range; for a list, the type is its {item type
+//     definition} and the value one list item. It is a fault of the backend,
+//     not of the instance. The error names the stage, the type — its QName, or
+//     for an anonymous type the declaration it is local to and that
+//     declaration's schema Loc, and for a list's item type the list's too —
+//     the normalized value, or the list item and its 1-based position among
+//     the value's items, and the value's source at its instance Loc, for a
+//     list the whole value's and never an item's: an element's character
+//     content, at its first character data, with that data's byte offset; a
+//     present attribute, at its Loc (xmltree.Attribute.Loc), with no offset;
+//     or a supplied value, at its element's start, with the declaration whose
+//     value constraint supplied it. It wraps nothing: errors.As finds no
+//     *xsderr.Error, *DeclineError or *UndecidedError in it, xsderr.RuleOf no
+//     rule, and errors.Is neither errors.ErrUnsupported nor [ErrTypeMismatch];
+//     and [ViolationsOf] returns nil for it.
 //
 // Items 7 and 8 are both found while filling T, and the first in document
 // order is returned: an element's xsi:type, then its attributes' values,
@@ -230,6 +142,115 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // absent ones in attribute-use order, then its children in document order,
 // each child of complex type filled in this same order before the next
 // child. A supplied value whose attribute is present is never mapped.
+//
+// Items 5 and 6 read no instance; [CheckDecode] returns them for a
+// declaration before an instance arrives.
+//
+// Item 5 examines the document element's declaration in this order; the
+// fourth and fifth bullets say how the particle step reads a substitution
+// group's <element ref> and a choice's alternatives:
+//
+//   - The declaration's {type table} and {nillable}.
+//   - Its {type definition}: a simple type's {variety} and {primitive type
+//     definition}, for a list its {item type definition}'s, whose construct
+//     the list declines by, after which nothing further is examined; or a
+//     complex type's content, then the occurrence of its sequence or choice.
+//   - Each particle of the complex type's content in order, the whole of one
+//     before the next. A nested model group or wildcard declines first. Then
+//     the particle's element declaration's {type table} and {nillable}, and
+//     its {type definition}: a simple one is examined as the document
+//     element's is; a complex one declines when it is xs:anyType, then when it
+//     has {abstract} true, and is otherwise examined as the document element's
+//     complex type is, from its content to its {attribute wildcard}. Then the
+//     particle declines by an expanded name an earlier particle's field takes,
+//     a particle's field taking its element's expanded name, or, for a
+//     substitution group's interface, each declaration the next bullet
+//     examines.
+//   - Of an <element ref> particle whose field holds a substitution group's
+//     sealed interface (item 6), in place of the referenced declaration's own
+//     properties and type: each declaration of the group with {abstract}
+//     false in group order, the head among them only where it has {abstract}
+//     false, examined as a particle's element declaration is, each then
+//     declining by a branch field of an earlier one's shape as a choice's
+//     alternatives do, and then the first of their expanded names in group
+//     order an earlier particle's field takes.
+//   - Of a choice, each alternative's own constructs, then a branch field of
+//     the name an earlier alternative's has where either alternative is of
+//     complex type or holds a substitution group's interface, and otherwise
+//     of the name and Go type, as item 6 reads it, which declines as two
+//     branches of a sealed interface whose structs have one shape.
+//   - Each of the complex type's attribute uses in order, and its {attribute
+//     wildcard}.
+//
+// The complex type of a top-level declaration, the document element's, one
+// an <element ref> names, or a member of that one's substitution group, and
+// a local declaration's named complex {type definition}, are each examined at
+// the first reach of that declaration or that name only, and contribute
+// nothing when reached again, so a type that reaches itself is examined once.
+//
+// Item 6 compares T with the type codegen emits by shape alone: neither T's,
+// a sealed interface's nor a branch's name is compared. Decode never reads
+// the fields from T, so for a type codegen emitted from this schema an item
+// 6 error is a defect of Decode's, or a branch set [WithBranches] did not
+// supply as codegen emitted it, and for any other T it is a T that does not
+// match. Item 6 compares:
+//
+//   - T of a complex {type definition}: T is a struct whose fields are
+//     exactly those codegen emits, in name, order and Go type, each field's
+//     Go type as the bullets below read it, or, where codegen emits the
+//     choice's sealed interface as the type itself, T is an interface, and
+//     Decode then returns a *T pointing at it. So a T of the same shape, such
+//     as the struct codegen emits for another top-level element of the same
+//     type, passes and decodes as the declaration's own struct does, an error
+//     only where that one's is.
+//   - T of a simple {type definition}: T's underlying type alone is the Go
+//     type codegen gives it (the Simple types section of codegen's package
+//     doc): its atomic Go type A, one of string, bool, float32, float64,
+//     big.Rat, big.Int, int64, int32, int16, int8, uint64, uint32, uint16 and
+//     uint8, or for a list []A, A its {item type definition}'s. So any T over
+//     that Go type passes, such as the type codegen emits for another
+//     document element of the same simple type.
+//   - The field of a particle or attribute use of simple type: for a local
+//     element declaration's particle and an attribute use it is V, *V or []V
+//     by its occurrence, an attribute's by its use's {required} and its
+//     effective value constraint (§3.5.4 key-evc), V the Go type codegen
+//     gives that simple type, A or []A; for an <element ref> particle it is
+//     N, *N or []N, N the named type codegen emits for the referenced
+//     declaration, matched as any type other than V whose underlying type is
+//     V, never by name; V itself, a local particle's type, does not pass, so
+//     a ref's field of simple type and a local one's never accept one Go
+//     type.
+//   - The field of a particle whose element declaration, local or
+//     referenced, has a complex {type definition}: S, *S or []S by its
+//     occurrence, S a struct held to that type as T is to the document
+//     element's, its fields exactly codegen's and its name never compared,
+//     or, where codegen emits the type's choice's sealed interface as the
+//     type itself, I or []I, I that interface, held as T is, the bare
+//     interface for an optional one and never a pointer, nil meaning absent.
+//   - The field of an <element ref> particle that codegen gives a sealed
+//     interface over the referenced declaration's substitution group
+//     (§3.3.6.4 key-eq; codegen's package doc, "# Substitution groups"
+//     states which): in place of all these, I or []I, I that interface, the
+//     bare interface for an optional one and never a pointer, nil meaning
+//     absent, one interface value per child for []I; its alternatives are the
+//     group's declarations with {abstract} false, in group order, each one's
+//     branch field named from its local name and holding what the field of an
+//     <element ref> particle occurring once to that declaration would hold
+//     were its own substitution group that declaration alone: N, S or I, so a
+//     group with no such declaration has no alternative and its field is
+//     nil.
+//   - A sealed interface, T, a struct's first field or a nested element's, a
+//     choice's or a substitution group's, whose branch types reach Decode
+//     only through [WithBranches]: it does not match when it is not an
+//     interface whose one method is unexported, or when its branch set, as
+//     WithBranches supplied it, is not one struct of one field per
+//     alternative, that field the name and Go type of the alternative's
+//     branch field, a branch whose field is named like an alternative of
+//     complex type, or of a substitution group's interface, held to that
+//     alternative alone: when no WithBranches supplies it for an interface
+//     with alternatives, or its count differs, or it holds a nil value, a
+//     type that is no struct, a type twice, or a branch matching no
+//     alternative an earlier branch did not match.
 func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error) {
 	cfg := newConfig(opts)
 	v, err := validate.New(schema, backend, validate.WithLogger(cfg.log))

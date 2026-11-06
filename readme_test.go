@@ -20,6 +20,7 @@ import (
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // TestReadmeFixtures holds each file of testdata/readme that README.md's CLI
@@ -212,12 +213,16 @@ func readmeDecode(schema *xsd.Schema, backend value.Backend) {
 	if err != nil {
 		var ue *codec.UndecidedError
 		var de *codec.DeclineError
+		rule, _ := xsderr.RuleOf(err)
 		switch vs := codec.ViolationsOf(err); {
 		case vs != nil:
 			// Item 3: every violation of a rejected instance.
 			for _, v := range vs {
 				fmt.Println(v.Loc, v.Rule)
 			}
+		case rule == xsderr.RuleXMLWellFormed:
+			// Item 2: the instance's source fault.
+			fmt.Println(err)
 		case errors.As(err, &ue):
 			// Item 4: the check the validator left undecided.
 			fmt.Println(ue.Unevaluated().Loc(), ue.Unevaluated().Rule())
@@ -230,8 +235,8 @@ func readmeDecode(schema *xsd.Schema, backend value.Backend) {
 			// Item 6: T does not match the declaration.
 			fmt.Println(err)
 		default:
-			// A source fault, a backend fault, or a nil schema's plain error.
-			// For a source fault, xsderr.RuleOf(err) returns its rule.
+			// Item 1's and item 5's plain errors, and item 8's fault of the
+			// backend.
 			fmt.Println(err)
 		}
 		log.Fatal(err)

@@ -44,8 +44,9 @@ func (o oneMapping) Mapping(typ xsd.QName) (value.Mapping, bool) {
 // value constraint's, and Decode none (value.Context's nil), so validate
 // accepts what Decode's lexical mapping rejects. A nil Context also reaches
 // Parse for the {value} of xs:int's bound facets, which rowLiterals does not
-// hold. The others break the governing mapping's Canonical: nil, failing, or
-// rendering a form int32 does not read.
+// hold. The others break the governing mapping's Canonical: nil, failing,
+// rendering a form int32 does not read, or, xs:float's in beyondFloat32,
+// rendering a finite form beyond float32's range.
 var (
 	rowLiterals = []string{"01", "1", "2", "3", "5"}
 	noContext   = decimalOver(func(base value.Mapping) value.Mapping {
@@ -65,6 +66,11 @@ var (
 	fractionCanonical = decimalOver(func(base value.Mapping) value.Mapping {
 		return value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "1.5", nil }}
 	})
+	beyondFloat32 = func() value.Backend {
+		float := xsd.QName{Space: xsd.XMLSchemaNS, Local: "float"}
+		base, _ := strict.New().Mapping(float)
+		return value.Override(strict.New(), oneMapping{name: float, m: value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "1e39", nil }}})
+	}()
 )
 
 // TestDecodeStageErrors pins item 8 of Decode's doc: a lexical mapping or a
@@ -110,6 +116,8 @@ func TestDecodeStageErrors(t *testing.T) {
 			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "01", a value of %s in the character content of element {urn:s}a at byte offset %d: no canonical form`, offset+1, intQName, offset)},
 		{"conversion, a form the Go type does not read", element, elementData, fractionCanonical, decodeErr[struct{ A int32 }], stageConversion,
 			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "01", a value of %s in the character content of element {urn:s}a at byte offset %d: canonical form "1.5" is no int32: strconv.ParseInt: parsing "1.5": invalid syntax`, offset+1, intQName, offset)},
+		{"conversion, a finite form beyond the Go type's range", sequenceOf(`<xs:element name="a" type="xs:float"/>`), elementData, beyondFloat32, decodeErr[struct{ A float32 }], stageConversion,
+			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "01", a value of {http://www.w3.org/2001/XMLSchema}float in the character content of element {urn:s}a at byte offset %d: canonical form "1e39" is no float32: strconv.ParseFloat: parsing "1e39": value out of range`, offset+1, offset)},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

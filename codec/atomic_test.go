@@ -222,6 +222,51 @@ func TestDecodeFixedNegativeZero(t *testing.T) {
 	}
 }
 
+// TestDecodeFloatBeyondRange pins Decode's doc on a float or double literal
+// beyond its type's range: ·floatingPointRound· (Datatypes §E.1) maps it to INF
+// or -INF, strict's Canonical renders that, and it decodes as ±Inf with no
+// error, on xs:float into float32 and xs:double into float64.
+func TestDecodeFloatBeyondRange(t *testing.T) {
+	float := schemaOf(t, sequenceOf(`<xs:element name="a" type="xs:float"/>`))
+	double := schemaOf(t, sequenceOf(`<xs:element name="a" type="xs:double"/>`))
+	for _, row := range []struct {
+		literal string
+		sign    int
+	}{
+		{"1e39", 1},
+		{"-1e39", -1},
+	} {
+		data := instanceOf("", "<s:a>"+row.literal+"</s:a>")
+		mustAccept(t, float, data)
+		got, err := Decode[struct{ A float32 }](float, strict.New(), data)
+		if err != nil {
+			t.Errorf("Decode xs:float %s: %v", row.literal, err)
+			continue
+		}
+		if !math.IsInf(float64(got.A), row.sign) {
+			t.Errorf("Decode xs:float %s = %v, want Inf of sign %d", row.literal, got.A, row.sign)
+		}
+	}
+	for _, row := range []struct {
+		literal string
+		sign    int
+	}{
+		{"1e309", 1},
+		{"-1e309", -1},
+	} {
+		data := instanceOf("", "<s:a>"+row.literal+"</s:a>")
+		mustAccept(t, double, data)
+		got, err := Decode[struct{ A float64 }](double, strict.New(), data)
+		if err != nil {
+			t.Errorf("Decode xs:double %s: %v", row.literal, err)
+			continue
+		}
+		if !math.IsInf(got.A, row.sign) {
+			t.Errorf("Decode xs:double %s = %v, want Inf of sign %d", row.literal, got.A, row.sign)
+		}
+	}
+}
+
 // TestDecodeAtomicTypeMismatch pins item 6 of Decode's doc over the atomic Go
 // types: a field, a simple root's T and a ref's named type of the wrong Go
 // integer width, and a ref's named type over big.Int where codegen emits one
