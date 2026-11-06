@@ -2342,7 +2342,7 @@ func TestProduceFacetFixedOutOfLexicalSpaceRejected(t *testing.T) {
 					t.Fatalf("error %v carries no position", err)
 				}
 				if loc.URI != produceURI || loc.Line != 3 {
-					t.Fatalf("position = %s:%d:%d, want the facet element's own line 3 of %s", loc.URI, loc.Line, loc.Col, produceURI)
+					t.Fatalf("position = %s:%d:%d, want the fixed attribute's line 3 of %s", loc.URI, loc.Line, loc.Col, produceURI)
 				}
 			})
 		}

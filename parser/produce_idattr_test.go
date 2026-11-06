@@ -10,13 +10,13 @@ import (
 
 // TestProduceNonIDValueRejected pins that an XSD element's id attribute whose
 // ·actual value· is outside xs:ID's ·lexical space· (NCName's, Datatypes
-// §3.4.8) is charged cvc-datatype-valid at that element, whatever position the
-// element is written in. One row per kind of position the walk reaches: a
+// §3.4.8) is charged cvc-datatype-valid at that id attribute, whatever position
+// the element is written in. One row per kind of position the walk reaches: a
 // top-level declaration, a local particle, an identity-constraint element, and
 // the <schema> root itself.
 func TestProduceNonIDValueRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). Every body puts the
-	// offending element on the line named by wantLine.
+	// offending id attribute on the line named by wantLine.
 	cases := []struct {
 		name     string
 		doc      string
@@ -50,7 +50,7 @@ func TestProduceNonIDValueRejected(t *testing.T) {
 			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"` + "\n" +
 				`id="a:b"/>`,
 			wantMsg:  `<schema> id "a:b" is not in`,
-			wantLine: 1,
+			wantLine: 2,
 		},
 	}
 	for _, tc := range cases {
@@ -64,7 +64,7 @@ func TestProduceNonIDValueRejected(t *testing.T) {
 
 // TestProduceDuplicateIDRejected pins cvc-id clause 2 (§3.3.4.5) over one
 // schema document: the SECOND element carrying a value is charged, at its own
-// position, the message names the first carrier and cites the clause inline
+// id attribute, the message names the first carrier and cites the clause inline
 // (STYLE E4). The padded row compares ·actual values·: xs:ID's whiteSpace =
 // collapse makes " a " and "a" one ID.
 func TestProduceDuplicateIDRejected(t *testing.T) {

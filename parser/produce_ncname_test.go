@@ -10,7 +10,7 @@ import (
 // TestProduceNonNCNameDeclarationNameRejected pins, END TO END from a schema
 // DOCUMENT, that a declaration whose name attribute is not in the ·lexical
 // space· of xs:NCName is rejected charged cvc-datatype-valid (Datatypes §4.1.4)
-// at the declaration's own position — never registered as a {name} nobody can
+// at the declaration's name attribute — never registered as a {name} nobody can
 // reference, which is what a colonized or digit-initial name became before #632.
 //
 // One row per CODE PATH into declarationName, not per bad name: the six
@@ -22,7 +22,7 @@ import (
 // Reverting any one call site leaves its row failing.
 func TestProduceNonNCNameDeclarationNameRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). Every body starts on
-	// line 2 of the wrapped document and puts the offending declaration on the
+	// line 2 of the wrapped document and puts the offending name attribute on the
 	// line named by wantLine, so the charged position is pinned exactly.
 	cases := []struct {
 		name     string

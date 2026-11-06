@@ -76,12 +76,21 @@ func (e *Element) Name() xmltree.Name { return e.src.Name() }
 // alone would otherwise re-derive it — as this module's own conformance harness
 // did, until the two implementations were collapsed into this one (issue #272).
 func (e *Element) Attr(local string) (string, bool) {
+	a, ok := e.attr(local)
+	return a.Value(), ok
+}
+
+// attr returns the element's attribute that Attr reads the value of, under
+// Attr's no-namespace rule, so a charge against that value can be located at the
+// attribute's own name (its Loc) rather than at the element's start tag. ok is
+// false, and the Attribute the zero value, when no such attribute is present.
+func (e *Element) attr(local string) (xmltree.Attribute, bool) {
 	for _, a := range e.attrs {
 		if a.Name().Space() == "" && a.Name().Local() == local {
-			return a.Value(), true
+			return a, true
 		}
 	}
-	return "", false
+	return xmltree.Attribute{}, false
 }
 
 // lookupPrefix resolves prefix to a namespace URI using the bindings in scope

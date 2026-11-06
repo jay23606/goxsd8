@@ -10,11 +10,11 @@ import (
 // TestProduceDerivationSetValueRejected pins that a block=/final= family value
 // outside the s4s type its owner's production declares it with (xs:blockSet,
 // xs:derivationSet, xs:simpleDerivationSet, xs:fullDerivationSet; Structures
-// §A, Datatypes §A) is charged cvc-datatype-valid at the owner element. Each
+// §A, Datatypes §A) is charged cvc-datatype-valid at the offending attribute. Each
 // type is "#all" alone or a list of its members, so a stray token, a token of a
 // sibling type, "#all" beside another token, a case variant, and a token split
 // by a character §4.3.6 is not whitespace for are all outside it. Every row puts
-// the offending element on the line named by wantLine, and wantMsg names the
+// the offending attribute on the line named by wantLine, and wantMsg names the
 // element, the attribute, the value and the type, in that order.
 func TestProduceDerivationSetValueRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2).

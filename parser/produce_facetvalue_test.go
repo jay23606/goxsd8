@@ -17,7 +17,7 @@ func facetValueSchema(base, facet string) string {
 // TestProduceFacetCountValueRejected pins that a length or digits facet's value
 // literal outside the type the schema for schema documents declares for it —
 // xs:nonNegativeInteger on xs:numFacet, xs:positiveInteger on <totalDigits> — is
-// charged cvc-datatype-valid at the facet element, from Produce alone with no
+// charged cvc-datatype-valid at the facet's value attribute, from Produce alone with no
 // instance in play (#1774). The message is pinned from its opening subject, so a
 // swapped argument cannot pass.
 func TestProduceFacetCountValueRejected(t *testing.T) {
@@ -60,9 +60,10 @@ func TestProduceFacetCountValueRejected(t *testing.T) {
 			if !ok {
 				t.Fatalf("error %v carries no position (STYLE E3)", err)
 			}
-			if loc.URI != produceURI || loc.Line != 3 || loc.Col != 1 {
-				t.Fatalf("position = %s:%d:%d, want the facet element at %s:3:1",
-					loc.URI, loc.Line, loc.Col, produceURI)
+			col := strings.Index(tc.facet, "value=") + 1
+			if loc.URI != produceURI || loc.Line != 3 || loc.Col != col {
+				t.Fatalf("position = %s:%d:%d, want the value attribute at %s:3:%d",
+					loc.URI, loc.Line, loc.Col, produceURI, col)
 			}
 		})
 	}

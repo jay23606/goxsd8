@@ -706,10 +706,10 @@ func rejectS4SFaults(el *Element, ids map[string]*Element) error {
 // value collapse's interior folding would change is not an NCName either way,
 // and is rejected before it reaches ids.
 //
-// Both are located at the offending element's start tag, not at the id
-// attribute. The walk that reaches el stops at <appinfo> and <documentation>,
-// so an element in their lax content is never judged: §5.1 lets a processor
-// treat invalid <annotation> descendants as valid (:616).
+// Both are located at the id attribute's name, a duplicate's at the second
+// occurrence's. The walk that reaches el stops at <appinfo> and
+// <documentation>, so an element in their lax content is never judged: §5.1
+// lets a processor treat invalid <annotation> descendants as valid (:616).
 //
 // GAP(parser): an overridden document's ids are judged over Dold as fetched,
 // not over Dold′, which src-override clause 3's Note (xmlschema11-1.md:4171)
@@ -724,18 +724,18 @@ func rejectS4SFaults(el *Element, ids map[string]*Element) error {
 // accept: Dold's y carrying id="foo", x overridden by one carrying the same
 // id="foo").
 func rejectInvalidID(el *Element, ids map[string]*Element) error {
-	lexical, ok := el.Attr("id")
+	attr, ok := el.attr("id")
 	if !ok {
 		return nil
 	}
-	id := collapseTrim(lexical)
+	id := collapseTrim(attr.Value())
 	if !ncNameRE.MatchString(id) {
-		return xsderr.New(ruleDatatypeValid, el.Loc(),
+		return xsderr.New(ruleDatatypeValid, attr.Loc(),
 			"<%s> id %q is not in the ·lexical space· of xs:ID, the type the schema for schema documents declares for it (Structures §5.1, §A): an xs:ID is an NCName, which carries no colon and begins with a letter or '_' (Datatypes §3.4.8)",
 			el.Name().Local(), id)
 	}
 	if first, dup := ids[id]; dup {
-		return xsderr.New(ruleValidationRootValid, el.Loc(),
+		return xsderr.New(ruleValidationRootValid, attr.Loc(),
 			"<%s> id %q duplicates the id of the <%s> at %s: an xs:ID value identifies one element of its schema document (cvc-id clause 2, Structures §3.3.4.5)",
 			el.Name().Local(), id, first.Name().Local(), first.Loc())
 	}
@@ -868,10 +868,9 @@ func derivationSetAttrs(el *Element) (string, []derivationSetAttr) {
 // validity against the schema for schema documents normative and no src-* clause
 // covers the value, so it is charged cvc-datatype-valid (Datatypes §4.1.4),
 // reached through cvc-attribute, exactly as rejectInvalidID charges an id outside
-// xs:ID. It is located at el's start tag, not at the attribute. An attribute
-// el's production prohibits is not checked here at all, whatever its value: that
-// is its form's prohibition guard's charge, and no datatype fault exists beside
-// it.
+// xs:ID. It is located at the attribute's name. An attribute el's production
+// prohibits is not checked here at all, whatever its value: that is its form's
+// prohibition guard's charge, and no datatype fault exists beside it.
 //
 // It is what makes effectiveDerivationSet's inputs well-typed: once it has
 // passed, a local block=/final= its form declares names only members of its own
@@ -881,11 +880,12 @@ func derivationSetAttrs(el *Element) (string, []derivationSetAttr) {
 func rejectInvalidDerivationSet(el *Element) error {
 	grammar, attrs := derivationSetAttrs(el)
 	for _, attr := range attrs {
-		lexical, ok := el.Attr(attr.name)
+		a, ok := el.attr(attr.name)
+		lexical := a.Value()
 		if !ok || attr.typ.admits(lexical) {
 			continue
 		}
-		return xsderr.New(ruleDatatypeValid, el.Loc(),
+		return xsderr.New(ruleDatatypeValid, a.Loc(),
 			"<%s> %s %q is not in the ·lexical space· of %s, the type %s declares %s with (Structures §5.1, §A): its value is #all alone or a whitespace-separated list of %s",
 			el.Name().Local(), attr.name, lexical, attr.typ.name, grammar, attr.name, attr.typ.spelled())
 	}
@@ -1814,10 +1814,10 @@ var ncNameRE = func() *regexp.Regexp {
 // xsd.NewElementDeclaration's e-props-correct clause 1 and
 // xsd.NewAttributeDeclaration's a-props-correct clause 1.
 func declarationName(el *Element, ns string) (xsd.QName, error) {
-	lexical, _ := el.Attr("name")
-	name := collapseTrim(lexical)
+	attr, _ := el.attr("name")
+	name := collapseTrim(attr.Value())
 	if name != "" && !ncNameRE.MatchString(name) {
-		return xsd.QName{}, xsderr.New(ruleDatatypeValid, el.Loc(),
+		return xsd.QName{}, xsderr.New(ruleDatatypeValid, attr.Loc(),
 			"<%s> name %q is not in the ·lexical space· of xs:NCName, the type the schema for schema documents declares for it (Structures §5.1, §A): an NCName carries no colon and begins with a letter or '_' (Datatypes §3.4.7.1)",
 			el.Name().Local(), name)
 	}
@@ -1836,7 +1836,7 @@ func declarationName(el *Element, ns string) (xsd.QName, error) {
 // encode, as there is for no-xsi's {target namespace} below.
 //
 // name is the {name} declarationName has already mapped, never the name
-// attribute re-read here (STYLE T4), and that ordering is what keeps the
+// attribute's value re-read here (STYLE T4), and that ordering is what keeps the
 // COLONIZED forms on their existing charge: declarationName rejects a name
 // outside NCName's ·lexical space· first, so xmlns: and xmlns:a never reach this
 // function at all and stay charged cvc-datatype-valid, one fault to one rule
@@ -1871,7 +1871,11 @@ func rejectXmlnsName(name string, el *Element) error {
 	if name != "xmlns" {
 		return nil
 	}
-	return xsderr.New(ruleNoXmlns, el.Loc(),
+	// "xmlns" is the mapped value of a present name attribute (declarationName
+	// maps an absent one to ""), so this lookup answers; it is read for its
+	// position alone, the charge being located at the attribute's name.
+	attr, _ := el.attr("name")
+	return xsderr.New(ruleNoXmlns, attr.Loc(),
 		"attribute declaration has %q as its {name}, which no-xmlns (§3.2.6.3) forbids whether the declaration is local or top-level: [XML Infoset] identifies an attribute so named as a namespace attribute rather than an ordinary one, so a schema neither need nor may declare it (§3.2.1)", name)
 }
 
@@ -4111,8 +4115,7 @@ func xmlSpaceFields(lexical string) []string {
 // validation against the schema for schema documents (Structures §5.1), the
 // attribute failing its declared type under cvc-attribute clause 3, charged
 // cvc-datatype-valid (§4.1.4) at assembly time whether or not any instance
-// reaches the facet. It is located at el's start tag, el.Loc(), not at the
-// attribute.
+// reaches the facet. It is located at the value attribute's name.
 //
 // The positiveInteger fault stays cvc-datatype-valid rather than
 // totalDigits-valid-restriction: "0" is outside the attribute's own declared
@@ -4127,10 +4130,11 @@ func xmlSpaceFields(lexical string) []string {
 // use="required" is charged nowhere, and every facet reads the absence as ""
 // (#1777).
 func facetCountValue(el *Element, kind xsd.FacetKind) error {
-	lexical, ok := el.Attr("value")
+	attr, ok := el.attr("value")
 	if !ok {
 		return nil
 	}
+	lexical := attr.Value()
 	name := "<" + el.Name().Local() + ">"
 	positive, inLexical := nonNegativeIntegerLexical(collapseTrim(lexical))
 	switch kind {
@@ -4138,13 +4142,13 @@ func facetCountValue(el *Element, kind xsd.FacetKind) error {
 		if inLexical {
 			return nil
 		}
-		return xsderr.New(ruleDatatypeValid, el.Loc(),
+		return xsderr.New(ruleDatatypeValid, attr.Loc(),
 			"%s value %q is not a nonNegativeInteger", name, lexical)
 	case xsd.FacetTotalDigits:
 		if positive {
 			return nil
 		}
-		return xsderr.New(ruleDatatypeValid, el.Loc(),
+		return xsderr.New(ruleDatatypeValid, attr.Loc(),
 			"%s value %q is not a positiveInteger", name, lexical)
 	default:
 		return nil
@@ -4192,17 +4196,18 @@ func nonNegativeIntegerLexical(s string) (positive, ok bool) {
 // An absent attribute is the {fixed} = false default and is NOT an error; that is
 // a branch distinct from present-but-invalid.
 func facetFixed(el *Element) (bool, error) {
-	lexical, ok := el.Attr("fixed")
+	attr, ok := el.attr("fixed")
 	if !ok {
 		return false, nil
 	}
+	lexical := attr.Value()
 	switch collapseTrim(lexical) {
 	case "true", "1":
 		return true, nil
 	case "false", "0":
 		return false, nil
 	}
-	return false, xsderr.New(ruleDatatypeValid, el.Loc(),
+	return false, xsderr.New(ruleDatatypeValid, attr.Loc(),
 		"<%s> fixed value %q is not in the lexical space of xs:boolean (true, false, 1, 0) that the schema for schema documents declares for it",
 		el.Name().Local(), lexical)
 }
