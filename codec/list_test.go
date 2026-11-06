@@ -383,7 +383,7 @@ func TestWithLoggerList(t *testing.T) {
 // type definition}: after the declining declaration, the item, its QName where
 // it has one, and its schema Loc, the zero Loc for a built-in.
 func TestDeclineErrorTextListItem(t *testing.T) {
-	const construct = "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal"
+	const construct = "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration"
 	rows := []struct {
 		name, decls, want string
 	}{

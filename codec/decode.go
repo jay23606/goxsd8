@@ -52,28 +52,35 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // cvc-datatype-valid clause 2.1), read back through that mapping's Canonical
 // and converted to the Go type: a boolean's canonical form exactly "true" or
 // "false" (§E.4 f-booleanCanmap), a float's and a double's by
-// strconv.ParseFloat at the Go type's width, and a decimal's into big.Rat,
+// strconv.ParseFloat at the Go type's width, a decimal's into big.Rat,
 // big.Int or one of the bounded Go integers int64, int32, int16, int8, uint64,
-// uint32, uint16 and uint8 at its width. A float or double literal beyond the
-// type's range is the INF or -INF its mapping rounds it to
-// (·floatingPointRound·, Datatypes §E.1), so it decodes as ±Inf where the
-// backend's Canonical renders that, as builtin/strict's does, and is no item 8
-// error. backend's governing mapping of each such type must therefore have a
-// non-nil Canonical, as builtin/strict's do; item 8 states the error where one
-// fails. For a list type, whose whiteSpace is collapse (Datatypes §4.3.6,
-// §2.4.1.2), the normalized string is split at each U+0020 into its list items
-// before any is mapped, an empty one into none (§4.1.1 dt-list), and each item
-// is read as above under the list's {item type definition}, a restriction of a
-// list taking its base's (Structures §3.16.2.3); the value is the []A of the
-// items in order. So the value is the instance's own even where a fixed value
-// constraint holds it to an equal one that is not identical (§3.5.4 cvc-au,
-// cvc-elt clause 5.2.2.2.2): -0 against fixed 0 on xs:double decodes to
-// negative zero. The field of an optional attribute use with an effective value
-// constraint is the Go type codegen gives its simple type itself, as codegen
-// emits it, holding the supplied value when the attribute is absent; a
-// whitespace-only element has a character child and holds its own value; and an
-// element absent from the instance supplies nothing, its field nil or not
-// appended to.
+// uint32, uint16 and uint8 at its width, and a date, time or duration type's
+// into its datatype struct, by that datatype's lexical grammar (§3.3.6.2,
+// §3.3.7.2–§3.3.14.2, §D.2.2), each property the local value the form shows,
+// never converted to UTC (§D.2.1), the timezoneOffset in minutes, and a
+// duration's Months and Seconds both of the form's one sign (§3.3.6.1, §E.2).
+// A type whose datatype struct is yearMonthDuration's alone is converted from
+// the string Parse accepted, so that zero, which has no canonical
+// representation (§3.4.26.1), decodes as Months 0; its Canonical is never
+// consulted. A float or double literal beyond the type's range is the INF or
+// -INF its mapping rounds it to (·floatingPointRound·, Datatypes §E.1), so it
+// decodes as ±Inf where the backend's Canonical renders that, as
+// builtin/strict's does, and is no item 8 error. backend's governing mapping of
+// each such type but those must therefore have a non-nil Canonical, as
+// builtin/strict's do; item 8 states the error where one fails. For a list
+// type, whose whiteSpace is collapse (Datatypes §4.3.6, §2.4.1.2), the
+// normalized string is split at each U+0020 into its list items before any is
+// mapped, an empty one into none (§4.1.1 dt-list), and each item is read as
+// above under the list's {item type definition}, a restriction of a list taking
+// its base's (Structures §3.16.2.3); the value is the []A of the items in
+// order. So the value is the instance's own even where a fixed value constraint
+// holds it to an equal one that is not identical (§3.5.4 cvc-au, cvc-elt clause
+// 5.2.2.2.2): -0 against fixed 0 on xs:double decodes to negative zero. The
+// field of an optional attribute use with an effective value constraint is the
+// Go type codegen gives its simple type itself, as codegen emits it, holding
+// the supplied value when the attribute is absent; a whitespace-only element
+// has a character child and holds its own value; and an element absent from the
+// instance supplies nothing, its field nil or not appended to.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -120,8 +127,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     validate accepted on the same backend: no mapping of backend governs
 //     the type, its Parse rejects the normalized value, or its Canonical is
 //     nil, fails, or renders a form the Go type does not read or a finite
-//     form beyond the Go type's range; for a list, the type is its {item type
-//     definition} and the value one list item. It is a fault of the backend,
+//     form beyond the Go type's range, or, for yearMonthDuration's datatype
+//     struct, which reads no Canonical, Parse accepts a form that struct does
+//     not read; a datatype struct reads no form denoting no value of its
+//     datatype, such as a month of 13, an hour of 24 or a dateTimeStamp
+//     without a timezone. For a list, the type is its {item type definition}
+//     and the value one list item. It is a fault of the backend,
 //     not of the instance. The error names the stage, the type — its QName, or
 //     for an anonymous type the declaration it is local to and that
 //     declaration's schema Loc, and for a list's item type the list's too —
@@ -176,7 +187,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     order an earlier particle's field takes.
 //   - Of a choice, each alternative's own constructs, then a branch field of
 //     the name an earlier alternative's has where either alternative is of
-//     complex type or holds a substitution group's interface, and otherwise
+//     complex type, holds a substitution group's interface or is of a simple
+//     type whose Go type is a datatype struct or a list of one, and otherwise
 //     of the name and Go type, as item 6 reads it, which declines as two
 //     branches of a sealed interface whose structs have one shape.
 //   - Each of the complex type's attribute uses in order, and its {attribute
@@ -206,10 +218,14 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - T of a simple {type definition}: T's underlying type alone is the Go
 //     type codegen gives it (the Simple types section of codegen's package
 //     doc): its atomic Go type A, one of string, bool, float32, float64,
-//     big.Rat, big.Int, int64, int32, int16, int8, uint64, uint32, uint16 and
-//     uint8, or for a list []A, A its {item type definition}'s. So any T over
-//     that Go type passes, such as the type codegen emits for another
-//     document element of the same simple type.
+//     big.Rat, big.Int, int64, int32, int16, int8, uint64, uint32, uint16,
+//     uint8 and a date, time or duration datatype struct D, or for a list
+//     []A, A its {item type definition}'s. So any T over that Go type passes,
+//     such as the type codegen emits for another document element of the same
+//     simple type. Codegen declares D in the caller's package, so D is matched
+//     by shape: a struct of exactly D's exported fields, in name, order and Go
+//     type, struct tags aside, whatever its name, and for a list a slice,
+//     named or not, of such a struct.
 //   - The field of a particle or attribute use of simple type: for a local
 //     element declaration's particle and an attribute use it is V, *V or []V
 //     by its occurrence, an attribute's by its use's {required} and its
@@ -218,8 +234,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     N, *N or []N, N the named type codegen emits for the referenced
 //     declaration, matched as any type other than V whose underlying type is
 //     V, never by name; V itself, a local particle's type, does not pass, so
-//     a ref's field of simple type and a local one's never accept one Go
-//     type.
+//     a ref's field of simple type and a local one's never accept one Go type,
+//     except where V is a datatype struct D: V and N are then each a struct of
+//     D's shape, as T is, so either field accepts both. For a list of D a
+//     local field's V is an unnamed slice of such a struct and a ref's N a
+//     defined slice type over one.
 //   - The field of a particle whose element declaration, local or
 //     referenced, has a complex {type definition}: S, *S or []S by its
 //     occurrence, S a struct held to that type as T is to the document
@@ -474,18 +493,34 @@ func (s shape) prefix() string {
 // store stores v, a decoded value of a type that converts to the V a field of
 // shape s holds, in dst, a value of a Go type of shape s: a repeated one
 // appends it, an optional one points at a copy of it, each converted to dst's
-// own element type, and shapeOne sets dst to it converted to dst's type.
+// own element type, and shapeOne sets dst to it converted to dst's type, each
+// conversion convertTo's.
 func (s shape) store(dst, v reflect.Value) {
 	switch s {
 	case shapeOptional:
 		p := reflect.New(dst.Type().Elem())
-		p.Elem().Set(v.Convert(dst.Type().Elem()))
+		p.Elem().Set(convertTo(v, dst.Type().Elem()))
 		dst.Set(p)
 	case shapeRepeated:
-		dst.Set(reflect.Append(dst, v.Convert(dst.Type().Elem())))
+		dst.Set(reflect.Append(dst, convertTo(v, dst.Type().Elem())))
 	default:
-		dst.Set(v.Convert(dst.Type()))
+		dst.Set(convertTo(v, dst.Type()))
 	}
+}
+
+// convertTo returns v converted to t: a slice whose element type is not t's,
+// a list of codec's mirror of a datatype struct, which converts to no slice
+// of the caller's struct, element by element into a new slice of t of v's
+// length, and any other value by Convert.
+func convertTo(v reflect.Value, t reflect.Type) reflect.Value {
+	if v.Kind() != reflect.Slice || v.Type().Elem() == t.Elem() {
+		return v.Convert(t)
+	}
+	out := reflect.MakeSlice(t, v.Len(), v.Len())
+	for i := range v.Len() {
+		out.Index(i).Set(v.Index(i).Convert(t.Elem()))
+	}
+	return out
 }
 
 // valueType is how the Go type V a field's shape holds its value in relates
@@ -534,19 +569,28 @@ type scalarArm struct {
 
 // accepts reports whether v is the V codegen gives a, as Decode's doc, item 6,
 // reads it: the Go type codegen gives a's simple type (scalar.goType) itself
-// for valueBare, and for valueNamed a type other than it whose underlying type
-// it is, its name never compared. Equal Kinds of two scalar types mean one
-// underlying type; for big.Rat and big.Int, ConvertibleTo means an identical
-// underlying type, which math/big's unexported fields keep any other struct
-// from having; and for two slice types, Kind Slice and ConvertibleTo mean an
-// identical underlying type, since Go converts between slice types only then.
+// for valueBare, and for valueNamed a type other than it over it
+// (scalar.underlies), its name never compared. A datatype struct D is
+// declared in the caller's package, so codec holds no D to compare v with:
+// for valueBare and valueNamed alike v is a struct over D, and for a list
+// []D, an unnamed slice of such a struct, for valueBare, and a defined slice
+// type over one, N for type N []D, for valueNamed.
 func (a scalarArm) accepts(v reflect.Type) bool {
+	if a.atom.mirrored() {
+		if !a.underlies(v) {
+			return false
+		}
+		if a.item == nil {
+			return true
+		}
+		return (v.Name() == "") == (a.value == valueBare)
+	}
 	want := a.goType()
 	switch a.value {
 	case valueBare:
 		return v == want
 	case valueNamed:
-		return v != want && v.Kind() == want.Kind() && v.ConvertibleTo(want)
+		return v != want && a.underlies(v)
 	}
 	// The zero valueType is an internal bug, never input.
 	panic(fmt.Sprintf("codec: invalid value type %d", a.value))
@@ -569,12 +613,13 @@ func (a scalarArm) read(p *pipeline, r *xmltree.Reader, start *xmltree.StartElem
 }
 
 // describe spells V: the Go type codegen gives a's simple type, A or for a
-// list []A, or N for a named type N over it.
+// list []A, as scalar.spell spells it, or N for a named type N over it, which
+// a datatype struct D, of no list, is not told apart from (accepts).
 func (a scalarArm) describe() string {
-	if a.value == valueNamed {
-		return "N for a named type N over " + a.goType().String()
+	if a.value == valueNamed && (!a.atom.mirrored() || a.item != nil) {
+		return "N for a named type N over " + a.spell()
 	}
-	return a.goType().String()
+	return a.spell()
 }
 
 // structArm is a field's V where the field's element is of a complex type
@@ -729,20 +774,21 @@ func (f field) matches(got reflect.StructField) bool {
 // sharesBranch reports whether f and g, two branch fields of one sealed
 // interface, a choice's alternatives' or a substitution group's members', may
 // accept a common Go type, as check reads one: the same name, and then either
-// arm other than a scalarArm, which is conservative, since such an
-// alternative's branch is selected by its field's name alone
-// (sealed.alternative); or the same value type and, for valueBare, the same
-// Go type of shape over scalar.goType, a repeated xs:int and a list of xs:int
-// each []int32; for valueNamed, the same shape and the same goType
-// separately, since the named type sits between them and []N over int32 is no
-// N over []int32.
+// arm other than a scalarArm, or either scalarArm's of a datatype struct,
+// which is conservative, since such an alternative's branch is selected by its
+// field's name alone (sealed.alternative), and a datatype struct's V is no Go
+// type codec holds (scalarArm.accepts); or the same value type and, for
+// valueBare, the same Go type of shape over scalar.goType, a repeated xs:int
+// and a list of xs:int each []int32; for valueNamed, the same shape and the
+// same goType separately, since the named type sits between them and []N over
+// int32 is no N over []int32.
 func (f field) sharesBranch(g field) bool {
 	fa, fScalar := f.arm.(scalarArm)
 	ga, gScalar := g.arm.(scalarArm)
 	if f.name != g.name {
 		return false
 	}
-	if !fScalar || !gScalar {
+	if !fScalar || !gScalar || fa.atom.mirrored() || ga.atom.mirrored() {
 		return true
 	}
 	if fa.value != ga.value {
@@ -1716,12 +1762,15 @@ func itemSubject(subject string, item *xsd.SimpleType) string {
 }
 
 // atomicDecline returns the atomic Go type codegen gives the simple type st,
-// an atomic type whose {primitive type definition} is xs:string, xs:anyURI,
-// xs:boolean, xs:float, xs:double or xs:decimal (codegen/doc.go "# Simple
-// types"), or else the construct Decode declines st for: a union's, or that of
-// its primitive. A list st is a plain error: simpleDecline routes a list to its
-// {item type definition}, which cos-st-restricts clause 2.1 holds to no list.
-// {variety} is a closed sum, so the switch is STYLE T2's sealed-sum exception.
+// an atomic type whose {primitive type definition} is one of
+// primitiveAtomics' or datatypeAtomics', as codegen/doc.go "# Simple types"
+// picks it: from st's {base type definition} chain (chainAtomic), which meets
+// a date, time or duration primitive at its top, failing that from its
+// primitive. Or else it returns the construct Decode declines st for: a
+// union's, a special type's, or that of its primitive. A list st is a plain
+// error: simpleDecline routes a list to its {item type definition}, which
+// cos-st-restricts clause 2.1 holds to no list. {variety} is a closed sum, so
+// the switch is STYLE T2's sealed-sum exception.
 func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
@@ -1741,18 +1790,15 @@ func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, e
 		// xs:anySimpleType, of absent {variety}, and xs:anyAtomicType.
 		return 0, constructSpecial, nil
 	}
-	switch primitive.Name() {
-	case stringPrimitive, anyURIPrimitive:
-		return atomicString, 0, nil
-	case booleanPrimitive:
-		return atomicBool, 0, nil
-	case floatPrimitive:
-		return atomicFloat32, 0, nil
-	case doublePrimitive:
-		return atomicFloat64, 0, nil
-	case decimalPrimitive:
-		atom, err := decimalAtomic(r, st)
-		return atom, 0, err
+	atom, ok, err := chainAtomic(r, st)
+	if err != nil {
+		return 0, 0, err
+	}
+	if ok {
+		return atom, 0, nil
+	}
+	if atom, ok := primitiveAtomics[primitive.Name()]; ok {
+		return atom, 0, nil
 	}
 	return 0, constructOtherPrimitive, nil
 }
@@ -1919,14 +1965,12 @@ type simpleRoot struct {
 	scalar
 }
 
-// check returns s, which fills t, when t's underlying type is the Go type
-// codegen gives s's simple type, and otherwise the ErrTypeMismatch error
-// Decode's doc states, item 6. t's name is never compared; equal Kinds and
-// ConvertibleTo mean one underlying type, as field.accepts states.
+// check returns s, which fills t, when t is a type over the Go type codegen
+// gives s's simple type (scalar.underlies), and otherwise the ErrTypeMismatch
+// error Decode's doc states, item 6. t's name is never compared.
 func (s *simpleRoot) check(t reflect.Type, _ *checkContext) (filler, error) {
-	want := s.goType()
-	if t.Kind() != want.Kind() || !t.ConvertibleTo(want) {
-		return nil, fmt.Errorf("%w: the underlying type of %s is not %s", ErrTypeMismatch, t, want)
+	if !s.underlies(t) {
+		return nil, fmt.Errorf("%w: the underlying type of %s is not %s", ErrTypeMismatch, t, s.spell())
 	}
 	return s, nil
 }

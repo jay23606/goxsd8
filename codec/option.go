@@ -48,7 +48,10 @@ func newConfig(opts []Option) config {
 //     the governing mapping's Parse, logged before Parse runs, so none where
 //     no mapping of the backend governs the type.
 //   - "conversion": rule "dt-canonical-mapping" (§2.3.1), input the canonical
-//     form the governing mapping's Canonical rendered, logged once it has.
+//     form the governing mapping's Canonical rendered, logged once it has;
+//     for yearMonthDuration's datatype struct, which Decode's doc states is
+//     converted from the string Parse accepted, rule "dt-lexical-mapping"
+//     (§2.3), input that string, logged once Parse has accepted it.
 //
 // Every record also carries type, the type as item 8 of Decode's doc names it,
 // and loc, the instance Loc of the value's source item 8 names, the whole

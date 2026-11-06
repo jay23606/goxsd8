@@ -49,12 +49,49 @@ type listItem struct {
 }
 
 // goType returns the Go type codegen gives s's simple type: s's atomic Go type
-// A, or []A for a list (codegen/doc.go "# Simple types").
+// A, or []A for a list (codegen/doc.go "# Simple types"), A codec's mirror
+// for a datatype struct (atomic.bare).
 func (s scalar) goType() reflect.Type {
 	if s.item == nil {
 		return s.atom.bare()
 	}
 	return reflect.SliceOf(s.atom.bare())
+}
+
+// underlies reports whether v is a type over the Go type codegen gives s's
+// simple type, its name never compared, as Decode's doc, item 6, reads a
+// simple document element's T. For an atomic Go type other than a datatype
+// struct, v's underlying type is goType's: equal Kinds of two scalar types
+// mean one underlying type; for big.Rat and big.Int, ConvertibleTo means an
+// identical underlying type, which math/big's unexported fields keep any
+// other struct from having; and for two slice types, Kind Slice and
+// ConvertibleTo mean an identical underlying type, since Go converts between
+// slice types only then. For a datatype struct, which codegen declares in the
+// caller's package, v is ConvertibleTo codec's mirror, which only a struct of
+// its exported fields exactly, in name, order and Go type, struct tags aside,
+// is, or for a list v is a slice of such a struct: []D converts to no
+// []mirror.
+func (s scalar) underlies(v reflect.Type) bool {
+	if !s.atom.mirrored() {
+		want := s.goType()
+		return v.Kind() == want.Kind() && v.ConvertibleTo(want)
+	}
+	if s.item != nil {
+		if v.Kind() != reflect.Slice {
+			return false
+		}
+		v = v.Elem()
+	}
+	return v.ConvertibleTo(s.atom.bare())
+}
+
+// spell spells the Go type codegen gives s's simple type for an error
+// message, A as atomic.spell spells it: A, or []A for a list.
+func (s scalar) spell() string {
+	if s.item == nil {
+		return s.atom.spell()
+	}
+	return "[]" + s.atom.spell()
 }
 
 // simpleGo is the Go type codegen gives a simple type Decode decodes, as
@@ -113,11 +150,14 @@ func typeLabel(st *xsd.SimpleType, subject string) string {
 }
 
 // The rules each stage's trace record names: Datatypes §4.3.6 rf-whiteSpace,
-// §4.1.4 cvc-datatype-valid clause 2.1, and §2.3.1 dt-canonical-mapping.
+// §4.1.4 cvc-datatype-valid clause 2.1, §2.3.1 dt-canonical-mapping, and,
+// for a conversion of the lexical (atomic.readsLexical), §2.3
+// dt-lexical-mapping.
 const (
 	ruleWhiteSpace       = "rf-whiteSpace"
 	ruleDatatypeValid    = "cvc-datatype-valid"
 	ruleCanonicalMapping = "dt-canonical-mapping"
+	ruleLexicalMapping   = "dt-lexical-mapping"
 )
 
 // decode runs Decode's value stages on raw, the item's characters or its
@@ -169,9 +209,10 @@ func (s scalar) decode(p *pipeline, raw string, src source) (reflect.Value, erro
 // lexicalStages are Decode's value stages after whiteSpace for lexicals of
 // one atomic simple type, label naming it, from src: for every atomic other
 // than string, the lexical mapping (m's Parse, the governing mapping
-// value.GoverningMapping returns) and the conversion to the Go type (m's
-// Canonical, then atomic.convert). m is the zero Mapping for atomicString,
-// whose value is the lexical itself.
+// value.GoverningMapping returns) and the conversion to the Go type
+// (atomic.convert, of the form m's Canonical renders or, where the atomic
+// readsLexical, of the lexical Parse accepted). m is the zero Mapping for
+// atomicString, whose value is the lexical itself.
 type lexicalStages struct {
 	atom  atomic
 	label string
@@ -200,7 +241,8 @@ func newLexicalStages(p *pipeline, atom atomic, st *xsd.SimpleType, label string
 }
 
 // run returns the value of lexical, at position token as stageError states
-// it, as a value of ls.atom's bare type.
+// it, as a value of ls.atom's bare type, codec's mirror for a datatype
+// struct, which shape.store converts to the caller's type.
 func (ls lexicalStages) run(p *pipeline, lexical string, token int) (reflect.Value, error) {
 	if ls.atom == atomicString {
 		return reflect.ValueOf(lexical), nil
@@ -209,6 +251,14 @@ func (ls lexicalStages) run(p *pipeline, lexical string, token int) (reflect.Val
 	v, err := ls.m.Parse(lexical, nil)
 	if err != nil {
 		return reflect.Value{}, ls.fail(stageLexicalMapping, lexical, token, err)
+	}
+	if ls.atom.readsLexical() {
+		p.trace("conversion", ruleLexicalMapping, ls.label, lexical, ls.src)
+		out, err := ls.atom.convert(lexical)
+		if err != nil {
+			return reflect.Value{}, ls.fail(stageConversion, lexical, token, fmt.Errorf("it is no %s: %w", ls.atom.spell(), err))
+		}
+		return out, nil
 	}
 	if ls.m.Canonical == nil {
 		return reflect.Value{}, ls.fail(stageConversion, lexical, token, errors.New("the governing mapping has no canonical mapping"))
@@ -220,7 +270,7 @@ func (ls lexicalStages) run(p *pipeline, lexical string, token int) (reflect.Val
 	p.trace("conversion", ruleCanonicalMapping, ls.label, canonical, ls.src)
 	out, err := ls.atom.convert(canonical)
 	if err != nil {
-		return reflect.Value{}, ls.fail(stageConversion, lexical, token, fmt.Errorf("canonical form %q is no %s: %w", canonical, ls.atom.bare(), err))
+		return reflect.Value{}, ls.fail(stageConversion, lexical, token, fmt.Errorf("canonical form %q is no %s: %w", canonical, ls.atom.spell(), err))
 	}
 	return out, nil
 }

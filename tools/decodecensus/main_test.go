@@ -99,7 +99,7 @@ const wantCounts = `decodecensus: 12 instance case(s) under %ROOT%
   decoded where validate rejects: 0
 
 === First decline, by construct: 2 construct(s) ===
-       2  an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal
+       2  an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration
        1  all content
 
 === Caveats ===
@@ -108,7 +108,7 @@ const wantCounts = `decodecensus: 12 instance case(s) under %ROOT%
 // wantPaths is the -paths sections over censusSuite.
 const wantPaths = `
 === Cases, by construct ===
-an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal (2):
+an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration (2):
   S/g/instance/simple
   S/g/instance/simple2
 all content (1):

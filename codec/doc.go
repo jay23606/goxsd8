@@ -36,15 +36,19 @@
 // # What decodes
 //
 // A simple type decodes when it is atomic with {primitive type definition}
-// xs:string, xs:anyURI, xs:boolean, xs:float, xs:double or xs:decimal. So
-// xs:normalizedString, xs:token, xs:language, xs:Name, xs:NCName, xs:NMTOKEN,
-// xs:ID, xs:IDREF, xs:ENTITY, xs:integer and every builtin derived from it,
-// and a user restriction of any of them decode. Each decodes into the atomic
-// Go type codegen gives it, by the rules of codegen's package doc, "# Simple
-// types". A list type decodes when its {item type definition} is such an
-// atomic type, a restriction of a list taking its base's (Structures
-// §3.16.2.3), xs:NMTOKENS among them, into []A, A its item's atomic Go type,
-// one element per list item; the empty list is a slice of length 0.
+// xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal,
+// xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay,
+// xs:gDay, xs:gMonth or xs:duration. So xs:normalizedString, xs:token,
+// xs:language, xs:Name, xs:NCName, xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY,
+// xs:integer and every builtin derived from it, xs:dateTimeStamp,
+// xs:dayTimeDuration, xs:yearMonthDuration, and a user restriction of any of
+// them decode. Each decodes into the atomic Go type codegen gives it, by the
+// rules of codegen's package doc, "# Simple types", a date, time or duration
+// type into its datatype struct. A list type decodes when its {item type
+// definition} is such an atomic type, a restriction of a list taking its
+// base's (Structures §3.16.2.3), xs:NMTOKENS among them, into []A, A its
+// item's atomic Go type, one element per list item; the empty list is a
+// slice of length 0.
 //
 // A document element decodes when its declaration, a top-level one, has no
 // {type table} and {nillable} false, and its {type definition} is either a
@@ -92,14 +96,15 @@
 // choice occurring other than exactly once, two branches of a sealed
 // interface, a choice's alternatives or a substitution group's declarations,
 // whose structs have one shape or which share a name where either is of
-// complex type or holds a substitution group's interface, an all group, a
-// nested model group or <group ref>, a choice's model-group alternative
-// included, a wildcard, mixed, simple or empty content, a particle's element
-// declaration of type xs:anyType or of a complex type with {abstract} true,
-// local or referenced, a nillable element, a union, a special type, a
-// primitive other than those six, a list whose {item type definition} is a
-// union or of such a primitive, declining by its item's construct, and an
-// xsi:type. Two of those are rulings rather than coverage still to come:
+// complex type, holds a substitution group's interface or holds a datatype
+// struct or a list of one, an all group, a nested model group or <group ref>,
+// a choice's model-group alternative included, a wildcard, mixed, simple or
+// empty content, a particle's element declaration of type xs:anyType or of a
+// complex type with {abstract} true, local or referenced, a nillable element,
+// a union, a special type, a primitive other than those fifteen, a list whose
+// {item type definition} is a union or of such a primitive, declining by its
+// item's construct, and an xsi:type. Two of those are rulings rather than
+// coverage still to come:
 //
 //   - A declaration with a {type table} declines. The slice that decodes it
 //     takes the branch from the type the validator selected

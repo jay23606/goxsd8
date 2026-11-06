@@ -62,7 +62,7 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a, constructNestedGroup, 1, 1},
 		{"choice alternatives sharing a branch shape, refs to a and A", `<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/><xs:element ref="s:A"/></xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
-		{"choice alternative of another primitive", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:dateTime"/></xs:choice>`),
+		{"choice alternative of another primitive", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:base64Binary"/></xs:choice>`),
 			"", a, constructOtherPrimitive, 1, 1},
 		{"choice alternatives sharing a branch shape, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`),
 			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
@@ -70,6 +70,8 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, two lists of xs:int", root(`<xs:choice><xs:element name="x"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element><xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element></xs:choice>`),
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a branch shape, a ref to an xs:date element and a local xs:date", `<xs:element name="d" type="xs:date"/>` + root(`<xs:choice><xs:element ref="s:d"/><xs:element name="d" form="unqualified" type="xs:date"/></xs:choice>`),
+			"", `<s:d>2000-01-01</s:d>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, a and A", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:token"/></xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
 		{"all content", root(`<xs:all><xs:element name="a" type="xs:string"/></xs:all>`), "", a, constructAllContent, 1, 1},
@@ -134,8 +136,8 @@ func TestDecodeDeclines(t *testing.T) {
 		{"xs:anyAtomicType", sequenceOf(`<xs:element name="a" type="xs:anyAtomicType"/>`), "", a, constructSpecial, 1, 1},
 		{"other primitive", sequenceOf(`<xs:element name="a" type="xs:hexBinary"/>`), "", `<s:a>0A</s:a>`, constructOtherPrimitive, 1, 1},
 		{"other primitive, precisionDecimal", sequenceOf(`<xs:element name="a" type="xs:precisionDecimal"/>`), "", `<s:a>1.0</s:a>`, constructOtherPrimitive, 1, 1},
-		{"attribute use's type", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b" type="xs:dateTime"/>`),
-			` b="2000-01-01T00:00:00"`, a, constructOtherPrimitive, 1, 1},
+		{"attribute use's type", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b" type="xs:QName"/>`),
+			` b="s:x"`, a, constructOtherPrimitive, 1, 1},
 		{"attribute use in the xsi namespace", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>` +
 			root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:nil"/>`), "", a, constructXsiAttribute, 1, 1},
 		{"attribute wildcard", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:anyAttribute processContents="lax"/>`),
@@ -443,7 +445,7 @@ func TestDeclineErrorText(t *testing.T) {
 func TestDeclineErrorTextSimpleRoot(t *testing.T) {
 	schema := schemaOf(t, `<xs:element name="r" type="xs:hexBinary"/>`)
 	_, err := Decode[string](schema, strict.New(), instanceOf("", `0A`))
-	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at ?; a decoder refusal, not a schema or instance fault"
+	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at ?; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}
@@ -486,12 +488,12 @@ func assertDecline(t *testing.T, err error, c construct, line, col int) {
 }
 
 // TestDeclineErrorTextOtherPrimitive pins the message of a decline of a
-// local element whose type's primitive, xs:hexBinary, is none of the six
+// local element whose type's primitive, xs:hexBinary, is none of those
 // simpleDecline admits.
 func TestDeclineErrorTextOtherPrimitive(t *testing.T) {
 	schema := schemaOf(t, sequenceOf(`<xs:element name="a" type="xs:hexBinary"/>`))
 	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", `<s:a>0A</s:a>`))
-	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal: element {urn:s}a declared at s.xsd:1:231; a decoder refusal, not a schema or instance fault"
+	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration: element {urn:s}a declared at s.xsd:1:231; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}
