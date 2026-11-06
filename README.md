@@ -225,7 +225,10 @@ too, so directives it never reached are neither followed nor reported.
 Several schema documents compiled as one set go through
 `parser.ParseSet(roots []parser.Root, opts ...Option)`, which returns the
 same three values. `parser.RootAt(location)` names a document the caller
-vouches for, so failing to read it is an error; `parser.HintAt(namespace,
+vouches for, so failing to read it is an error, and its location is resolved
+by the `WithResolver` resolver — under the default `loader.Dir(".")` even an
+absolute path is joined beneath the working directory (`go doc
+github.com/kud360/goxsd8/parser RootAt`); `parser.HintAt(namespace,
 location)` names a schema location hint whose document may legally be
 absent, and is then skipped and listed by
 `AssemblyReport.UnfollowedRoots()`. `Parse` and `ParseReport` are

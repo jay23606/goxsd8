@@ -127,26 +127,25 @@ type AssembledDocument struct {
 	Location string
 
 	// Unmapped is every element of THIS discovery of the document that the
-	// producer maps to no component, in document order. Whether some pass also
-	// REJECTS the document over that same element is independent of its being
-	// here: an entry can ride beside a verdict naming its own construct, and
-	// [UnmappedConstruct] states which of the two a consumer may act on. The
-	// census covers several regions of the vocabulary and not all of it —
-	// parser/census.go's "Scope" states which, and what each region left out
-	// costs — so empty is never a statement about the whole document, only about
-	// the regions censused. A top-level child outside the XSD namespace is passed
-	// over unreported at every depth, an open gap marked and owned at
-	// producer.topLevelDecls (#1036).
+	// producer maps to no component, in document order. Trust an empty Unmapped
+	// only when [ParseSet] returned a nil error: otherwise it may mean NOT
+	// COMPUTED rather than "nothing unmapped".
 	//
-	// It is populated for every discovery whose CENSUS RAN, and a census that ran
-	// is complete over those regions: the walk precedes the first pass of its own
-	// document that can fail (assembly.compile), so a document the assembly went
-	// on to REJECT still carries its whole census — which is how a top-level
-	// entry reaches a consumer at all. What an assembly failure costs is the
-	// discoveries it never censused: a discovery is recorded when the document is
-	// READ, before any census is taken, so one the failure preempted carries an
-	// empty Unmapped meaning NOT COMPUTED rather than "nothing unmapped". Only a
-	// NIL ERROR from [ParseSet] says every discovery was censused.
+	// That is because a discovery is recorded when its document is READ, before
+	// its census is taken, so one an assembly failure preempted carries an empty
+	// Unmapped. A discovery whose census did run carries it whole, even when the
+	// assembly went on to REJECT its document: the census precedes every pass over
+	// that document that can fail, which is how a top-level entry reaches a
+	// consumer at all.
+	//
+	// Whether some pass also REJECTS the document over an element is independent
+	// of its being here: an entry can ride beside a verdict naming its own
+	// construct, and [UnmappedConstruct] states which of the two a consumer may
+	// act on. The census covers several regions of the vocabulary and not all of
+	// it, so even a complete Unmapped that is empty is a statement about the
+	// regions censused, never about the whole document. A top-level child outside
+	// the XSD namespace is passed over unreported at every depth, an open gap
+	// (#1036).
 	//
 	// It is a property of the DISCOVERY, not of the document: the ·override
 	// pre-processing· in force over one discovery substitutes for declarations

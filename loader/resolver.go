@@ -36,6 +36,22 @@ var ErrNotFound = errors.New("loader: schema document not found")
 // targetNamespace, §4.2.6.2 / §4.3.2), so namespace == "" is the sentinel
 // for the no-namespace case, not a missing argument.
 //
+// Which namespace a request carries depends on what made it. Package parser
+// makes four kinds of request:
+//
+//   - an xs:import asks under its namespace attribute, "" when it has none (an
+//     xs:import with no schemaLocation asks nothing);
+//   - a parser.HintAt root asks under the namespace it was given;
+//   - an xs:include, xs:redefine or xs:override asks under the including
+//     document's EFFECTIVE target namespace: its declared one or, for a
+//     document itself chameleon-included, the namespace it was included under,
+//     so a chameleon target is asked under a namespace it does not declare;
+//   - a parser.RootAt root asks under "" whatever the document declares.
+//
+// A resolver keyed on namespace, such as a catalog, must therefore not treat
+// "" or a namespace the document does not declare as "not mine" for an
+// include-family or RootAt request.
+//
 // The location argument is ALREADY RESOLVED against the owner element's
 // base URI: §4.3.2 clause 4 makes relative-reference resolution the
 // caller's (parser's) job, so Resolve is location-hint-in / reader-out and

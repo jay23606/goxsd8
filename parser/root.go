@@ -13,11 +13,17 @@ import (
 // is a closed set (STYLE T2's sealed-sum exception), so the two constructors
 // are the only way to build one.
 //
+// Use [RootAt] for a document the caller requires: one that cannot be read is a
+// plain I/O error, and no namespace is checked. Use [HintAt] for a hint that may
+// be absent: one naming no document is skipped and reported in
+// [AssemblyReport.UnfollowedRoots], and the document's targetNamespace is held
+// to the namespace under src-import clause 3, so HintAt("", f) for a namespaced
+// f is clause 3.2. Each constructor's doc states the rest.
+//
 // Which composition a root gets is derived from which constructor built it,
 // never from a flag: a RootAt root is read exactly as [ParseReport] reads its
 // root, in its own target namespace, and a HintAt root is followed exactly as an
-// <xs:import> of that namespace is (§4.2.6.2), checked against src-import clause
-// 3.
+// <xs:import> of that namespace is (§4.2.6.2).
 //
 // Root values are comparable, and [AssemblyReport.UnfollowedRoots] hands back
 // the caller's own values, so a caller identifies a root it passed by comparing
@@ -33,12 +39,20 @@ type Root interface {
 }
 
 // RootAt returns the Root naming the schema document at location — resolved
-// through the [loader.Resolver] under the no-namespace sentinel and read as
-// [ParseReport] reads its root: conditional inclusion first (§4.2.2), then a
-// document element that must be <schema>, whose own targetNamespace its
-// components are minted in. A failure to resolve or read it is a plain I/O error,
-// as it is for [ParseReport], since the caller named a document that must exist;
-// it is therefore never among [AssemblyReport.UnfollowedRoots].
+// through the [WithResolver] resolver ([loader.Resolver] states the namespace
+// it is asked under) and read as [ParseReport] reads its root: conditional
+// inclusion first (§4.2.2), then a document element that must be <schema>, whose
+// own targetNamespace its components are minted in. A failure to resolve or read
+// it is a plain I/O error, as it is for [ParseReport], since the caller named a
+// document that must exist; it is therefore never among
+// [AssemblyReport.UnfollowedRoots].
+//
+// location is the resolver's to interpret, not the filesystem's: under the
+// default loader.Dir(".") it is joined beneath the working directory, so an
+// absolute path is not honored as absolute — "/tmp/bad.xsd" names
+// ./tmp/bad.xsd, ordinarily not found. A caller holding absolute paths passes a
+// resolver rooted where they are interpreted, such as
+// WithResolver(loader.Dir(base)) with each location relative to base.
 func RootAt(location string) Root { return documentRoot{location: location} }
 
 // HintAt returns the Root naming the schema document at location as a schema
@@ -47,8 +61,8 @@ func RootAt(location string) Root { return documentRoot{location: location} }
 // namespace xsi:noNamespaceSchemaLocation implies.
 //
 // It is followed exactly as an <xs:import> naming that namespace and location
-// (§4.2.6.2), with no importing document: the resolver is asked under namespace,
-// a location that resolves to no document is legal to skip and is recorded among
+// (§4.2.6.2), with no importing document: a location that resolves to no
+// document is legal to skip and is recorded among
 // [AssemblyReport.UnfollowedRoots], a document that cannot be read or whose
 // element is not <schema> is src-import clause 2, and one whose targetNamespace
 // disagrees is src-import clause 3.1 (namespace non-empty) or 3.2 (namespace "")

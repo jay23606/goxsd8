@@ -18,9 +18,10 @@ type dirResolver struct {
 //
 // location is treated as an untrusted, possibly attacker-supplied hint
 // (xsi:schemaLocation flows through the same seam), so Dir refuses any
-// location that would escape root via ".." segments or an absolute
-// override, mapping such attempts to ErrNotFound. This traversal defense is
-// an engineering decision, NOT a spec rule — no XSD text governs it.
+// location that would escape root via ".." segments, mapping such attempts
+// to ErrNotFound, and joins an absolute location beneath root like any
+// other: "/tmp/a.xsd" names root/tmp/a.xsd. This traversal defense is an
+// engineering decision, NOT a spec rule — no XSD text governs it.
 //
 // Choosing to confine is engineering; how a consumer must treat the refusal
 // that results is not. §4.2.6.2 (src-import) names URI-to-document resolution
