@@ -383,18 +383,18 @@ func TestWithLoggerList(t *testing.T) {
 // type definition}: after the declining declaration, the item, its QName where
 // it has one, and its schema Loc, the zero Loc for a built-in.
 func TestDeclineErrorTextListItem(t *testing.T) {
-	const construct = "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration"
+	const construct = "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary and xs:base64Binary"
 	rows := []struct {
 		name, decls, want string
 	}{
-		{"a built-in item", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list itemType="xs:hexBinary"/></xs:simpleType></xs:element>`),
-			"element {urn:s}a declared at s.xsd:1:231, through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}hexBinary, a type defined at ?"},
-		{"an anonymous item", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType><xs:restriction base="xs:hexBinary"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`),
+		{"a built-in item", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list itemType="xs:QName"/></xs:simpleType></xs:element>`),
+			"element {urn:s}a declared at s.xsd:1:231, through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}QName, a type defined at ?"},
+		{"an anonymous item", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType><xs:restriction base="xs:QName"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`),
 			"element {urn:s}a declared at s.xsd:1:231, through the list type's anonymous {item type definition}, a type defined at s.xsd:1:276"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
-			_, err := Decode[struct{}](schemaOf(t, row.decls), strict.New(), instanceOf("", `<s:a>0A</s:a>`))
+			_, err := Decode[struct{}](schemaOf(t, row.decls), strict.New(), instanceOf("", `<s:a>s:x</s:a>`))
 			if want := "?:1:1: codec does not decode " + construct + ": " + row.want + "; a decoder refusal, not a schema or instance fault"; err == nil || err.Error() != want {
 				t.Errorf("error = %v\nwant    %q", err, want)
 			}

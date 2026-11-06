@@ -64,13 +64,13 @@ func (s scalar) goType() reflect.Type {
 // struct, v's underlying type is goType's: equal Kinds of two scalar types
 // mean one underlying type; for big.Rat and big.Int, ConvertibleTo means an
 // identical underlying type, which math/big's unexported fields keep any
-// other struct from having; and for two slice types, Kind Slice and
-// ConvertibleTo mean an identical underlying type, since Go converts between
-// slice types only then. For a datatype struct, which codegen declares in the
-// caller's package, v is ConvertibleTo codec's mirror, which only a struct of
-// its exported fields exactly, in name, order and Go type, struct tags aside,
-// is, or for a list v is a slice of such a struct: []D converts to no
-// []mirror.
+// other struct from having; and for two slice types, a list's or []byte's,
+// Kind Slice and ConvertibleTo mean an identical underlying type, since Go
+// converts between slice types only then. For a datatype struct, which
+// codegen declares in the caller's package, v is ConvertibleTo codec's
+// mirror, which only a struct of its exported fields exactly, in name, order
+// and Go type, struct tags aside, is, or for a list v is a slice of such a
+// struct: []D converts to no []mirror.
 func (s scalar) underlies(v reflect.Type) bool {
 	if !s.atom.mirrored() {
 		want := s.goType()

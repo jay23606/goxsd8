@@ -131,7 +131,7 @@ var constructNames = [...]string{
 	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",
 	constructUnion:               "a union simple type",
 	constructSpecial:             "a special simple type",
-	constructOtherPrimitive:      "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration",
+	constructOtherPrimitive:      "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary and xs:base64Binary",
 	constructXsiAttribute:        "an attribute use in the xsi namespace",
 	constructAttributeWildcard:   "an {attribute wildcard}",
 	constructXsiType:             "an element carrying xsi:type",

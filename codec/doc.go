@@ -38,13 +38,14 @@
 // A simple type decodes when it is atomic with {primitive type definition}
 // xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal,
 // xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay,
-// xs:gDay, xs:gMonth or xs:duration. So xs:normalizedString, xs:token,
-// xs:language, xs:Name, xs:NCName, xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY,
-// xs:integer and every builtin derived from it, xs:dateTimeStamp,
-// xs:dayTimeDuration, xs:yearMonthDuration, and a user restriction of any of
-// them decode. Each decodes into the atomic Go type codegen gives it, by the
-// rules of codegen's package doc, "# Simple types", a date, time or duration
-// type into its datatype struct. A list type decodes when its {item type
+// xs:gDay, xs:gMonth, xs:duration, xs:hexBinary or xs:base64Binary. So
+// xs:normalizedString, xs:token, xs:language, xs:Name, xs:NCName,
+// xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY, xs:integer and every builtin
+// derived from it, xs:dateTimeStamp, xs:dayTimeDuration,
+// xs:yearMonthDuration, and a user restriction of any of them decode. Each
+// decodes into the atomic Go type codegen gives it, by the rules of
+// codegen's package doc, "# Simple types", a date, time or duration type
+// into its datatype struct. A list type decodes when its {item type
 // definition} is such an atomic type, a restriction of a list taking its
 // base's (Structures §3.16.2.3), xs:NMTOKENS among them, into []A, A its
 // item's atomic Go type, one element per list item; the empty list is a
@@ -101,7 +102,7 @@
 // a choice's model-group alternative included, a wildcard, mixed or simple
 // content, a particle's element declaration of type xs:anyType, local or
 // referenced, a complex type with {abstract} true, a nillable element,
-// a union, a special type, a primitive other than those fifteen, a list whose
+// a union, a special type, a primitive other than those seventeen, a list whose
 // {item type definition} is a union or of such a primitive, declining by its
 // item's construct, and an xsi:type. Two of those are rulings rather than
 // coverage still to come:

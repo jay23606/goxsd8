@@ -48,7 +48,7 @@ func schemaTest(doc string) string {
 // censusSuite is the fixture suite. Group g's schema generates, and its
 // cases decode (a.xml, twice, f.xml, of simple type, and g.xml, a choice,
 // through the branch set the census binds), decline with another primitive,
-// xs:hexBinary (e.xml, twice) and all content (c.xml), and fail otherwise, charged
+// xs:QName (e.xml, twice) and all content (c.xml), and fail otherwise, charged
 // (invalid.xml) and with no declaration for the document element (u.xml), which
 // decodes into the placeholder; its case old is withheld. Group rec's schema
 // assembles and does not generate, group bad's does not assemble, and group none
@@ -68,7 +68,7 @@ var censusSuite = map[string]string{
 	"d/s.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="c"><xs:complexType><xs:all><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
-  <xs:element name="e" type="xs:hexBinary"/>
+  <xs:element name="e" type="xs:QName"/>
   <xs:element name="f" type="xs:string"/>
   <xs:element name="g"><xs:complexType><xs:choice><xs:element name="h" type="xs:string"/><xs:element name="i" type="xs:string"/></xs:choice></xs:complexType></xs:element>
 </xs:schema>`,
@@ -78,7 +78,7 @@ var censusSuite = map[string]string{
 	"d/bad.xsd":       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="a" type="undeclared"/></xs:schema>`,
 	"d/a.xml":         `<a><b>x</b></a>`,
 	"d/c.xml":         `<c><d>x</d></c>`,
-	"d/e.xml":         `<e>0A</e>`,
+	"d/e.xml":         `<e>x</e>`,
 	"d/f.xml":         `<f>x</f>`,
 	"d/g.xml":         `<g><i>x</i></g>`,
 	"d/invalid.xml":   `<a/>`,
@@ -99,7 +99,7 @@ const wantCounts = `decodecensus: 12 instance case(s) under %ROOT%
   decoded where validate rejects: 0
 
 === First decline, by construct: 2 construct(s) ===
-       2  an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration
+       2  an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary and xs:base64Binary
        1  all content
 
 === Caveats ===
@@ -108,7 +108,7 @@ const wantCounts = `decodecensus: 12 instance case(s) under %ROOT%
 // wantPaths is the -paths sections over censusSuite.
 const wantPaths = `
 === Cases, by construct ===
-an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration (2):
+an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary and xs:base64Binary (2):
   S/g/instance/simple
   S/g/instance/simple2
 all content (1):

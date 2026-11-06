@@ -46,8 +46,8 @@ func TestDecodeDeclines(t *testing.T) {
 		{"nillable local element with a fixed value", sequenceOf(`<xs:element name="a" type="xs:string" nillable="true" fixed="x"/>`), "", `<s:a>x</s:a>`, constructNillable, 1, 1},
 		{"document element of mixed content with a default", `<xs:element name="r" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`,
 			"", "", constructMixedContent, 1, 1},
-		{"simple root of another primitive", `<xs:element name="r" type="xs:hexBinary"/>`, "", "0A", constructOtherPrimitive, 1, 1},
-		{"simple root of a list of another primitive", `<xs:element name="r"><xs:simpleType><xs:list itemType="xs:hexBinary"/></xs:simpleType></xs:element>`, "", "0A 0B", constructOtherPrimitive, 1, 1},
+		{"simple root of another primitive", `<xs:element name="r" type="xs:QName"/>`, "", "s:x", constructOtherPrimitive, 1, 1},
+		{"simple root of a list of another primitive", `<xs:element name="r"><xs:simpleType><xs:list itemType="xs:QName"/></xs:simpleType></xs:element>`, "", "s:x s:y", constructOtherPrimitive, 1, 1},
 		{"document element of an abstract complex type of empty content, under xsi:type", `<xs:complexType name="ab" abstract="true"/>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, "", constructAbstractTypeElement, 1, 1},
@@ -67,11 +67,17 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a, constructNestedGroup, 1, 1},
 		{"choice alternatives sharing a branch shape, refs to a and A", `<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/><xs:element ref="s:A"/></xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
-		{"choice alternative of another primitive", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:base64Binary"/></xs:choice>`),
+		{"choice alternative of another primitive", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:QName"/></xs:choice>`),
 			"", a, constructOtherPrimitive, 1, 1},
 		{"choice alternatives sharing a branch shape, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`),
 			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, a repeated xs:int and a list of xs:int", root(`<xs:choice><xs:element name="x" type="xs:int" maxOccurs="unbounded"/><xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element></xs:choice>`),
+			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a branch shape, a repeated xs:hexBinary and a list of xs:hexBinary", root(`<xs:choice><xs:element name="x" type="xs:hexBinary" maxOccurs="unbounded"/><xs:element name="X"><xs:simpleType><xs:list itemType="xs:hexBinary"/></xs:simpleType></xs:element></xs:choice>`),
+			"", `<s:x>0A</s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a branch shape, an xs:hexBinary and an xs:base64Binary", root(`<xs:choice><xs:element name="x" type="xs:hexBinary"/><xs:element name="X" type="xs:base64Binary"/></xs:choice>`),
+			"", `<s:x>0A</s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a branch shape, a repeated xs:unsignedByte and an xs:hexBinary", root(`<xs:choice><xs:element name="x" type="xs:unsignedByte" maxOccurs="unbounded"/><xs:element name="X" type="xs:hexBinary"/></xs:choice>`),
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, two lists of xs:int", root(`<xs:choice><xs:element name="x"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element><xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element></xs:choice>`),
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
@@ -119,8 +125,8 @@ func TestDecodeDeclines(t *testing.T) {
 			"", "", constructAbstractTypeElement, 1, 1},
 		{"nillable local element of complex type", sequenceOf(`<xs:element name="a" nillable="true"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`),
 			"", `<s:a><s:b>x</s:b></s:a>`, constructNillable, 1, 1},
-		{"a nested type's particle of another primitive", sequenceOf(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:hexBinary"/></xs:sequence></xs:complexType></xs:element>`),
-			"", `<s:a><s:b>0A</s:b></s:a>`, constructOtherPrimitive, 1, 1},
+		{"a nested type's particle of another primitive", sequenceOf(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:QName"/></xs:sequence></xs:complexType></xs:element>`),
+			"", `<s:a><s:b>s:x</s:b></s:a>`, constructOtherPrimitive, 1, 1},
 		{"a nested type's attribute wildcard", sequenceOf(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence><xs:anyAttribute processContents="lax"/></xs:complexType></xs:element>`),
 			"", `<s:a><s:b>x</s:b></s:a>`, constructAttributeWildcard, 1, 1},
 		{"choice alternatives sharing a name, one of complex type", root(`<xs:choice><xs:element name="x"><xs:complexType><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType></xs:element><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`),
@@ -128,12 +134,12 @@ func TestDecodeDeclines(t *testing.T) {
 		{"particles sharing an expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/>`),
 			"", a + `<s:b>y</s:b>` + a, constructSharedName, 1, 1},
 		{"list of a union", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`), "", a, constructUnion, 1, 1},
-		{"attribute of a list of another primitive", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b"><xs:simpleType><xs:list itemType="xs:hexBinary"/></xs:simpleType></xs:attribute>`),
-			` b="0A"`, a, constructOtherPrimitive, 1, 1},
+		{"attribute of a list of another primitive", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b"><xs:simpleType><xs:list itemType="xs:QName"/></xs:simpleType></xs:attribute>`),
+			` b="s:x"`, a, constructOtherPrimitive, 1, 1},
 		{"union", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:element>`), "", a, constructUnion, 1, 1},
 		{"xs:anySimpleType", sequenceOf(`<xs:element name="a" type="xs:anySimpleType"/>`), "", a, constructSpecial, 1, 1},
 		{"xs:anyAtomicType", sequenceOf(`<xs:element name="a" type="xs:anyAtomicType"/>`), "", a, constructSpecial, 1, 1},
-		{"other primitive", sequenceOf(`<xs:element name="a" type="xs:hexBinary"/>`), "", `<s:a>0A</s:a>`, constructOtherPrimitive, 1, 1},
+		{"other primitive", sequenceOf(`<xs:element name="a" type="xs:QName"/>`), "", `<s:a>s:x</s:a>`, constructOtherPrimitive, 1, 1},
 		{"other primitive, precisionDecimal", sequenceOf(`<xs:element name="a" type="xs:precisionDecimal"/>`), "", `<s:a>1.0</s:a>`, constructOtherPrimitive, 1, 1},
 		{"attribute use's type", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b" type="xs:QName"/>`),
 			` b="s:x"`, a, constructOtherPrimitive, 1, 1},
@@ -295,7 +301,7 @@ func TestCheckDecodeMaxOccursZero(t *testing.T) {
 // before item 5: a declaration outside the slice probed with a T that
 // mismatches what codegen emits returns the decline, as Decode does.
 func TestCheckDecodeDeclineBeforeMismatch(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="r" type="xs:hexBinary"/>`)
+	schema := schemaOf(t, `<xs:element name="r" type="xs:QName"/>`)
 	var de *DeclineError
 	if err := CheckDecode[struct{ A int }](schema, rootName); !errors.As(err, &de) || de.Construct() != (Construct{constructOtherPrimitive}) {
 		t.Errorf("CheckDecode = %v, want the decline of %s", err, constructOtherPrimitive.name())
@@ -439,12 +445,12 @@ func TestDeclineErrorText(t *testing.T) {
 
 // TestDeclineErrorTextSimpleRoot pins the message of a decline of the
 // document element's type when that type is simple and built in,
-// xs:hexBinary, and that it precedes the T check: T is string, which is not
-// the []byte codegen emits for it.
+// xs:QName, and that it precedes the T check: T is string, which is not the
+// QName datatype struct codegen emits for it.
 func TestDeclineErrorTextSimpleRoot(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="r" type="xs:hexBinary"/>`)
-	_, err := Decode[string](schema, strict.New(), instanceOf("", `0A`))
-	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at ?; a decoder refusal, not a schema or instance fault"
+	schema := schemaOf(t, `<xs:element name="r" type="xs:QName"/>`)
+	_, err := Decode[string](schema, strict.New(), instanceOf("", `s:x`))
+	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary and xs:base64Binary: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at ?; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}
@@ -487,12 +493,12 @@ func assertDecline(t *testing.T, err error, c construct, line, col int) {
 }
 
 // TestDeclineErrorTextOtherPrimitive pins the message of a decline of a
-// local element whose type's primitive, xs:hexBinary, is none of those
+// local element whose type's primitive, xs:QName, is none of those
 // simpleDecline admits.
 func TestDeclineErrorTextOtherPrimitive(t *testing.T) {
-	schema := schemaOf(t, sequenceOf(`<xs:element name="a" type="xs:hexBinary"/>`))
-	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", `<s:a>0A</s:a>`))
-	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth and xs:duration: element {urn:s}a declared at s.xsd:1:231; a decoder refusal, not a schema or instance fault"
+	schema := schemaOf(t, sequenceOf(`<xs:element name="a" type="xs:QName"/>`))
+	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", `<s:a>s:x</s:a>`))
+	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary and xs:base64Binary: element {urn:s}a declared at s.xsd:1:231; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}

@@ -54,33 +54,36 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // "false" (§E.4 f-booleanCanmap), a float's and a double's by
 // strconv.ParseFloat at the Go type's width, a decimal's into big.Rat,
 // big.Int or one of the bounded Go integers int64, int32, int16, int8, uint64,
-// uint32, uint16 and uint8 at its width, and a date, time or duration type's
-// into its datatype struct, by that datatype's lexical grammar (§3.3.6.2,
-// §3.3.7.2–§3.3.14.2, §D.2.2), each property the local value the form shows,
-// never converted to UTC (§D.2.1), the timezoneOffset in minutes, and a
-// duration's Months and Seconds both of the form's one sign (§3.3.6.1, §E.2).
-// A type whose datatype struct is yearMonthDuration's alone is converted from
-// the string Parse accepted, so that zero, which has no canonical
-// representation (§3.4.26.1), decodes as Months 0; its Canonical is never
-// consulted. A float or double literal beyond the type's range is the INF or
-// -INF its mapping rounds it to (·floatingPointRound·, Datatypes §E.1), so it
-// decodes as ±Inf where the backend's Canonical renders that, as
-// builtin/strict's does, and is no item 8 error. backend's governing mapping of
-// each such type but those must therefore have a non-nil Canonical, as
-// builtin/strict's do; item 8 states the error where one fails. For a list
-// type, whose whiteSpace is collapse (Datatypes §4.3.6, §2.4.1.2), the
-// normalized string is split at each U+0020 into its list items before any is
-// mapped, an empty one into none (§4.1.1 dt-list), and each item is read as
-// above under the list's {item type definition}, a restriction of a list taking
-// its base's (Structures §3.16.2.3); the value is the []A of the items in
-// order. So the value is the instance's own even where a fixed value constraint
-// holds it to an equal one that is not identical (§3.5.4 cvc-au, cvc-elt clause
-// 5.2.2.2.2): -0 against fixed 0 on xs:double decodes to negative zero. The
-// field of an optional attribute use with an effective value constraint is the
-// Go type codegen gives its simple type itself, as codegen emits it, holding
-// the supplied value when the attribute is absent; a whitespace-only element
-// has a character child and holds its own value; and an element absent from the
-// instance supplies nothing, its field nil or not appended to.
+// uint32, uint16 and uint8 at its width, a hexBinary's into []byte by
+// encoding/hex, either letter case read (§E.4.1 f-hexBinaryMap), a
+// base64Binary's into []byte by encoding/base64's StdEncoding (§3.3.16.2), and
+// a date, time or duration type's into its datatype struct, by that datatype's
+// lexical grammar (§3.3.6.2, §3.3.7.2–§3.3.14.2, §D.2.2), each property the
+// local value the form shows, never converted to UTC (§D.2.1), the
+// timezoneOffset in minutes, and a duration's Months and Seconds both of the
+// form's one sign (§3.3.6.1, §E.2). A type whose datatype struct is
+// yearMonthDuration's alone is converted from the string Parse accepted, so
+// that zero, which has no canonical representation (§3.4.26.1), decodes as
+// Months 0; its Canonical is never consulted. A float or double literal beyond
+// the type's range is the INF or -INF its mapping rounds it to
+// (·floatingPointRound·, Datatypes §E.1), so it decodes as ±Inf where the
+// backend's Canonical renders that, as builtin/strict's does, and is no item 8
+// error. backend's governing mapping of each such type but those must therefore
+// have a non-nil Canonical, as builtin/strict's do; item 8 states the error
+// where one fails. For a list type, whose whiteSpace is collapse (Datatypes
+// §4.3.6, §2.4.1.2), the normalized string is split at each U+0020 into its
+// list items before any is mapped, an empty one into none (§4.1.1 dt-list), and
+// each item is read as above under the list's {item type definition}, a
+// restriction of a list taking its base's (Structures §3.16.2.3); the value is
+// the []A of the items in order. So the value is the instance's own even where
+// a fixed value constraint holds it to an equal one that is not identical
+// (§3.5.4 cvc-au, cvc-elt clause 5.2.2.2.2): -0 against fixed 0 on xs:double
+// decodes to negative zero. The field of an optional attribute use with an
+// effective value constraint is the Go type codegen gives its simple type
+// itself, as codegen emits it, holding the supplied value when the attribute is
+// absent; a whitespace-only element has a character child and holds its own
+// value; and an element absent from the instance supplies nothing, its field
+// nil or not appended to.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -219,7 +222,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     type codegen gives it (the Simple types section of codegen's package
 //     doc): its atomic Go type A, one of string, bool, float32, float64,
 //     big.Rat, big.Int, int64, int32, int16, int8, uint64, uint32, uint16,
-//     uint8 and a date, time or duration datatype struct D, or for a list
+//     uint8, []byte and a date, time or duration datatype struct D, or for a list
 //     []A, A its {item type definition}'s. So any T over that Go type passes,
 //     such as the type codegen emits for another document element of the same
 //     simple type. Codegen declares D in the caller's package, so D is matched

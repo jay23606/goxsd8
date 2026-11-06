@@ -1,6 +1,8 @@
 package codec
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -12,9 +14,11 @@ import (
 )
 
 // atomic is the atomic Go type codegen gives an atomic simple type Decode
-// decodes (codegen/doc.go "# Simple types"): string, bool, float32, float64,
-// big.Rat, big.Int, a bounded Go integer, or the datatype struct of a date,
-// time or duration datatype. The zero value is invalid (STYLE T1).
+// decodes (codegen/doc.go "# Simple types"), and how its value is read:
+// string, bool, float32, float64, big.Rat, big.Int, a bounded Go integer,
+// []byte read from xs:hexBinary's canonical form or from xs:base64Binary's,
+// or the datatype struct of a date, time or duration datatype. The zero value
+// is invalid (STYLE T1).
 type atomic uint8
 
 const (
@@ -44,6 +48,8 @@ const (
 	atomicDuration
 	atomicDayTimeDuration
 	atomicYearMonthDuration
+	atomicHexBinary
+	atomicBase64Binary
 )
 
 // The mirrors of the twelve date, time and duration datatype structs codegen
@@ -145,6 +151,8 @@ var atomicTypes = [...]reflect.Type{
 	atomicDuration:          reflect.TypeFor[durationMirror](),
 	atomicDayTimeDuration:   reflect.TypeFor[dayTimeDurationMirror](),
 	atomicYearMonthDuration: reflect.TypeFor[yearMonthDurationMirror](),
+	atomicHexBinary:         reflect.TypeFor[[]byte](),
+	atomicBase64Binary:      reflect.TypeFor[[]byte](),
 }
 
 // datatypeNames holds, indexed by a mirrored atomic, the local name of the
@@ -191,10 +199,14 @@ func (a atomic) mirrored() bool {
 // possible").
 func (a atomic) readsLexical() bool { return a == atomicYearMonthDuration }
 
-// spell spells a's Go type for an error message: its own name, or for a
-// datatype struct "D for the datatype struct D of" the datatype's QName and
-// the struct's fields, never the mirror's name.
+// spell spells a's Go type for an error message: its own name, []byte for
+// either binary arm (reflect spells it []uint8), or for a datatype struct "D
+// for the datatype struct D of" the datatype's QName and the struct's fields,
+// never the mirror's name.
 func (a atomic) spell() string {
+	if a == atomicHexBinary || a == atomicBase64Binary {
+		return "[]byte"
+	}
 	if !a.mirrored() {
 		return a.bare().String()
 	}
@@ -256,6 +268,21 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 			return reflect.Value{}, err
 		}
 		v.SetUint(n)
+	case atomicHexBinary:
+		// form is f-hexBinaryCanonical's (Datatypes §E.4.1); its letter case
+		// is not compared, hex.DecodeString reading either.
+		b, err := hex.DecodeString(form)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		v.SetBytes(b)
+	case atomicBase64Binary:
+		// form is Canonical-base64Binary's (Datatypes §3.3.16.2).
+		b, err := base64.StdEncoding.DecodeString(form)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		v.SetBytes(b)
 	default:
 		// atomicString's value is the normalized lexical itself.
 		panic(fmt.Sprintf("codec: atomic %s has no conversion", a.bare()))
@@ -299,12 +326,14 @@ var datatypeAtomics = func() map[xsd.QName]atomic {
 // builtin chainAtomic meets decides (codegen/doc.go "# Simple types"); it is
 // a lookup index only and never iterated (STYLE D2).
 var primitiveAtomics = map[xsd.QName]atomic{
-	{Space: xsd.XMLSchemaNS, Local: "string"}:  atomicString,
-	{Space: xsd.XMLSchemaNS, Local: "anyURI"}:  atomicString,
-	{Space: xsd.XMLSchemaNS, Local: "boolean"}: atomicBool,
-	{Space: xsd.XMLSchemaNS, Local: "float"}:   atomicFloat32,
-	{Space: xsd.XMLSchemaNS, Local: "double"}:  atomicFloat64,
-	{Space: xsd.XMLSchemaNS, Local: "decimal"}: atomicBigRat,
+	{Space: xsd.XMLSchemaNS, Local: "string"}:       atomicString,
+	{Space: xsd.XMLSchemaNS, Local: "anyURI"}:       atomicString,
+	{Space: xsd.XMLSchemaNS, Local: "boolean"}:      atomicBool,
+	{Space: xsd.XMLSchemaNS, Local: "float"}:        atomicFloat32,
+	{Space: xsd.XMLSchemaNS, Local: "double"}:       atomicFloat64,
+	{Space: xsd.XMLSchemaNS, Local: "decimal"}:      atomicBigRat,
+	{Space: xsd.XMLSchemaNS, Local: "hexBinary"}:    atomicHexBinary,
+	{Space: xsd.XMLSchemaNS, Local: "base64Binary"}: atomicBase64Binary,
 }
 
 // chainAtomic returns the atomic of st as codegen/doc.go "# Simple types"
