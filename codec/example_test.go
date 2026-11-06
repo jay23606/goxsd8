@@ -77,3 +77,51 @@ func ExampleUndecidedError() {
 	// Output:
 	// cvc-assertion
 }
+
+// pay, payCard and payCash are the sealed interface and branch structs
+// codegen emits for ExampleWithBranches' s:pay, written by hand so the example
+// generates nothing.
+type (
+	pay     interface{ isPay() }
+	payCard struct{ Card string }
+	payCash struct{ Cash []string }
+)
+
+func (payCard) isPay() {}
+func (payCash) isPay() {}
+
+// ExampleWithBranches parses an inline schema whose document element's type
+// is a choice occurring once, decodes an instance of it into the sealed
+// interface pay, given its branches by WithBranches, and type-switches on the
+// branch the instance matched.
+func ExampleWithBranches() {
+	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="urn:s" targetNamespace="urn:s" elementFormDefault="qualified">
+  <xs:element name="pay"><xs:complexType><xs:choice>
+    <xs:element name="card" type="xs:string"/><xs:element name="cash" type="xs:token" maxOccurs="3"/>
+  </xs:choice></xs:complexType></xs:element>
+</xs:schema>`
+	resolve := loader.ResolverFunc(func(_, location string) (io.ReadCloser, string, error) {
+		if location != "s.xsd" {
+			return nil, "", fmt.Errorf("no document %q", location)
+		}
+		return io.NopCloser(strings.NewReader(doc)), location, nil
+	})
+	schema, err := parser.Parse("s.xsd", parser.WithResolver(resolve))
+	if err != nil {
+		log.Fatal(err)
+	}
+	instance := []byte(`<s:pay xmlns:s="urn:s"><s:card>4111</s:card></s:pay>`)
+	p, err := codec.Decode[pay](schema, strict.New(), instance, codec.WithBranches[pay](payCard{}, payCash{}))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	switch b := (*p).(type) {
+	case payCard:
+		fmt.Println("card", b.Card)
+	case payCash:
+		fmt.Println("cash", b.Cash)
+	}
+	// Output:
+	// card 4111
+}

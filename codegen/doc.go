@@ -407,12 +407,13 @@
 //     element or a wildcard its one field, a sequence occurring exactly once
 //     the fields of its own particles, any other model group its one field —
 //     and implementing the method; consumers type-switch over the branches,
-//     and "N pointer fields, exactly one non-nil" never appears. A choice with
-//     no {particles}, which matches no sequence of children, the empty one
-//     included (§3.8.4.3 cvc-model-group), gets the interface alone, which no
-//     branch implements, so its one value is nil, and which a content
-//     {particle} gives as the type itself, or a field gives, as it does any
-//     choice.
+//     and "N pointer fields, exactly one non-nil" never appears. codec.Decode
+//     of a type holding an interface with branches takes codec.WithBranches
+//     given one value of each branch struct. A choice with no {particles},
+//     which matches no sequence of children, the empty one included (§3.8.4.3
+//     cvc-model-group), gets the interface alone, which no branch implements,
+//     so its one value is nil, and which a content {particle} gives as the
+//     type itself, or a field gives, as it does any choice.
 //   - One occurrence of a choice with {particles} matches nothing exactly when
 //     one of its alternatives is emptiable (§3.8.6.6 cos-choice-range,
 //     §3.9.6.3 cos-group-emptiable), and the nil interface is the one value for
@@ -440,7 +441,8 @@
 //     order [xsd.Schema.Elements] returns them, emitted after the interface,
 //     each holding one field, named from the declaration's local name, of the
 //     type emitted for that top-level declaration, and implementing the method.
-//     The field takes the occurrence rules below.
+//     codec.Decode takes codec.WithBranches for the interface as for a
+//     choice's. The field takes the occurrence rules below.
 //   - A substitution group's declarations' own types are emitted unchanged,
 //     each at its own position, and one interface is emitted per head however
 //     many particles reach it.
