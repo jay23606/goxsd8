@@ -683,6 +683,9 @@ func TestParseRootUnresolvable(t *testing.T) {
 	if !errors.Is(err, loader.ErrNotFound) {
 		t.Fatalf("Parse error = %v, want it to wrap loader.ErrNotFound", err)
 	}
+	if rule, ok := xsderr.RuleOf(err); ok {
+		t.Fatalf("Parse error = %v charged %q, want a plain error with no *xsderr.Error in its chain", err, rule)
+	}
 }
 
 // TestParseRootNotASchema checks the caller-precondition fault: a root whose

@@ -142,12 +142,34 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // src-expredef clause 1.1 defines, so its self-derivation is a real derivation.
 // §4.2.4 marks the mechanism ·deprecated·.
 //
-// Errors are schema-validity verdicts as *[xsderr.Error] values (src-include,
-// src-import, src-import-noselfimport, src-override, src-redefine, src-expredef,
-// src-resolve, sch-props-correct, …) carrying the offending construct's
-// location; a failure to resolve the ROOT location, by contrast, is a plain I/O
-// error, since the caller named a document that must exist. Like [Produce],
-// ParseReport returns only the first error.
+// A returned error takes one of four shapes, told apart by the test a caller
+// runs:
+//
+//   - an *[xsderr.Error] that errors.As and [xsderr.RuleOf] reach under a catalog
+//     rule (src-include, src-import, src-redefine, src-resolve,
+//     sch-props-correct, …): a schema-validity verdict located at the offending
+//     construct. A document an <include>, <import>, <redefine> or <override>
+//     names that resolves but cannot be read, or is not well-formed, is such a
+//     verdict under that directive's rule, with the reader's error still
+//     reachable by errors.Is.
+//   - an *[xsderr.Error] under [xsderr.RuleXMLWellFormed]: a fault, not a
+//     verdict, for a ROOT document that resolves but cannot be read or is not
+//     well-formed, with the reader's error reachable by errors.Is. An *Error
+//     under [xsderr.RuleComponentInvariant] is no verdict either, and one
+//     reaching a ParseReport caller is a parser defect.
+//   - a plain error, which errors.As does not reach as an *[xsderr.Error], so
+//     RuleOf reports false: a grammar fault against the schema for schema
+//     documents (the s4s-grammar class [xsderr]'s package doc names); a root
+//     whose document element is not <schema>; a derivation this parser cannot
+//     yet map, one that reads the {content type} of a base still being built; a
+//     root location the resolver does not resolve, wrapping the resolver's
+//     error, so errors.Is(err, [loader.ErrNotFound]) reports a missing root; and
+//     a resolver error other than ErrNotFound for a directive's location, wrapped
+//     the same way.
+//   - a *[builtin.MissingPrimitivesError], which errors.As reaches, when the
+//     backend [WithBackend] set does not map every primitive datatype.
+//
+// Like [Produce], ParseReport returns only the first error.
 //
 // It is [ParseSet] over the one root [RootAt](location).
 func ParseReport(location string, opts ...Option) (*xsd.Schema, *AssemblyReport, error) {

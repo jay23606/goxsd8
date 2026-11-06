@@ -13,9 +13,9 @@ import (
 // is a closed set (STYLE T2's sealed-sum exception), so the two constructors
 // are the only way to build one.
 //
-// Use [RootAt] for a document the caller requires: one that cannot be read is a
-// plain I/O error, and no namespace is checked. Use [HintAt] for a hint that may
-// be absent: one naming no document is skipped and reported in
+// Use [RootAt] for a document the caller requires: one that cannot be resolved
+// or read is an error, and no namespace is checked. Use [HintAt] for a hint that
+// may be absent: one naming no document is skipped and reported in
 // [AssemblyReport.UnfollowedRoots], and the document's targetNamespace is held
 // to the namespace under src-import clause 3, so HintAt("", f) for a namespaced
 // f is clause 3.2. Each constructor's doc states the rest.
@@ -43,8 +43,8 @@ type Root interface {
 // it is asked under) and read as [ParseReport] reads its root: conditional
 // inclusion first (§4.2.2), then a document element that must be <schema>, whose
 // own targetNamespace its components are minted in. A failure to resolve or read
-// it is a plain I/O error, as it is for [ParseReport], since the caller named a
-// document that must exist; it is therefore never among
+// it is an error, in the shape [ParseReport]'s doc gives a root's, since the
+// caller named a document that must exist; it is therefore never among
 // [AssemblyReport.UnfollowedRoots].
 //
 // location is the resolver's to interpret, not the filesystem's: under the
