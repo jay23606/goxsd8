@@ -293,7 +293,10 @@
 //	    prints one line on stdout, <loc>: [<rule>] <message>, and
 //	    each check the assessment declined one line beside them,
 //	    carrying the literal undecided: after the rule: <loc>: [<rule>]
-//	    undecided: <message>. An instance's violations print first,
+//	    undecided: <message>. On a violation line the first [<rule>]
+//	    is the rule charged at <loc>, and the <message> may end with
+//	    the cause that rule delegates to, as [<rule>] <message> with
+//	    no location of its own. An instance's violations print first,
 //	    then the line of the fault that stopped its walk if one did,
 //	    then its undecided checks.
 //
