@@ -412,7 +412,8 @@ func (r *Reader) withinPE(open []string) bool {
 // references and predefined entities and applies §2.11, but not step 3. Every
 // other value is re-read from its source. src reports that raw is document
 // source rather than replacement text; open names the inclusions raw is part
-// of.
+// of. A fault in a value is charged at its attribute's own Loc, not at loc,
+// the start tag's.
 //
 // The re-read of raw (attrSpans) must find the decoder's attributes, in its
 // order and under its names; a tag it reads otherwise is refused at loc,
@@ -428,9 +429,10 @@ func (r *Reader) expandAttrs(t xml.StartElement, raw string, src bool, at func(i
 		if !strings.HasPrefix(raw[span.name:], rawName(a.Name)) {
 			return nil, xsderr.Wrap(xsderr.RuleXMLWellFormed, loc, fmt.Errorf("%w: the decoder read attribute %d as %s, where the source spells %q", errAttrScan, i+1, rawName(a.Name), excerpt(raw[span.name:])))
 		}
+		attrLoc := r.locAt(at(span.name))
 		if refersToEntity(span.value) || strings.ContainsAny(span.value, attrSpace) {
 			var b strings.Builder
-			if err := r.attrValue(&b, span.value, src, loc, open); err != nil {
+			if err := r.attrValue(&b, span.value, src, attrLoc, open); err != nil {
 				return nil, err
 			}
 			a.Value = b.String()
@@ -438,7 +440,7 @@ func (r *Reader) expandAttrs(t xml.StartElement, raw string, src bool, at func(i
 		if r.tokenized[attName{elem: rawName(t.Name), name: rawName(a.Name)}] {
 			a.Value = collapseSpace(a.Value)
 		}
-		out[i] = rawAttr{attr: a, loc: r.locAt(at(span.name))}
+		out[i] = rawAttr{attr: a, loc: attrLoc}
 	}
 	return out, nil
 }
@@ -521,7 +523,8 @@ func nameStart(seg string) int {
 // #x20, and a reference to a general entity appends the normalized value of
 // its replacement text, which must hold no '<' (WFC No < in Attribute Values),
 // whatever depth the reference is at. In document source (src) a line end is
-// one character (§2.11).
+// one character (§2.11). Every fault is charged at loc, the position of the
+// attribute's name, whatever reference or byte of s it lies in.
 func (r *Reader) attrValue(b *strings.Builder, s string, src bool, loc xsderr.Loc, open []string) error {
 	for i := 0; i < len(s); i++ {
 		switch c := s[i]; {

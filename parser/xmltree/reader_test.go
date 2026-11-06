@@ -822,8 +822,8 @@ func TestEOFIsIdempotent(t *testing.T) {
 
 // TestPrefixUndeclarationIs11Only pins nsc-NoPrefixUndecl: in a document that
 // is XML 1.0 — no declaration, or any label but 1.1 — a prefixed namespace
-// declaration with an empty value is a located well-formedness fault at its
-// element's start tag, while under a 1.1 label it undeclares the prefix
+// declaration with an empty value is a located well-formedness fault at that
+// declaration's own name, while under a 1.1 label it undeclares the prefix
 // (Namespaces in XML 1.1). The default declaration xmlns="" is legal in 1.0.
 func TestPrefixUndeclarationIs11Only(t *testing.T) {
 	body := "<a xmlns:p='urn:p'>\n  <b xmlns:p=''/>\n</a>"
@@ -846,10 +846,10 @@ func TestPrefixUndeclarationIs11Only(t *testing.T) {
 				return
 			}
 			wantWellFormednessError(t, err)
-			if loc, _ := xsderr.LocOf(err); loc != (xsderr.Loc{URI: "t.xml", Line: tc.line, Col: 3}) {
-				t.Errorf("fault at %v, want t.xml:%d:3, the start tag of <b>", loc, tc.line)
+			if loc, _ := xsderr.LocOf(err); loc != (xsderr.Loc{URI: "t.xml", Line: tc.line, Col: 6}) {
+				t.Errorf("fault at %v, want t.xml:%d:6, the name of <b>'s xmlns:p", loc, tc.line)
 			}
-			if want := fmt.Sprintf("t.xml:%d:3: [xml-wf] namespace declaration xmlns:p has an empty value", tc.line); !strings.HasPrefix(err.Error(), want) {
+			if want := fmt.Sprintf("t.xml:%d:6: [xml-wf] namespace declaration xmlns:p has an empty value", tc.line); !strings.HasPrefix(err.Error(), want) {
 				t.Errorf("error = %q, want it to open %q", err, want)
 			}
 		})

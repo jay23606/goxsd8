@@ -252,13 +252,13 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 		subset, root, want string
 	}{
 		{pe, `<r>&e;</r>`, `d.xml:1:91: ` + fmt.Sprintf(msg, "e")},
-		{pe, `<r a="&e;"/>`, `d.xml:1:88: ` + fmt.Sprintf(msg, "e")},
+		{pe, `<r a="&e;"/>`, `d.xml:1:91: ` + fmt.Sprintf(msg, "e")},
 		{pe + `<!ENTITY f "[&e;]">`, `<r>&f;</r>`, `d.xml:1:110: ` + fmt.Sprintf(msg, "e")},
 		{xpe, `<r>&x;</r>`, `d.xml:1:102: ` + fmt.Sprintf(msg, "x")},
-		{xpe, `<r a="&x;"/>`, `d.xml:1:99: ` + fmt.Sprintf(msg, "x")},
+		{xpe, `<r a="&x;"/>`, `d.xml:1:102: ` + fmt.Sprintf(msg, "x")},
 		{`<!NOTATION n SYSTEM 'n'><!ENTITY % p "<!ENTITY x SYSTEM 'x.ent' NDATA n>">%p;`, `<r>&x;</r>`, `d.xml:1:134: ` + fmt.Sprintf(msg, "x")},
 		{viaG, `<r>&f;</r>`, `d.xml:1:142: ` + fmt.Sprintf(msg, "x")},
-		{viaG, `<r a="&f;"/>`, `d.xml:1:139: ` + fmt.Sprintf(msg, "x")},
+		{viaG, `<r a="&f;"/>`, `d.xml:1:142: ` + fmt.Sprintf(msg, "x")},
 	} {
 		t.Run(tc.subset+tc.root, func(t *testing.T) {
 			_, err := collect(t, "d.xml", alone+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
@@ -317,23 +317,22 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 // directly or through replacement text, to an external entity whose
 // declaration the reader read (XML 1.0 WFC No External Entity References) as
 // a fault the reader charges itself, wrapping no cause and located at the
-// start tag: outside a standalone document, in one whose external entity is
+// attribute's name: outside a standalone document, in one whose external entity is
 // declared in a parameter entity (the constraint keys on neither), in the
 // replacement text of an entity bound in a parameter entity, where WFC Entity
 // Declared is not charged (#2365), and in an attribute of an element
 // replacement text included in content opens, located at that reference. A
 // reference to an unparsed entity there is WFC Parsed Entity, checked first as
 // entityGraph's walk of a default value checks it, and charged so in a
-// standalone="yes" document whose declaration of it follows a
-// parameter-entity reference the reader did not read, which §5.1 has the
-// reader process (#2459); one in content is TestContentUnparsedEntity's
-// fault. Each guard is refused, wrapping a cause and naming neither
-// constraint: the same external entity referenced in content, where §4.4.3
-// lets the reader decline to include it, and, outside a standalone document,
-// an external one declared after a parameter-entity reference the reader did
-// not read (§5.2), referenced in an attribute value directly and through an
-// entity declared before that reference, which reaches the charge with no
-// declaration recorded.
+// standalone="yes" document whose declaration of it follows a parameter-entity
+// reference the reader did not read, which §5.1 has the reader process (#2459);
+// one in content is TestContentUnparsedEntity's fault. Each guard is refused,
+// wrapping a cause and naming neither constraint: the same external entity
+// referenced in content, where §4.4.3 lets the reader decline to include it, and,
+// outside a standalone document, an external one declared after a parameter-entity
+// reference the reader did not read (§5.2), referenced in an attribute value
+// directly and through an entity declared before that reference, which reaches the
+// charge with no declaration recorded.
 func TestAttributeValueExternalEntity(t *testing.T) {
 	const alone = `<?xml version="1.0" standalone="yes"?>`
 	const plain = `<?xml version="1.0"?>`
@@ -346,14 +345,14 @@ func TestAttributeValueExternalEntity(t *testing.T) {
 	for _, tc := range []struct {
 		decl, subset, root, want string
 	}{
-		{plain, ext, `<r a="&x;"/>`, `d.xml:1:63: ` + noExt},
-		{plain, ext + `<!ENTITY e "&x;">`, `<r a="&e;"/>`, `d.xml:1:80: ` + noExt},
-		{plain, `<!ENTITY % p "` + ext + `">%p;`, `<r a="&x;"/>`, `d.xml:1:82: ` + noExt},
-		{alone, peBoundExt, `<r a="&f;"/>`, `d.xml:1:133: ` + noExt},
+		{plain, ext, `<r a="&x;"/>`, `d.xml:1:66: ` + noExt},
+		{plain, ext + `<!ENTITY e "&x;">`, `<r a="&e;"/>`, `d.xml:1:83: ` + noExt},
+		{plain, `<!ENTITY % p "` + ext + `">%p;`, `<r a="&x;"/>`, `d.xml:1:85: ` + noExt},
+		{alone, peBoundExt, `<r a="&f;"/>`, `d.xml:1:136: ` + noExt},
 		{plain, ext + `<!ENTITY b "<b a='&x;'/>">`, `<r>&b;</r>`, `d.xml:1:92: ` + noExt},
-		{plain, ndata, `<r a="&u;"/>`, `d.xml:1:95: ` + parsed},
-		{plain, ndata + `<!ENTITY e "&u;">`, `<r a="&e;"/>`, `d.xml:1:112: ` + parsed},
-		{alone, unread + ndata, `<r a="&u;"/>`, `d.xml:1:145: ` + parsed},
+		{plain, ndata, `<r a="&u;"/>`, `d.xml:1:98: ` + parsed},
+		{plain, ndata + `<!ENTITY e "&u;">`, `<r a="&e;"/>`, `d.xml:1:115: ` + parsed},
+		{alone, unread + ndata, `<r a="&u;"/>`, `d.xml:1:148: ` + parsed},
 	} {
 		t.Run(tc.decl+tc.subset+tc.root, func(t *testing.T) {
 			_, err := collect(t, "d.xml", tc.decl+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
@@ -463,30 +462,30 @@ func TestContentUnparsedEntity(t *testing.T) {
 
 // TestEntityAmpersandBeginsNoReference charges a '&' in included replacement
 // text that begins no Reference (XML 1.0 §4.4.2, §4.4.5, [67] Reference) as a
-// fault the reader charges itself, wrapping no cause, at the outermost
-// reference and naming the entity whose replacement text holds it: a literal
-// spelling it `&#38;` or `&#x26;`, in an attribute value and in content; a
-// ';' after it that closes no Name; one an included entity's replacement text
-// holds; and one in an attribute value of a start tag replacement text holds.
-// Each control reads: a '&' its literal spelled `&#38;` that begins a CharRef,
-// to '<' or to '&', or an EntityRef to a declared entity, and one inside a
-// comment or a CDATA section. An EntityRef so spelled to an undeclared entity
-// is the reader's refusal, wrapping a cause, as TestEntityReferenceRefusedUnread
-// refuses one. A '&' in a comment, a processing instruction or an end tag the
-// decoder fails to read is no such charge: the decoder's own syntax error is
-// wrapped as the cause.
+// fault the reader charges itself, wrapping no cause, at the attribute's name
+// in an attribute value and at the outermost reference in content, and naming
+// the entity whose replacement text holds it: a literal spelling it `&#38;` or
+// `&#x26;`, in an attribute value and in content; a ';' after it that closes no
+// Name; one an included entity's replacement text holds; and one in an attribute
+// value of a start tag replacement text holds. Each control reads: a '&' its
+// literal spelled `&#38;` that begins a CharRef, to '<' or to '&', or an
+// EntityRef to a declared entity, and one inside a comment or a CDATA section.
+// An EntityRef so spelled to an undeclared entity is the reader's refusal,
+// wrapping a cause, as TestEntityReferenceRefusedUnread refuses one. A '&' in a
+// comment, a processing instruction or an end tag the decoder fails to read is
+// no such charge: the decoder's own syntax error is wrapped as the cause.
 func TestEntityAmpersandBeginsNoReference(t *testing.T) {
 	const msg = "[xml-wf] the replacement text of entity %s holds a '&' that begins no Reference, '&' Name ';' or a character reference (XML 1.0 §4.4.2, [67] Reference, [68] EntityRef, [66] CharRef)"
 	for _, tc := range []struct {
 		subset, root, want string
 	}{
-		{`<!ENTITY e "a&#38;b">`, `<r a="&e;"/>`, "d.xml:1:37: " + fmt.Sprintf(msg, "e")},
+		{`<!ENTITY e "a&#38;b">`, `<r a="&e;"/>`, "d.xml:1:40: " + fmt.Sprintf(msg, "e")},
 		{`<!ENTITY e "a&#38;b">`, `<r>&e;</r>`, "d.xml:1:40: " + fmt.Sprintf(msg, "e")},
-		{`<!ENTITY e "a&#x26;b">`, `<r a="&e;"/>`, "d.xml:1:38: " + fmt.Sprintf(msg, "e")},
+		{`<!ENTITY e "a&#x26;b">`, `<r a="&e;"/>`, "d.xml:1:41: " + fmt.Sprintf(msg, "e")},
 		{`<!ENTITY e "a&#x26;b">`, `<r>&e;</r>`, "d.xml:1:41: " + fmt.Sprintf(msg, "e")},
-		{`<!ENTITY e "a&#38;b c;">`, `<r a="&e;"/>`, "d.xml:1:40: " + fmt.Sprintf(msg, "e")},
+		{`<!ENTITY e "a&#38;b c;">`, `<r a="&e;"/>`, "d.xml:1:43: " + fmt.Sprintf(msg, "e")},
 		{`<!ENTITY e "a&#38;b c;">`, `<r>&e;</r>`, "d.xml:1:43: " + fmt.Sprintf(msg, "e")},
-		{`<!ENTITY f "a&#38;b"><!ENTITY e "x&f;">`, `<r a="&e;"/>`, "d.xml:1:55: " + fmt.Sprintf(msg, "f")},
+		{`<!ENTITY f "a&#38;b"><!ENTITY e "x&f;">`, `<r a="&e;"/>`, "d.xml:1:58: " + fmt.Sprintf(msg, "f")},
 		{`<!ENTITY f "a&#38;b"><!ENTITY e "x&f;">`, `<r>&e;</r>`, "d.xml:1:58: " + fmt.Sprintf(msg, "f")},
 		{`<!ENTITY e "<b v='a&#38;b'/>">`, `<r>&e;</r>`, "d.xml:1:49: " + fmt.Sprintf(msg, "e")},
 	} {

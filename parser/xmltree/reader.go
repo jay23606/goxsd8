@@ -438,11 +438,10 @@ func (r *Reader) checkDeclaration(pi xml.ProcInst, loc xsderr.Loc) error {
 // the scope its declarations establish, pushes an open-element frame, and
 // returns the node.
 func (r *Reader) startElement(tag xml.Name, attrs []rawAttr, loc xsderr.Loc) (*StartElement, error) {
-	bindings := bindingsOf(attrs)
-	if err := r.checkUndeclarations(bindings, loc); err != nil {
+	if err := r.checkUndeclarations(attrs); err != nil {
 		return nil, err
 	}
-	child := r.currentScope().child(bindings)
+	child := r.currentScope().child(bindingsOf(attrs))
 
 	if tag.Space == xmlnsPrefix {
 		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "%q is a reserved prefix and cannot name an element", xmlnsPrefix)
@@ -453,7 +452,7 @@ func (r *Reader) startElement(tag xml.Name, attrs []rawAttr, loc xsderr.Loc) (*S
 	}
 	name := Name{space: space, local: tag.Local}
 
-	resolved, err := resolveAttrs(attrs, child, loc)
+	resolved, err := resolveAttrs(attrs, child)
 	if err != nil {
 		return nil, err
 	}
@@ -467,14 +466,17 @@ func (r *Reader) startElement(tag xml.Name, attrs []rawAttr, loc xsderr.Loc) (*S
 // empty." Undeclaring a prefix with xmlns:p="" is a Namespaces in XML 1.1
 // feature, so the constraint holds unless the document is labelled
 // version="1.1"; a document with no XML declaration is XML 1.0. The default
-// namespace declaration xmlns="" is exempt (xml-names §6.2).
-func (r *Reader) checkUndeclarations(bindings []binding, loc xsderr.Loc) error {
+// namespace declaration xmlns="" is exempt (xml-names §6.2). The fault is
+// located at the declaration's own name (rawAttr), not at its element's start
+// tag.
+func (r *Reader) checkUndeclarations(attrs []rawAttr) error {
 	if r.decl.Version() == "1.1" {
 		return nil
 	}
-	for _, b := range bindings {
-		if b.prefix != "" && b.uri == "" {
-			return xsderr.New(xsderr.RuleXMLWellFormed, loc, "namespace declaration xmlns:%s has an empty value: only an XML 1.1 document may undeclare a prefix (nsc-NoPrefixUndecl)", b.prefix)
+	for _, ra := range attrs {
+		a := ra.attr
+		if a.Name.Space == xmlnsPrefix && a.Value == "" {
+			return xsderr.New(xsderr.RuleXMLWellFormed, ra.loc, "namespace declaration xmlns:%s has an empty value: only an XML 1.1 document may undeclare a prefix (nsc-NoPrefixUndecl)", a.Name.Local)
 		}
 	}
 	return nil
@@ -549,23 +551,20 @@ func bindingsOf(attrs []rawAttr) []binding {
 // resolveAttrs resolves the non-declaration attributes of an element against
 // scope s, in document order (STYLE D2: order is preserved, no map). An
 // unprefixed attribute is in no namespace; a prefixed one whose prefix is
-// unbound is an error, located at loc, the start tag. Each Attribute keeps the
-// position of its own name (rawAttr).
-func resolveAttrs(attrs []rawAttr, s *scope, loc xsderr.Loc) ([]Attribute, error) {
+// unbound is an error, located at that attribute's own name. Each Attribute
+// keeps the position of its own name (rawAttr).
+func resolveAttrs(attrs []rawAttr, s *scope) ([]Attribute, error) {
 	var out []Attribute
 	for _, ra := range attrs {
 		a := ra.attr
 		if isDeclaration(a) {
 			continue
 		}
-		if a.Name.Space == xmlnsPrefix {
-			return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "%q is a reserved prefix and cannot name an attribute", xmlnsPrefix)
-		}
 		space := ""
 		if a.Name.Space != "" {
 			resolved, ok := s.lookup(a.Name.Space)
 			if !ok {
-				return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "unbound namespace prefix %q on attribute %s", a.Name.Space, rawName(a.Name))
+				return nil, xsderr.New(xsderr.RuleXMLWellFormed, ra.loc, "unbound namespace prefix %q on attribute %s", a.Name.Space, rawName(a.Name))
 			}
 			space = resolved
 		}
