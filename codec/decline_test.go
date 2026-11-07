@@ -23,6 +23,13 @@ func sequenceOf(particles string) string {
 	return root(`<xs:sequence>` + particles + `</xs:sequence>`)
 }
 
+// vStruct is a local element declaration named name, its attributes attrs,
+// of an anonymous complex type whose content is a sequence of v, an
+// xs:string, so codegen gives it a struct of one field V string.
+func vStruct(name, attrs string) string {
+	return `<xs:element name="` + name + `"` + attrs + `><xs:complexType><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
+}
+
 // TestDecodeDeclines pins one row per construct Decode declines: each
 // schema and instance is valid, so validation accepts, and Decode returns
 // the construct's *DeclineError at the declining element's instance Loc,
@@ -81,6 +88,10 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, two lists of xs:int", root(`<xs:choice><xs:element name="x"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element><xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element></xs:choice>`),
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a branch shape, a repeated xs:int and a ref to a list of xs:int", `<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>` + root(`<xs:choice><xs:element name="x" type="xs:int" maxOccurs="unbounded"/><xs:element ref="s:X"/></xs:choice>`),
+			"", `<s:X>1 2</s:X>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a branch shape, a ref to a list of xs:int and a repeated xs:int", `<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>` + root(`<xs:choice><xs:element ref="s:X"/><xs:element name="x" type="xs:int" maxOccurs="unbounded"/></xs:choice>`),
+			"", `<s:X>1 2</s:X>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, a ref to an xs:date element and a local xs:date", `<xs:element name="d" type="xs:date"/>` + root(`<xs:choice><xs:element ref="s:d"/><xs:element name="d" form="unqualified" type="xs:date"/></xs:choice>`),
 			"", `<s:d>2000-01-01</s:d>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, a and A", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:token"/></xs:choice>`),
@@ -129,7 +140,22 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:a><s:b>1.0</s:b></s:a>`, constructOtherPrimitive, 1, 1},
 		{"a nested type's attribute wildcard", sequenceOf(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence><xs:anyAttribute processContents="lax"/></xs:complexType></xs:element>`),
 			"", `<s:a><s:b>x</s:b></s:a>`, constructAttributeWildcard, 1, 1},
-		{"choice alternatives sharing a name, one of complex type", root(`<xs:choice><xs:element name="x"><xs:complexType><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType></xs:element><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`),
+		{"choice alternatives sharing a branch shape, two structs of one shape", root(`<xs:choice>` + vStruct("x", "") + vStruct("X", "") + `</xs:choice>`),
+			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a name, two structs of differing fields", root(`<xs:choice>` + vStruct("x", "") +
+			`<xs:element name="X"><xs:complexType><xs:sequence><xs:element name="y" type="xs:int"/></xs:sequence></xs:complexType></xs:element></xs:choice>`),
+			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a name, of Cj and of Ck holding an optional Cj", `<xs:complexType name="Cj"><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType>
+			<xs:complexType name="Ck"><xs:sequence><xs:element name="y" type="s:Cj" minOccurs="0"/></xs:sequence></xs:complexType>` +
+			root(`<xs:choice><xs:element name="x" type="s:Cj"/><xs:element name="X" type="s:Ck"/></xs:choice>`),
+			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a name, a choice's interface and a substitution group's", `<xs:complexType name="Cx"><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int"/></xs:choice></xs:complexType>
+			<xs:element name="X" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:X"/>` +
+			root(`<xs:choice><xs:element name="x" type="s:Cx"/><xs:element ref="s:X"/></xs:choice>`),
+			"", `<s:x><s:a>a</s:a></s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a name, a struct and an xs:date", root(`<xs:choice>` + vStruct("x", "") + `<xs:element name="X" type="xs:date"/></xs:choice>`),
+			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a name, a struct and an xs:decimal", root(`<xs:choice>` + vStruct("x", "") + `<xs:element name="X" type="xs:decimal"/></xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
 		{"particles sharing an expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/>`),
 			"", a + `<s:b>y</s:b>` + a, constructSharedName, 1, 1},
@@ -159,6 +185,15 @@ func TestDecodeDeclines(t *testing.T) {
 			assertDecline(t, err, row.construct, row.line, row.col)
 			assertProbeDecline(t, CheckDecode[struct{}](schema, rootName), err)
 		})
+	}
+	// C's alternatives e and E each hold C's own interface, unbound when the
+	// second is read, and no finite instance validates, so CheckDecode alone
+	// probes it: it returns, declining.
+	selfPair := schemaOf(t, `<xs:complexType name="C"><xs:choice><xs:element name="e" type="s:C"/><xs:element name="E" type="s:C"/></xs:choice></xs:complexType>
+		<xs:element name="r" type="s:C"/>`)
+	var de *DeclineError
+	if err := CheckDecode[struct{}](selfPair, rootName); !errors.As(err, &de) || de.Construct() != (Construct{constructSharedBranch}) {
+		t.Errorf("CheckDecode(choice(e:C, E:C)) = %v, want the %s decline", err, constructSharedBranch.name())
 	}
 }
 

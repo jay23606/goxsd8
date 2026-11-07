@@ -97,9 +97,11 @@
 // Every other construct is a [*DeclineError], never a zero value: a content
 // choice occurring other than exactly once, two branches of a sealed
 // interface, a choice's alternatives or a substitution group's declarations,
-// whose structs have one shape or which share a name where either is of
-// complex type, holds a substitution group's interface or holds a datatype
-// struct or a list of one, an all group, a nested model group or <group ref>,
+// whose structs have one shape or which share a name where either holds a
+// datatype struct or a list of one, where one holds codegen's struct and the
+// other big.Rat or big.Int, or where both are of complex type or hold a
+// substitution group's interface, occur alike, and are both a struct or both
+// a sealed interface, an all group, a nested model group or <group ref>,
 // a choice's model-group alternative included, a wildcard, mixed or simple
 // content, a particle's element declaration of type xs:anyType, local or
 // referenced, a complex type with {abstract} true, a nillable element,
