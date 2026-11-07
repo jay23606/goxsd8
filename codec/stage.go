@@ -170,8 +170,18 @@ const (
 // (§2.4.1.2), an empty one into no items (§4.1.1 dt-list), and the lexical
 // stages run on each item under s.item.st, the governing mapping read once,
 // only when there is an item. It traces one Debug record per stage it runs. A
-// whiteSpace fault is a plain error; a lexical-mapping or conversion failure
-// is the *stageError Decode's doc states, item 8.
+// lexical-mapping or conversion failure is the *stageError Decode's doc
+// states, item 8.
+//
+// A whiteSpace fault never reaches Decode's return. On a schema Finalize
+// accepted it is an error wrapping the *xsderr.Error of rule
+// xsderr.RuleComponentInvariant that value.ApplyWhiteSpace's doc states, of
+// an atomic or list s.st (§4.1.5 cos-applicable-facets). Finalize does
+// not diagnose it, but validate's String Valid runs the same
+// value.ApplyWhiteSpace on the same simple type for every value Decode decodes
+// — an element's character content, a present attribute, or a supplied value
+// — and records the fault, which is no datatype verdict, as Unevaluated, so
+// Decode returns its item 4 first.
 func (s scalar) decode(p *pipeline, raw string, src source) (reflect.Value, error) {
 	p.trace("whiteSpace", ruleWhiteSpace, s.label, raw, src)
 	normalized, err := value.ApplyWhiteSpace(p.schema, s.st, raw)
@@ -226,6 +236,14 @@ type lexicalStages struct {
 // or the error for a governing mapping of st that cannot be read, the
 // *stageError of item 8 where no mapping of p's backend governs st, charged to
 // first, the first lexical, at position token as stageError states it.
+//
+// A fault reading the governing mapping never reaches Decode's return:
+// value.GoverningMapping fails only on a {variety} or {base type definition}
+// hop of st, Finalize refuses every such hop that does not resolve
+// (Structures §3.17.6.2 src-resolve clause 1.1) or is absent
+// (xsderr.RuleComponentInvariant), and value.ApplyWhiteSpace (an atomic st)
+// or atomicDecline (a list's item type) has read the same hops on the same
+// schema first.
 func newLexicalStages(p *pipeline, atom atomic, st *xsd.SimpleType, label string, src source, first string, token int) (lexicalStages, error) {
 	ls := lexicalStages{atom: atom, label: label, src: src}
 	if atom == atomicString {

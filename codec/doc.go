@@ -137,13 +137,14 @@
 // type. On a list value whiteSpace runs once, under the list type, and the
 // other two on each list item, under its {item type definition}. Pattern,
 // facet and assertion stages are validate's, decided on the same backend
-// first, and a whiteSpace failure is a fault of the simple type, a plain
-// error. A lexical mapping or conversion that fails is the error [Decode]'s
-// doc states in item 8, naming the stage, the type, the normalized value or
-// the list item and its position, the instance Loc and, for an element's
-// character content, its byte offset. Decode traces each stage it runs on the
-// logger [WithLogger] sets, whose doc states each record. No package reads
-// GOXSD_DEBUG.
+// first. A whiteSpace failure, a fault of the simple type, never reaches
+// Decode's return: validate runs the same whiteSpace stage first and leaves
+// the instance undecided, item 4 of [Decode]'s doc. A lexical mapping or
+// conversion that fails is the error [Decode]'s doc states in item 8, naming
+// the stage, the type, the normalized value or the list item and its
+// position, the instance Loc and, for an element's character content, its
+// byte offset. Decode traces each stage it runs on the logger [WithLogger]
+// sets, whose doc states each record. No package reads GOXSD_DEBUG.
 //
 // # Planned decode paths
 //
