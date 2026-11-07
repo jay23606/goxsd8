@@ -381,15 +381,18 @@ func TestWithLoggerList(t *testing.T) {
 
 // TestDeclineErrorTextListItem pins the message of a decline by a list's {item
 // type definition}: after the declining declaration, the item, its QName where
-// it has one, and its schema Loc, the zero Loc for a built-in.
+// it has one, and its schema Loc. No built-in item declines: no built-in type
+// is a union, and a special type is no list's item (cos-st-restricts clause
+// 2.1).
 func TestDeclineErrorTextListItem(t *testing.T) {
-	const construct = "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary, xs:base64Binary, xs:QName and xs:NOTATION"
+	const construct = "a union simple type"
+	const union = `<xs:union memberTypes="xs:string xs:int"/>`
 	rows := []struct {
 		name, decls, want string
 	}{
-		{"a built-in item", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list itemType="xs:precisionDecimal"/></xs:simpleType></xs:element>`),
-			"element {urn:s}a declared at s.xsd:1:231, through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, a type defined at ?"},
-		{"an anonymous item", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType><xs:restriction base="xs:precisionDecimal"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`),
+		{"a named item", `<xs:simpleType name="u">` + union + `</xs:simpleType>` + sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list itemType="s:u"/></xs:simpleType></xs:element>`),
+			"element {urn:s}a declared at s.xsd:1:313, through the list type's {item type definition} {urn:s}u, a type defined at s.xsd:1:181"},
+		{"an anonymous item", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType>` + union + `</xs:simpleType></xs:list></xs:simpleType></xs:element>`),
 			"element {urn:s}a declared at s.xsd:1:231, through the list type's anonymous {item type definition}, a type defined at s.xsd:1:276"},
 	}
 	for _, row := range rows {

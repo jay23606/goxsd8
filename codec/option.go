@@ -14,12 +14,13 @@ type Option func(*config)
 type config struct {
 	uri      string
 	branches branchSets
+	decimals decimalArmSets
 	log      *slog.Logger
 }
 
 // newConfig applies opts over the defaults: the instance is unnamed, so
 // every instance Loc Decode's errors carry renders "?" for its URI, no
-// interface has a branch set, and nothing is logged
+// interface has a branch set or an arm set, and nothing is logged
 // ([slog.DiscardHandler]).
 func newConfig(opts []Option) config {
 	cfg := config{log: slog.New(slog.DiscardHandler)}
@@ -49,9 +50,10 @@ func newConfig(opts []Option) config {
 //     no mapping of the backend governs the type.
 //   - "conversion": rule "dt-canonical-mapping" (§2.3.1), input the canonical
 //     form the governing mapping's Canonical rendered, logged once it has;
-//     for yearMonthDuration's datatype struct and QName's, which Decode's doc
-//     states are converted from the string Parse accepted, rule "dt-lexical-mapping"
-//     (§2.3), input that string, logged once Parse has accepted it.
+//     for yearMonthDuration's datatype struct, QName's and PrecisionDecimal's,
+//     which Decode's doc states are converted from the string Parse accepted,
+//     rule "dt-lexical-mapping" (§2.3), input that string, logged once Parse
+//     has accepted it.
 //
 // Every record also carries type, the type as item 8 of Decode's doc names it,
 // and loc, the instance Loc of the value's source item 8 names, the whole
@@ -75,12 +77,14 @@ func WithURI(uri string) Option {
 // implementers. Pass one value of each branch, in any order, such as
 // codec.WithBranches[order.Pay](order.PayCard{}, order.PayCash{}); only each
 // value's dynamic type is read. A later WithBranches for the same I replaces
-// an earlier one's set. Decode uses the set wherever T holds I, at any depth:
-// T itself, a field, a nested element's struct or interface, or a branch, and
-// ignores a set for any type T does not hold, so one option list may serve
-// every document element of a package; a set for a type that is no interface
-// is never used. With no WithBranches for I, I's set is empty. Decode's doc,
-// item 6, states when a set is [ErrTypeMismatch].
+// an earlier one's set. Decode uses the set wherever T holds I as a choice's
+// or a substitution group's interface, at any depth: T itself, a field, a
+// nested element's struct or interface, or a branch, and ignores a set for
+// any type T does not hold so, so one option list may serve every document
+// element of a package; a set for a type that is no interface is never used.
+// The Value interface of codegen's PrecisionDecimal takes its arms from
+// [WithPrecisionDecimalArms] alone. With no WithBranches for I, I's set is
+// empty. Decode's doc, item 6, states when a set is [ErrTypeMismatch].
 func WithBranches[I any](branches ...I) Option {
 	set := branchSet{iface: reflect.TypeFor[I](), branches: make([]reflect.Type, len(branches))}
 	for i, b := range branches {
@@ -119,4 +123,65 @@ func (s branchSets) of(it reflect.Type) ([]reflect.Type, bool) {
 		return nil, false
 	}
 	return s[i].branches, true
+}
+
+// WithPrecisionDecimalArms supplies the four arms of I, the sealed interface
+// codegen emits as the type of the one field Value of its PrecisionDecimal
+// datatype struct (codegen's package doc, "# Simple types"), which [Decode]
+// cannot find from T: a Go interface names none of its implementers. Pass
+// one value of each arm in its role, numerical the arm holding a finite
+// value, positiveInfinity, negativeInfinity and notANumber the arms of the
+// special values (precisionDecimal §3.1 vp-pd-numVal), such as
+// codec.WithPrecisionDecimalArms[m.PrecisionDecimalValue](m.PrecisionDecimalValueNumerical{},
+// m.PrecisionDecimalValuePositiveInfinity{},
+// m.PrecisionDecimalValueNegativeInfinity{},
+// m.PrecisionDecimalValueNotANumber{}); only each value's dynamic type is
+// read. A later WithPrecisionDecimalArms for the same I replaces an earlier
+// one's arms. Decode reads them only where T holds a PrecisionDecimal whose
+// Value is of type I, at any depth, and ignores them elsewhere, a choice's or
+// a substitution group's interface included; Decode's doc, item 6, states
+// when they are [ErrTypeMismatch]. Decode matches each arm by its shape
+// alone, so it cannot tell the three field-less arms apart: passed in one
+// another's roles, they decode the special values into the wrong arm, the
+// one misuse Decode cannot report.
+func WithPrecisionDecimalArms[I any](numerical, positiveInfinity, negativeInfinity, notANumber I) Option {
+	set := decimalArms{
+		iface:            reflect.TypeFor[I](),
+		numerical:        reflect.TypeOf(numerical),
+		positiveInfinity: reflect.TypeOf(positiveInfinity),
+		negativeInfinity: reflect.TypeOf(negativeInfinity),
+		notANumber:       reflect.TypeOf(notANumber),
+	}
+	return func(c *config) { c.decimals = c.decimals.with(set) }
+}
+
+// decimalArms is the arm types one WithPrecisionDecimalArms supplies for the
+// interface iface, one per role, each nil for a nil value.
+type decimalArms struct {
+	iface, numerical, positiveInfinity, negativeInfinity, notANumber reflect.Type
+}
+
+// decimalArmSets holds one decimalArms per interface, in the order a
+// WithPrecisionDecimalArms first named each; it is searched by identity and
+// never ranged over into output (STYLE D2).
+type decimalArmSets []decimalArms
+
+// with returns s with set in place of the entry for its interface, or
+// appended when s has none; it may reuse s's array.
+func (s decimalArmSets) with(set decimalArms) decimalArmSets {
+	if i := slices.IndexFunc(s, func(e decimalArms) bool { return e.iface == set.iface }); i >= 0 {
+		s[i] = set
+		return s
+	}
+	return append(s, set)
+}
+
+// of returns the arm types s holds for the interface it, and whether any
+// WithPrecisionDecimalArms supplied them.
+func (s decimalArmSets) of(it reflect.Type) (decimalArms, bool) {
+	i := slices.IndexFunc(s, func(e decimalArms) bool { return e.iface == it })
+	if i < 0 {
+		return decimalArms{}, false
+	}
+	return s[i], true
 }

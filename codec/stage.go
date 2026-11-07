@@ -16,12 +16,16 @@ import (
 )
 
 // pipeline is what Decode's value stages read beside the item: the schema,
-// the backend validate assessed the instance on, and the logger Decode traces
-// each stage on, under the "codec" group.
+// the backend validate assessed the instance on, the logger Decode traces
+// each stage on, under the "codec" group, and decimals, the arm sets
+// [WithPrecisionDecimalArms] supplied, from the config field the item-6
+// check reads (checkContext), which the fill builds a PrecisionDecimal's
+// Value from (pipeline.decimal).
 type pipeline struct {
-	schema  *xsd.Schema
-	backend value.Backend
-	log     *slog.Logger
+	schema   *xsd.Schema
+	backend  value.Backend
+	log      *slog.Logger
+	decimals decimalArmSets
 }
 
 // scalar is one item Decode decodes a value for: atom, the atomic Go type of
@@ -67,12 +71,14 @@ func (s scalar) goType() reflect.Type {
 // other struct from having; and for two slice types, a list's or []byte's,
 // Kind Slice and ConvertibleTo mean an identical underlying type, since Go
 // converts between slice types only then. For a datatype struct, which
-// codegen declares in the caller's package, v is ConvertibleTo codec's
-// mirror, which only a struct of its exported fields exactly, in name, order
-// and Go type, struct tags aside, is, or for a list v is a slice of such a
-// struct: []D converts to no []mirror.
+// codegen declares in the caller's package, v is a struct of its shape
+// (atomic.shapes), ConvertibleTo codec's mirror, which only a struct of its
+// exported fields exactly, in name, order and Go type, struct tags aside, is,
+// or for PrecisionDecimal's, which has no mirror, a struct decimalShape
+// holds, or for a list v is a slice of such a struct: []D converts to no
+// []mirror.
 func (s scalar) underlies(v reflect.Type) bool {
-	if !s.atom.mirrored() {
+	if !s.atom.datatypeStruct() {
 		want := s.goType()
 		return v.Kind() == want.Kind() && v.ConvertibleTo(want)
 	}
@@ -82,7 +88,22 @@ func (s scalar) underlies(v reflect.Type) bool {
 		}
 		v = v.Elem()
 	}
-	return v.ConvertibleTo(s.atom.bare())
+	return s.atom.shapes(v)
+}
+
+// decimalSite returns nil unless s's atomic Go type is PrecisionDecimal's,
+// and otherwise checkDecimalArms' answer for the Value interface of v, a
+// type underlies holds, or of its element type for a list, at the site site
+// names: so a PrecisionDecimal's V holds, beside its shape, the arms cx
+// supplies for its interface (Decode's doc, item 6).
+func (s scalar) decimalSite(v reflect.Type, site string, cx *checkContext) error {
+	if s.atom != atomicPrecisionDecimal {
+		return nil
+	}
+	if s.item != nil {
+		v = v.Elem()
+	}
+	return checkDecimalArms(v.Field(0).Type, site, cx)
 }
 
 // spell spells the Go type codegen gives s's simple type for an error
@@ -262,7 +283,8 @@ func newLexicalStages(p *pipeline, atom atomic, st *xsd.SimpleType, label string
 
 // run returns the value of lexical, at position token as stageError states
 // it, as a value of ls.atom's bare type, codec's mirror for a datatype
-// struct, which shape.store converts to the caller's type.
+// struct, which shape.store converts to the caller's type, or decimalValue,
+// which shape.store builds the caller's PrecisionDecimal from.
 func (ls lexicalStages) run(p *pipeline, lexical string, token int) (reflect.Value, error) {
 	if ls.atom == atomicString {
 		return reflect.ValueOf(lexical), nil

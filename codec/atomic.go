@@ -19,8 +19,9 @@ import (
 // decodes (codegen/doc.go "# Simple types"), and how its value is read:
 // string, bool, float32, float64, big.Rat, big.Int, a bounded Go integer,
 // []byte read from xs:hexBinary's canonical form or from xs:base64Binary's,
-// the datatype struct of a date, time or duration datatype, or QName's
-// datatype struct, which NOTATION shares. The zero value is invalid (STYLE
+// the datatype struct of a date, time or duration datatype, QName's
+// datatype struct, which NOTATION shares, or PrecisionDecimal's, read from
+// the lexical into codec's decimalValue. The zero value is invalid (STYLE
 // T1).
 type atomic uint8
 
@@ -54,14 +55,18 @@ const (
 	atomicHexBinary
 	atomicBase64Binary
 	atomicQName
+	atomicPrecisionDecimal
 )
 
 // The mirrors of the thirteen datatype structs codegen emits other than
 // PrecisionDecimal (codegen/doc.go "# Simple types"), the twelve date, time
-// and duration ones and QName's: each holds codegen's exported
-// fields exactly, in name, order and Go type, so that the struct codegen
-// emits in the caller's package, which codec cannot name, converts to it and
-// back (mirrored). TestDatatypeMirrorsAreCodegens pins each to codegen's.
+// and duration ones and QName's: each holds codegen's exported fields
+// exactly, in name, order and Go type, so that the struct codegen emits in
+// the caller's package, which codec cannot name, converts to it and back
+// (mirrored). TestDatatypeMirrorsAreCodegens pins each to codegen's.
+// PrecisionDecimal has none: its one field is of the caller's own sealed
+// interface, so no struct of codec's converts to it, and codec mirrors its
+// numerical arm alone (decimalNumerical).
 type (
 	dateTimeMirror struct {
 		Year           big.Int
@@ -132,7 +137,8 @@ type (
 )
 
 // atomicTypes holds, indexed by atomic, each one's Go type: for a datatype
-// struct, codec's mirror of it.
+// struct, codec's mirror of it, and for PrecisionDecimal's, which has none,
+// codec's decimalValue.
 var atomicTypes = [...]reflect.Type{
 	atomicString:            reflect.TypeFor[string](),
 	atomicBool:              reflect.TypeFor[bool](),
@@ -163,14 +169,16 @@ var atomicTypes = [...]reflect.Type{
 	atomicHexBinary:         reflect.TypeFor[[]byte](),
 	atomicBase64Binary:      reflect.TypeFor[[]byte](),
 	atomicQName:             reflect.TypeFor[qNameMirror](),
+	atomicPrecisionDecimal:  decimalValueType,
 }
 
-// datatypeNames holds, indexed by a mirrored atomic, the local name of the
-// XSD datatype whose datatype struct it is, the one encoding of that pairing
-// (datatypeAtomics indexes it by name); codegen names the struct from it
-// (codegen/doc.go, the datatype struct names): dateTime's is DateTime and
-// QName's QName. xs:NOTATION, which shares QName's struct, is no entry:
-// primitiveAtomics keys it to atomicQName.
+// datatypeNames holds, indexed by an atomic whose Go type is a datatype
+// struct (datatypeStruct), the local name of the XSD datatype whose datatype
+// struct it is, the one encoding of that pairing (datatypeAtomics indexes it
+// by name); codegen names the struct from it (codegen/doc.go, the datatype
+// struct names): dateTime's is DateTime and QName's QName. xs:NOTATION,
+// which shares QName's struct, is no entry: primitiveAtomics keys it to
+// atomicQName.
 var datatypeNames = [...]string{
 	atomicDateTime:          "dateTime",
 	atomicDateTimeStamp:     "dateTimeStamp",
@@ -185,10 +193,12 @@ var datatypeNames = [...]string{
 	atomicDayTimeDuration:   "dayTimeDuration",
 	atomicYearMonthDuration: "yearMonthDuration",
 	atomicQName:             "QName",
+	atomicPrecisionDecimal:  "precisionDecimal",
 }
 
 // bare returns a's Go type itself, unnamed, or for a datatype struct codec's
-// mirror of it.
+// mirror of it, or decimalValue for PrecisionDecimal's, which converts to no
+// caller type.
 func (a atomic) bare() reflect.Type {
 	if a == 0 || int(a) >= len(atomicTypes) {
 		// The zero atomic is an internal bug, never input.
@@ -197,12 +207,33 @@ func (a atomic) bare() reflect.Type {
 	return atomicTypes[a]
 }
 
-// mirrored reports whether the Go type codegen gives a is a datatype struct,
-// which codegen declares in the caller's package, so that codec holds only a
-// struct of the identical underlying type, its mirror (bare). It is read from
-// the mirror's package: big.Rat and big.Int are structs too, of math/big.
+// mirrored reports whether the Go type codegen gives a is a datatype struct
+// that codec holds a mirror of (bare), a struct of the identical underlying
+// type, since codegen declares the datatype struct in the caller's package.
+// It is read from the mirror's package and kind: big.Rat and big.Int are
+// structs too, of math/big, and decimalValue, PrecisionDecimal's bare type,
+// is codec's but no struct.
 func (a atomic) mirrored() bool {
-	return a.bare().PkgPath() == reflect.TypeFor[atomic]().PkgPath()
+	return a.bare().PkgPath() == reflect.TypeFor[atomic]().PkgPath() && a.bare().Kind() == reflect.Struct
+}
+
+// datatypeStruct reports whether the Go type codegen gives a is a datatype
+// struct, mirrored or PrecisionDecimal's: whether datatypeNames names its
+// datatype.
+func (a atomic) datatypeStruct() bool {
+	return int(a) < len(datatypeNames) && datatypeNames[a] != ""
+}
+
+// shapes reports whether v is a struct of the shape of the datatype struct
+// codegen gives a, a datatypeStruct atomic, its name never compared: for a
+// mirrored a, one that converts to the mirror, so of its exported fields
+// exactly, in name, order and Go type, struct tags aside; for
+// PrecisionDecimal's, one decimalShape holds.
+func (a atomic) shapes(v reflect.Type) bool {
+	if a == atomicPrecisionDecimal {
+		return decimalShape(v)
+	}
+	return v.ConvertibleTo(a.bare())
 }
 
 // reading is what an atomic's value is read from once its governing
@@ -216,7 +247,10 @@ const (
 	readCanonical reading = iota + 1
 	// readLexical is the normalized lexical Parse accepted, never Canonical:
 	// yearMonthDuration's, whose zero value has no canonical representation
-	// (§3.4.26.1, §2.3.1 dt-canonical-mapping's "where possible").
+	// (§3.4.26.1, §2.3.1 dt-canonical-mapping's "where possible"), and
+	// precisionDecimal's, whose canonical mapping keeps neither the ·scale·
+	// of zero nor its ·sign· (precisionDecimal §6 f-precDecCanmap), read by
+	// the lexical mapping (f-precDecLexmap).
 	readLexical
 	// readExpanded is the expanded name the normalized lexical resolves to
 	// against the bindings Parse was given, never Canonical: QName's, which
@@ -227,7 +261,7 @@ const (
 
 // reading returns what a's value is read from.
 func (a atomic) reading() reading {
-	if a == atomicYearMonthDuration {
+	if a == atomicYearMonthDuration || a == atomicPrecisionDecimal {
 		return readLexical
 	}
 	if a == atomicQName {
@@ -239,10 +273,14 @@ func (a atomic) reading() reading {
 // spell spells a's Go type for an error message: its own name, []byte for
 // either binary arm (reflect spells it []uint8), or for a datatype struct "D
 // for the datatype struct D of" the datatype's QName and the struct's fields,
-// never the mirror's name.
+// never the mirror's name, PrecisionDecimal's Value field by its role, its
+// type being the caller's interface.
 func (a atomic) spell() string {
 	if a == atomicHexBinary || a == atomicBase64Binary {
 		return "[]byte"
+	}
+	if a == atomicPrecisionDecimal {
+		return "D for the datatype struct D of xs:precisionDecimal (Value I, I a sealed interface whose arms WithPrecisionDecimalArms supplies)"
 	}
 	if !a.mirrored() {
 		return a.bare().String()
@@ -260,52 +298,52 @@ func (a atomic) spell() string {
 // form is a canonical lexical form the governing mapping's Canonical
 // rendered, or where a's reading is readLexical the normalized lexical Parse
 // accepted. A boolean is never read by strconv.ParseBool, which accepts more
-// than f-booleanCanmap's two forms. atomicString has no conversion and
-// panics, and so does atomicQName, read by expandedName.
+// than f-booleanCanmap's two forms. PrecisionDecimal's is convertDecimal's,
+// and every atomic convert does not name is convertTemporal's, which converts
+// the date, time and duration ones and panics for the rest, atomicString and
+// atomicQName, read by expandedName, having no conversion.
 func (a atomic) convert(form string) (reflect.Value, error) {
-	if a.mirrored() && a != atomicQName {
-		return convertTemporal(a, form)
-	}
-	v := reflect.New(a.bare()).Elem()
 	switch a {
+	case atomicPrecisionDecimal:
+		return convertDecimal(form)
 	case atomicBool:
 		switch form {
 		case "true":
-			v.SetBool(true)
+			return reflect.ValueOf(true), nil
 		case "false":
-		default:
-			return reflect.Value{}, errors.New("a boolean's canonical form is true or false (f-booleanCanmap)")
+			return reflect.ValueOf(false), nil
 		}
+		return reflect.Value{}, errors.New("a boolean's canonical form is true or false (f-booleanCanmap)")
 	case atomicFloat32, atomicFloat64:
 		f, err := strconv.ParseFloat(form, a.bare().Bits())
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		v.SetFloat(f)
+		return reflect.ValueOf(f).Convert(a.bare()), nil
 	case atomicBigRat:
 		r, ok := new(big.Rat).SetString(form)
 		if !ok {
 			return reflect.Value{}, errors.New("big.Rat does not read it")
 		}
-		v.Set(reflect.ValueOf(r).Elem())
+		return reflect.ValueOf(r).Elem(), nil
 	case atomicBigInt:
 		i, ok := new(big.Int).SetString(form, 10)
 		if !ok {
 			return reflect.Value{}, errors.New("big.Int does not read it in base 10")
 		}
-		v.Set(reflect.ValueOf(i).Elem())
+		return reflect.ValueOf(i).Elem(), nil
 	case atomicInt8, atomicInt16, atomicInt32, atomicInt64:
 		n, err := strconv.ParseInt(form, 10, a.bare().Bits())
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		v.SetInt(n)
+		return reflect.ValueOf(n).Convert(a.bare()), nil
 	case atomicUint8, atomicUint16, atomicUint32, atomicUint64:
 		n, err := strconv.ParseUint(form, 10, a.bare().Bits())
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		v.SetUint(n)
+		return reflect.ValueOf(n).Convert(a.bare()), nil
 	case atomicHexBinary:
 		// form is f-hexBinaryCanonical's (Datatypes §E.4.1); its letter case
 		// is not compared, hex.DecodeString reading either.
@@ -313,20 +351,17 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		v.SetBytes(b)
+		return reflect.ValueOf(b), nil
 	case atomicBase64Binary:
 		// form is Canonical-base64Binary's (Datatypes §3.3.16.2).
 		b, err := base64.StdEncoding.DecodeString(form)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		v.SetBytes(b)
+		return reflect.ValueOf(b), nil
 	default:
-		// atomicString's value is the normalized lexical itself, and
-		// atomicQName's expandedName's.
-		panic(fmt.Sprintf("codec: atomic %s has no conversion", a.bare()))
+		return convertTemporal(a, form)
 	}
-	return v, nil
 }
 
 // expandedName returns the value of QName's datatype struct, codec's mirror

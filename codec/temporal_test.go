@@ -154,9 +154,19 @@ func structBody(t *testing.T, name string, st reflect.Type) string {
 // TestDatatypeMirrorsAreCodegens pins each of codec's thirteen datatype struct
 // mirrors (atomicTypes) to the struct codegen emits for its datatype, in
 // field names, order and Go types, and each of this test's datatype structs
-// to its mirror, so that a mirror drifting from codegen fails here.
+// to its mirror, so that a mirror drifting from codegen fails here; that
+// PrecisionDecimal's atomic is no mirrored one; and decimalNumerical, the
+// mirror of PrecisionDecimal's numerical arm, to codegen's
+// PrecisionDecimalValueNumerical and to the test's arm.
 func TestDatatypeMirrorsAreCodegens(t *testing.T) {
 	gen := string(generated(t, schemaOf(t, temporalSchema))) + string(generated(t, schemaOf(t, qnameSchema)))
+	numerical := reflect.TypeFor[decimalNumerical]()
+	if want := structBody(t, "PrecisionDecimalValueNumerical", numerical); !strings.Contains(string(generated(t, schemaOf(t, decimalSchema))), want) {
+		t.Errorf("codegen does not declare the mirror of PrecisionDecimal's numerical arm,\n%s", want)
+	}
+	if got, want := structBody(t, "N", reflect.TypeFor[tPDNumerical]()), structBody(t, "N", numerical); got != want {
+		t.Errorf("the test's numerical arm is\n%s\nwhere the mirror is\n%s", got, want)
+	}
 	mirrored := 0
 	for a := atomic(1); int(a) < len(atomicTypes); a++ {
 		if !a.mirrored() {

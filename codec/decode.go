@@ -30,59 +30,87 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // documents of several roots therefore reads the document element's name
 // itself, through parser/xmltree or encoding/xml, before choosing T.
 //
-// The slice Decode covers is the package doc's "# What decodes". Decode first assesses data
-// against schema with package validate and decodes only an instance whose Result has no source
-// fault and stands validate.NotProvenInvalid; it then reads data a second time with
-// parser/xmltree. Each decoded value, a field's or, for a document element of simple type, T's
-// own, is read from the item's ·normalized value· (Structures §3.1.4 key-nv) under its
-// declaration's simple type: the string [value.ApplyWhiteSpace] returns for the item's
-// characters, an attribute's as XML 1.0 §3.3.3 normalized them, an element's the concatenation
-// of its character children. Where the post-schema-validation infoset supplies a value it is
-// read from that value, the {lexical form} of a value constraint under the same normalization:
-// for an absent attribute whose use has an effective value constraint (§3.5.4 key-evc; §3.4.4.2
-// key-dflt-att, §3.4.5.1 sic-attrDefault), and for an element with neither element nor
-// character children whose declaration has a {value constraint} (§3.3.4.3 cvc-elt clause 5.1,
-// §3.3.5.4 sic-eltType). For a simple type whose atomic Go type is string the value is that
-// string. For every other it is the value backend's governing mapping of the type
-// ([value.GoverningMapping]) maps that string to, through Parse with the item's namespace
-// bindings in scope (Datatypes §4.1.4 cvc-datatype-valid clause 2.1): an element's own for its
-// content, its owner element's for an attribute, and for a supplied value those in scope at the
-// schema document element that wrote the value constraint ([value.ConstraintContext]), never
-// the instance's; read back through that mapping's Canonical and converted to the Go type: a
-// boolean's canonical form exactly "true" or "false" (§E.4 f-booleanCanmap), a float's and a
-// double's by strconv.ParseFloat at the Go type's width, a decimal's into big.Rat, big.Int or
-// one of the bounded Go integers int64, int32, int16, int8, uint64, uint32, uint16 and uint8 at
-// its width, a hexBinary's into []byte by encoding/hex, either letter case read (§E.4.1
-// f-hexBinaryMap), a base64Binary's into []byte by encoding/base64's StdEncoding (§3.3.16.2),
-// and a date, time or duration type's into its datatype struct, by that datatype's lexical
-// grammar (§3.3.6.2, §3.3.7.2–§3.3.14.2, §D.2.2), each property the local value the form shows,
-// never converted to UTC (§D.2.1), the timezoneOffset in minutes, and a duration's Months and
-// Seconds both of the form's one sign (§3.3.6.1, §E.2). A type whose datatype struct is
-// yearMonthDuration's alone is converted from the string Parse accepted, so that zero, which
-// has no canonical representation (§3.4.26.1), decodes as Months 0; its Canonical is never
-// consulted. A type whose datatype struct is QName's, an xs:QName or xs:NOTATION type, neither
-// of which has a canonical representation (§3.3.18, §3.3.19), is the expanded name the string
-// Parse accepted resolves to against the same bindings Parse was given, Space its namespace
-// name, "" for none, and Local its local part, no prefix kept; its Canonical is never consulted
-// either. A float or double literal beyond the type's range is the INF or -INF its mapping
-// rounds it to (·floatingPointRound·, Datatypes §E.1), so it decodes as ±Inf where the
-// backend's Canonical renders that, as builtin/strict's does, and is no item 8 error. backend's
-// governing mapping of each such type but those two kinds must therefore have a non-nil
-// Canonical, as builtin/strict's do; item 8 states the error where one fails. For a list type,
-// whose whiteSpace is collapse (Datatypes §4.3.6, §2.4.1.2), the normalized string is split at
-// each U+0020 into its list items before any is mapped, an empty one into none (§4.1.1
-// dt-list), and each item is read as above under the list's {item type definition}, a
-// restriction of a list taking its base's (Structures §3.16.2.3); the value is the []A of the
-// items in order. So the value is the instance's own even where a fixed value constraint holds
-// it to an equal one that is not identical (§3.5.4 cvc-au, cvc-elt clause 5.2.2.2.2): -0
-// against fixed 0 on xs:double decodes to negative zero. The field of an optional attribute use
-// with an effective value constraint is the Go type codegen gives its simple type itself, as
-// codegen emits it, holding the supplied value when the attribute is absent; a whitespace-only
-// element has a character child and holds its own value; and an element absent from the
-// instance supplies nothing, its field nil or not appended to. An element of type xs:anyType
-// holds no such value: its field holds its content raw (item 6), and its {value constraint}
-// supplies none, since its {content type} is mixed and it has no [schema normalized value]
-// (§3.3.5.4 sic-eltType), so an empty one's Text is "" whatever its default or fixed value.
+// The slice Decode covers is the package doc's "# What decodes". Decode first
+// assesses data against schema with package validate and decodes only an
+// instance whose Result has no source fault and stands
+// validate.NotProvenInvalid; it then reads data a second time with
+// parser/xmltree. Each decoded value, a field's or, for a document element of
+// simple type, T's own, is read from the item's ·normalized value·
+// (Structures §3.1.4 key-nv) under its declaration's simple type: the string
+// [value.ApplyWhiteSpace] returns for the item's characters, an attribute's
+// as XML 1.0 §3.3.3 normalized them, an element's the concatenation of its
+// character children. Where the post-schema-validation infoset supplies a
+// value it is read from that value, the {lexical form} of a value constraint
+// under the same normalization: for an absent attribute whose use has an
+// effective value constraint (§3.5.4 key-evc; §3.4.4.2 key-dflt-att, §3.4.5.1
+// sic-attrDefault), and for an element with neither element nor character
+// children whose declaration has a {value constraint} (§3.3.4.3 cvc-elt
+// clause 5.1, §3.3.5.4 sic-eltType). For a simple type whose atomic Go type
+// is string the value is that string. For every other it is the value
+// backend's governing mapping of the type ([value.GoverningMapping]) maps
+// that string to, through Parse with the item's namespace bindings in scope
+// (Datatypes §4.1.4 cvc-datatype-valid clause 2.1): an element's own for its
+// content, its owner element's for an attribute, and for a supplied value
+// those in scope at the schema document element that wrote the value
+// constraint ([value.ConstraintContext]), never the instance's; read back
+// through that mapping's Canonical and converted to the Go type: a boolean's
+// canonical form exactly "true" or "false" (§E.4 f-booleanCanmap), a float's
+// and a double's by strconv.ParseFloat at the Go type's width, a decimal's
+// into big.Rat, big.Int or one of the bounded Go integers int64, int32,
+// int16, int8, uint64, uint32, uint16 and uint8 at its width, a hexBinary's
+// into []byte by encoding/hex, either letter case read (§E.4.1
+// f-hexBinaryMap), a base64Binary's into []byte by encoding/base64's
+// StdEncoding (§3.3.16.2), and a date, time or duration type's into its
+// datatype struct, by that datatype's lexical grammar (§3.3.6.2,
+// §3.3.7.2–§3.3.14.2, §D.2.2), each property the local value the form shows,
+// never converted to UTC (§D.2.1), the timezoneOffset in minutes, and a
+// duration's Months and Seconds both of the form's one sign (§3.3.6.1, §E.2).
+// A type whose datatype struct is yearMonthDuration's alone is converted from
+// the string Parse accepted, so that zero, which has no canonical
+// representation (§3.4.26.1), decodes as Months 0; its Canonical is never
+// consulted. A type whose datatype struct is QName's, an xs:QName or
+// xs:NOTATION type, neither of which has a canonical representation (§3.3.18,
+// §3.3.19), is the expanded name the string Parse accepted resolves to
+// against the same bindings Parse was given, Space its namespace name, "" for
+// none, and Local its local part, no prefix kept; its Canonical is never
+// consulted either. A type whose datatype struct is PrecisionDecimal's, an
+// xs:precisionDecimal type, is converted from the string Parse accepted by
+// ·precisionDecimalLexicalMap· (precisionDecimal §6 f-precDecLexmap), since
+// its canonical mapping keeps neither the ·scale· of zero nor its ·sign·
+// (f-precDecCanmap); its Canonical is never consulted. Its Value holds the
+// arm [WithPrecisionDecimalArms] supplies for the value's ·numericalValue·
+// (§3.1 vp-pd-numVal): INF and +INF the positive infinity's, -INF the
+// negative infinity's and NaN the not-a-number's, each a struct of no field;
+// and a numeral the numerical arm, its Coefficient the numeral's digits read
+// as one decimal integer, the value's magnitude times 10^Scale, its Scale the
+// numeral's ·scale· (vp-pd-precision), its digits after the '.' less its
+// exponent, and its Negative true exactly when the numeral opens with '-'
+// (vp-pd-sign). So 3 and 3.00 decode to Scale 0 and 2, 0 and -0 to Negative
+// false and true, and 3E2 to Coefficient 3 and Scale -2. A float or double
+// literal beyond the type's range is the INF or -INF its mapping rounds it to
+// (·floatingPointRound·, Datatypes §E.1), so it decodes as ±Inf where the
+// backend's Canonical renders that, as builtin/strict's does, and is no item
+// 8 error. backend's governing mapping of each such type but those three
+// kinds must therefore have a non-nil Canonical, as builtin/strict's do; item
+// 8 states the error where one fails. For a list type, whose whiteSpace is
+// collapse (Datatypes §4.3.6, §2.4.1.2), the normalized string is split at
+// each U+0020 into its list items before any is mapped, an empty one into
+// none (§4.1.1 dt-list), and each item is read as above under the list's
+// {item type definition}, a restriction of a list taking its base's
+// (Structures §3.16.2.3); the value is the []A of the items in order. So the
+// value is the instance's own even where a fixed value constraint holds it to
+// an equal one that is not identical (§3.5.4 cvc-au, cvc-elt clause
+// 5.2.2.2.2): -0 against fixed 0 on xs:double decodes to negative zero. The
+// field of an optional attribute use with an effective value constraint is
+// the Go type codegen gives its simple type itself, as codegen emits it,
+// holding the supplied value when the attribute is absent; a whitespace-only
+// element has a character child and holds its own value; and an element
+// absent from the instance supplies nothing, its field nil or not appended
+// to. An element of type xs:anyType holds no such value: its field holds its
+// content raw (item 6), and its {value constraint} supplies none, since its
+// {content type} is mixed and it has no [schema normalized value] (§3.3.5.4
+// sic-eltType), so an empty one's Text is "" whatever its default or fixed
+// value.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -133,26 +161,27 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     the type, its Parse rejects the normalized value, or its Canonical is
 //     nil, fails, or renders a form the Go type does not read or a finite
 //     form beyond the Go type's range, or, for yearMonthDuration's datatype
-//     struct, which reads no Canonical, Parse accepts a form that struct does
-//     not read, or, for QName's, which reads none either, Parse accepts a
-//     lexical that resolves to no expanded name against the bindings it was
-//     given; a datatype struct reads no form denoting no value of its
-//     datatype, such as a month of 13, an hour of 24 or a dateTimeStamp
-//     without a timezone. For a list, the type is its {item type definition}
-//     and the value one list item. It is a fault of the backend,
-//     not of the instance. The error names the stage, the type — its QName, or
-//     for an anonymous type the declaration it is local to and that
-//     declaration's schema Loc, and for a list's item type the list's too —
-//     the normalized value, or the list item and its 1-based position among
-//     the value's items, and the value's source at its instance Loc, for a
-//     list the whole value's and never an item's: an element's character
-//     content, at its first character data, with that data's byte offset; a
-//     present attribute, at its Loc (xmltree.Attribute.Loc), with no offset;
-//     or a supplied value, at its element's start, with the declaration whose
-//     value constraint supplied it. It wraps nothing: errors.As finds no
-//     *xsderr.Error, *DeclineError or *UndecidedError in it, xsderr.RuleOf no
-//     rule, and errors.Is neither errors.ErrUnsupported nor [ErrTypeMismatch];
-//     and [ViolationsOf] returns nil for it.
+//     struct and PrecisionDecimal's, which read no Canonical, Parse accepts
+//     a form that struct does not read, PrecisionDecimal's reading the
+//     pDecimalRep production alone (precisionDecimal §3.2), or, for QName's,
+//     which reads none either, Parse accepts a lexical that resolves to no
+//     expanded name against the bindings it was given; a datatype struct
+//     reads no form denoting no value of its datatype, such as a month of 13,
+//     an hour of 24 or a dateTimeStamp without a timezone. For a list, the
+//     type is its {item type definition} and the value one list item. It is a
+//     fault of the backend, not of the instance. The error names the stage,
+//     the type — its QName, or for an anonymous type the declaration it is
+//     local to and that declaration's schema Loc, and for a list's item type
+//     the list's too — the normalized value, or the list item and its 1-based
+//     position among the value's items, and the value's source at its instance
+//     Loc, for a list the whole value's and never an item's: an element's
+//     character content, at its first character data, with that data's byte
+//     offset; a present attribute, at its Loc (xmltree.Attribute.Loc), with no
+//     offset; or a supplied value, at its element's start, with the
+//     declaration whose value constraint supplied it. It wraps nothing:
+//     errors.As finds no *xsderr.Error, *DeclineError or *UndecidedError in
+//     it, xsderr.RuleOf no rule, and errors.Is neither errors.ErrUnsupported
+//     nor [ErrTypeMismatch]; and [ViolationsOf] returns nil for it.
 //
 // Items 7 and 8 are both found while filling T, and the first in document
 // order is returned: an element's xsi:type, then its attributes' values,
@@ -230,9 +259,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // Item 6 compares T with the type codegen emits by shape alone: neither T's,
 // a sealed interface's nor a branch's name is compared. Decode never reads
 // the fields from T, so for a type codegen emitted from this schema an item
-// 6 error is a defect of Decode's, or a branch set [WithBranches] did not
-// supply as codegen emitted it, and for any other T it is a T that does not
-// match. Item 6 compares:
+// 6 error is a defect of Decode's, or a branch set [WithBranches] or an arm
+// set [WithPrecisionDecimalArms] did not supply as codegen emitted it, and
+// for any other T it is a T that does not match. Item 6 compares:
 //
 //   - T of a complex {type definition}: T is a struct whose fields are
 //     exactly those codegen emits, in name, order and Go type, each field's
@@ -247,13 +276,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     doc): its atomic Go type A, one of string, bool, float32, float64,
 //     big.Rat, big.Int, int64, int32, int16, int8, uint64, uint32, uint16,
 //     uint8, []byte and a datatype struct D, a date, time or duration
-//     datatype's or QName's, which an xs:NOTATION type shares, or for a list
-//     []A, A its {item type definition}'s. So any T over that Go type passes,
-//     such as the type codegen emits for another document element of the same
-//     simple type. Codegen declares D in the caller's package, so D is matched
-//     by shape: a struct of exactly D's exported fields, in name, order and Go
-//     type, struct tags aside, whatever its name, and for a list a slice,
-//     named or not, of such a struct.
+//     datatype's, QName's, which an xs:NOTATION type shares, or
+//     PrecisionDecimal's, or for a list []A, A its {item type definition}'s.
+//     So any T over that Go type passes, such as the type codegen emits for
+//     another document element of the same simple type. Codegen declares D in
+//     the caller's package, so D is matched by shape: a struct of exactly D's
+//     exported fields, in name, order and Go type, struct tags aside, whatever
+//     its name, PrecisionDecimal's exactly one field Value, not embedded,
+//     whose type is an interface of one unexported method, and for a list a
+//     slice, named or not, of such a struct.
 //   - The field of a particle or attribute use of simple type: for a local
 //     element declaration's particle and an attribute use it is V, *V or []V
 //     by its occurrence, an attribute's by its use's {required} and its
@@ -341,6 +372,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     be no alternative is held to the first alternative of its field's name
 //     of complex type, a wildcard or a substitution group's interface, and
 //     the error is that alternative's mismatch.
+//   - The Value interface I of a PrecisionDecimal, T's own or a field's, at
+//     any depth, a list's element included, whose arms reach Decode only
+//     through [WithPrecisionDecimalArms]: it does not match when no
+//     WithPrecisionDecimalArms supplies I's arms, or it supplies a nil arm, a
+//     numerical arm that is not a struct of exactly Coefficient and Scale,
+//     each a big.Int, and Negative, a bool, in that order, none embedded,
+//     struct tags aside, a positive infinity, negative infinity or
+//     not-a-number arm that is no struct of no field, or one type as two
+//     arms.
 func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error) {
 	cfg := newConfig(opts)
 	v, err := validate.New(schema, backend, validate.WithLogger(cfg.log))
@@ -359,11 +399,11 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 	if err != nil {
 		return nil, err
 	}
-	b, err := bind(&pipeline{schema: schema, backend: backend, log: cfg.log.WithGroup("codec")}, root)
+	b, err := bind(&pipeline{schema: schema, backend: backend, log: cfg.log.WithGroup("codec"), decimals: cfg.decimals}, root)
 	if err != nil {
 		return nil, err
 	}
-	f, err := b.check(reflect.TypeFor[T](), newCheckContext(cfg.branches))
+	f, err := b.check(reflect.TypeFor[T](), newCheckContext(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -377,8 +417,9 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 // CheckDecode returns, reading no instance, the error items 5 and 6 of
 // [Decode]'s doc state for a document element of the top-level element
 // declaration name in schema decoded into T under opts, or nil when neither
-// applies. Of opts it reads only the sets [WithBranches] supplies. The first
-// of these that applies is returned:
+// applies. Of opts it reads only the sets [WithBranches] and
+// [WithPrecisionDecimalArms] supply. The first of these that applies is
+// returned:
 //
 //  1. A nil schema: a plain error.
 //  2. No top-level element declaration of schema has the expanded name name:
@@ -412,7 +453,7 @@ func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) erro
 	if err != nil {
 		return err
 	}
-	_, err = b.check(reflect.TypeFor[T](), newCheckContext(newConfig(opts).branches))
+	_, err = b.check(reflect.TypeFor[T](), newCheckContext(newConfig(opts)))
 	return err
 }
 
@@ -562,28 +603,34 @@ func (s shape) prefix() string {
 }
 
 // store stores v, a decoded value of a type that converts to the V a field of
-// shape s holds, in dst, a value of a Go type of shape s: a repeated one
-// appends it, an optional one points at a copy of it, each converted to dst's
-// own element type, and shapeOne sets dst to it converted to dst's type, each
-// conversion convertTo's.
-func (s shape) store(dst, v reflect.Value) {
+// shape s holds, or a decimalValue or a list of them that p builds one from,
+// in dst, a value of a Go type of shape s: a repeated one appends it, an
+// optional one points at a copy of it, each converted to dst's own element
+// type, and shapeOne sets dst to it converted to dst's type, each conversion
+// convertTo's.
+func (s shape) store(p *pipeline, dst, v reflect.Value) {
 	switch s {
 	case shapeOptional:
-		p := reflect.New(dst.Type().Elem())
-		p.Elem().Set(convertTo(v, dst.Type().Elem()))
-		dst.Set(p)
+		ptr := reflect.New(dst.Type().Elem())
+		ptr.Elem().Set(convertTo(p, v, dst.Type().Elem()))
+		dst.Set(ptr)
 	case shapeRepeated:
-		dst.Set(reflect.Append(dst, convertTo(v, dst.Type().Elem())))
+		dst.Set(reflect.Append(dst, convertTo(p, v, dst.Type().Elem())))
 	default:
-		dst.Set(convertTo(v, dst.Type()))
+		dst.Set(convertTo(p, v, dst.Type()))
 	}
 }
 
-// convertTo returns v converted to t: a slice whose element type is not t's,
-// a list of codec's mirror of a datatype struct, which converts to no slice
-// of the caller's struct, element by element into a new slice of t of v's
-// length, and any other value by Convert.
-func convertTo(v reflect.Value, t reflect.Type) reflect.Value {
+// convertTo returns v converted to t: a decimalValue, or a list of them, as
+// p.decimal builds the caller's PrecisionDecimal from it, since it converts
+// to no caller type; a slice whose element type is not t's, a list of codec's
+// mirror of a datatype struct, which converts to no slice of the caller's
+// struct, element by element into a new slice of t of v's length; and any
+// other value by Convert.
+func convertTo(p *pipeline, v reflect.Value, t reflect.Type) reflect.Value {
+	if v.Type() == decimalValueType || (v.Kind() == reflect.Slice && v.Type().Elem() == decimalValueType) {
+		return p.decimal(v, t)
+	}
 	if v.Kind() != reflect.Slice || v.Type().Elem() == t.Elem() {
 		return v.Convert(t)
 	}
@@ -631,10 +678,12 @@ type fieldArm interface {
 	// element into a V, or at's mismatch.
 	bind(v reflect.Type, at fieldAt, cx *checkContext) (elementReader, error)
 	// admits reports whether v could be the V the arm binds: for a scalarArm,
-	// a rawArm and an anyTypeArm, exactly the V bind accepts; for a
-	// structArm, a struct; for an ifaceArm and a groupArm, an interface. bind
-	// rejects every v the arm does not admit before it checks anything
-	// further, so such a v stores no checkContext.bound entry.
+	// a rawArm and an anyTypeArm, exactly the V bind accepts, but that bind
+	// also holds a PrecisionDecimal scalarArm's V to the arms checkContext
+	// supplies for its Value interface; for a structArm, a struct; for an
+	// ifaceArm and a groupArm, an interface. bind rejects every v the arm does
+	// not admit before it checks anything further, so such a v stores no
+	// checkContext.bound entry.
 	admits(v reflect.Type) bool
 	// describe spells V for an ErrTypeMismatch message.
 	describe() string
@@ -651,13 +700,14 @@ type scalarArm struct {
 // admits reports whether v is the V codegen gives a, as Decode's doc, item 6,
 // reads it: the Go type codegen gives a's simple type (scalar.goType) itself
 // for valueBare, and for valueNamed a type other than it over it
-// (scalar.underlies), its name never compared. A datatype struct D is
-// declared in the caller's package, so codec holds no D to compare v with:
-// for valueBare and valueNamed alike v is a struct over D, and for a list
-// []D, an unnamed slice of such a struct, for valueBare, and a defined slice
-// type over one, N for type N []D, for valueNamed.
+// (scalar.underlies), its name never compared. A datatype struct D, a
+// PrecisionDecimal included, is declared in the caller's package, so codec
+// holds no D to compare v with: for valueBare and valueNamed alike v is a
+// struct of D's shape, and for a list []D, an unnamed slice of such a struct,
+// for valueBare, and a defined slice type over one, N for type N []D, for
+// valueNamed.
 func (a scalarArm) admits(v reflect.Type) bool {
-	if a.atom.mirrored() {
+	if a.atom.datatypeStruct() {
 		if !a.underlies(v) {
 			return false
 		}
@@ -677,11 +727,15 @@ func (a scalarArm) admits(v reflect.Type) bool {
 	panic(fmt.Sprintf("codec: invalid value type %d", a.value))
 }
 
-// bind returns a, which reads the field's element, when a admits v, and
-// otherwise at's mismatch.
-func (a scalarArm) bind(v reflect.Type, at fieldAt, _ *checkContext) (elementReader, error) {
+// bind returns a, which reads the field's element, when a admits v and, for
+// a PrecisionDecimal, cx holds its Value interface's arms (scalar.decimalSite),
+// and otherwise at's mismatch, or the arms' mismatch.
+func (a scalarArm) bind(v reflect.Type, at fieldAt, cx *checkContext) (elementReader, error) {
 	if !a.admits(v) {
 		return nil, at.mismatch()
+	}
+	if err := a.decimalSite(v, at.site(), cx); err != nil {
+		return nil, err
 	}
 	return a, nil
 }
@@ -697,7 +751,7 @@ func (a scalarArm) read(p *pipeline, r *xmltree.Reader, start *xmltree.StartElem
 // list []A, as scalar.spell spells it, or N for a named type N over it, which
 // a datatype struct D, of no list, is not told apart from (admits).
 func (a scalarArm) describe() string {
-	if a.value == valueNamed && (!a.atom.mirrored() || a.item != nil) {
+	if a.value == valueNamed && (!a.atom.datatypeStruct() || a.item != nil) {
 		return "N for a named type N over " + a.spell()
 	}
 	return a.spell()
@@ -1132,7 +1186,8 @@ func (f field) admits(got reflect.StructField) bool {
 //   - One arm a scalarArm, the other nested: true exactly when the nested arm
 //     is a structArm and the scalar's atomic Go type is a struct, big.Rat or
 //     big.Int, which is conservative, since a structArm admits any struct. No
-//     scalar's V is an interface, or holds one, so an ifaceArm or a groupArm
+//     scalar's V is an interface, and none holds one but a PrecisionDecimal's,
+//     which the datatype-struct bullet answers, so an ifaceArm or a groupArm
 //     gives false.
 //   - Both nested: true exactly when both are structArms, or neither is,
 //     each then an ifaceArm or a groupArm, and they have one shape, which is
@@ -1148,7 +1203,7 @@ func (f field) sharesBranch(g field) bool {
 	// exception.
 	fa, fScalar := f.arm.(scalarArm)
 	ga, gScalar := g.arm.(scalarArm)
-	if (fScalar && fa.atom.mirrored()) || (gScalar && ga.atom.mirrored()) {
+	if (fScalar && fa.atom.datatypeStruct()) || (gScalar && ga.atom.datatypeStruct()) {
 		return true
 	}
 	_, fStruct := f.arm.(structArm)
@@ -1235,10 +1290,12 @@ type complexUnit interface {
 }
 
 // checkContext is what one item-6 check of T reads beside the binder: sets,
-// the branch types [WithBranches] supplied, and bound, the filler already
-// bound for each complex unit and Go type the check has reached.
+// the branch types [WithBranches] supplied, decimals, the arm types
+// [WithPrecisionDecimalArms] supplied, and bound, the filler already bound
+// for each complex unit and Go type the check has reached.
 type checkContext struct {
-	sets branchSets
+	sets     branchSets
+	decimals decimalArmSets
 	// bound ties the check's knot (STYLE D4): a unit is held to a Go type once,
 	// its entry stored before its fields are checked, and a later reach of the
 	// same pair, through a recursive type, links to that entry. It lives for
@@ -1247,9 +1304,10 @@ type checkContext struct {
 	bound map[boundKey]filler
 }
 
-// newCheckContext returns the checkContext of a check under sets.
-func newCheckContext(sets branchSets) *checkContext {
-	return &checkContext{sets: sets, bound: map[boundKey]filler{}}
+// newCheckContext returns the checkContext of a check under cfg's branch and
+// arm sets.
+func newCheckContext(cfg config) *checkContext {
+	return &checkContext{sets: cfg.branches, decimals: cfg.decimals, bound: map[boundKey]filler{}}
 }
 
 // boundKey is a complex unit and the Go type item 6 holds it to.
@@ -1623,7 +1681,7 @@ func (b *boundSequence) fill(r *xmltree.Reader, out reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		s.fields[i].shape.store(out.Field(i), v)
+		s.fields[i].shape.store(s.p, out.Field(i), v)
 		return nil
 	})
 }
@@ -1854,7 +1912,7 @@ func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i int
 	if err != nil {
 		return err
 	}
-	alt.shape.store(branch.Field(0), v)
+	alt.shape.store(bc.sealed.p, branch.Field(0), v)
 	dst.Set(branch)
 	return nil
 }
@@ -2266,12 +2324,12 @@ func itemSubject(subject string, item *xsd.SimpleType) string {
 // an atomic type whose {primitive type definition} is one of primitiveAtomics' or
 // datatypeAtomics', as codegen/doc.go "# Simple types" picks it: from st's {base
 // type definition} chain (chainAtomic), which meets a date, time or duration
-// primitive or xs:QName at its top, failing that from its primitive. Or else it
-// returns the construct Decode declines st for: a union's, a special type's, or
-// that of its primitive. A list st is a plain error: simpleDecline routes a list
-// to its {item type definition}, which cos-st-restricts clause 2.1 holds to no
-// list. {variety} is a closed sum, so the switch is STYLE T2's sealed-sum
-// exception.
+// primitive, xs:QName or xs:precisionDecimal at its top, failing that from its
+// primitive. Or else it returns the construct Decode declines st for: a union's,
+// a special type's, or that of its primitive. A list st is a plain error:
+// simpleDecline routes a list to its {item type definition}, which
+// cos-st-restricts clause 2.1 holds to no list. {variety} is a closed sum, so the
+// switch is STYLE T2's sealed-sum exception.
 func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
@@ -2383,7 +2441,7 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 		if err != nil {
 			return err
 		}
-		bd.attrs[i].shape.store(out.Field(width+i), v)
+		bd.attrs[i].shape.store(bd.p, out.Field(width+i), v)
 		present[i] = true
 	}
 	for i, f := range bd.attrs {
@@ -2394,7 +2452,7 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 		if err != nil {
 			return err
 		}
-		f.shape.store(out.Field(width+i), v)
+		f.shape.store(bd.p, out.Field(width+i), v)
 	}
 	return b.content.fill(r, out)
 }
@@ -2511,11 +2569,16 @@ type simpleRoot struct {
 }
 
 // check returns s, which fills t, when t is a type over the Go type codegen
-// gives s's simple type (scalar.underlies), and otherwise the ErrTypeMismatch
-// error Decode's doc states, item 6. t's name is never compared.
-func (s *simpleRoot) check(t reflect.Type, _ *checkContext) (filler, error) {
+// gives s's simple type (scalar.underlies) and, for a PrecisionDecimal, cx
+// holds its Value interface's arms (scalar.decimalSite), and otherwise the
+// ErrTypeMismatch error Decode's doc states, item 6. t's name is never
+// compared.
+func (s *simpleRoot) check(t reflect.Type, cx *checkContext) (filler, error) {
 	if !s.underlies(t) {
 		return nil, fmt.Errorf("%w: the underlying type of %s is not %s", ErrTypeMismatch, t, s.spell())
+	}
+	if err := s.decimalSite(t, "T", cx); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -2533,7 +2596,7 @@ func (s *simpleRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out ref
 	if err != nil {
 		return err
 	}
-	shapeOne.store(out, v)
+	shapeOne.store(s.p, out, v)
 	return nil
 }
 

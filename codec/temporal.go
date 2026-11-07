@@ -20,7 +20,8 @@ import (
 // yearMonthDuration's seconds or a dayTimeDuration's months other than 0
 // (§3.4.26, §3.4.27). Each property is the local value the form shows, never
 // converted to UTC (§D.2.1), and a duration's Months and Seconds both take the
-// form's one sign (§3.3.6.1).
+// form's one sign (§3.3.6.1). Any other a panics, since convert delegates to
+// it every atomic convert does not name.
 func convertTemporal(a atomic, form string) (reflect.Value, error) {
 	c := &scanner{s: form}
 	var v any
@@ -45,8 +46,10 @@ func convertTemporal(a atomic, form string) (reflect.Value, error) {
 	case atomicDuration, atomicDayTimeDuration, atomicYearMonthDuration:
 		v, err = c.duration(a)
 	default:
-		// convert dispatches the temporal mirrors alone.
-		panic(fmt.Sprintf("codec: atomic %s is no datatype struct", a.bare()))
+		// convert delegates every atomic it does not convert itself; of those,
+		// atomicString's value is the normalized lexical itself, and
+		// atomicQName's expandedName's.
+		panic(fmt.Sprintf("codec: atomic %s has no conversion", a.bare()))
 	}
 	if err != nil {
 		return reflect.Value{}, err

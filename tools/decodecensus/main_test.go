@@ -46,20 +46,20 @@ func schemaTest(doc string) string {
 }
 
 // censusSuite is the fixture suite. Group g's schema generates, and its
-// cases decode (a.xml, twice, f.xml, of simple type, and g.xml, a choice,
-// through the branch set the census binds), decline with another primitive,
-// xs:precisionDecimal (e.xml, twice) and all content (c.xml), and fail otherwise, charged
-// (invalid.xml) and with no declaration for the document element (u.xml), which
-// decodes into the placeholder; its case old is withheld. Group rec's schema
-// assembles and does not generate, group bad's does not assemble, and group none
-// declares no schemaTest.
+// cases decode (a.xml, twice, f.xml, of simple type, g.xml, a choice, through
+// the branch set the census binds, and p.xml, of xs:precisionDecimal, through
+// the arm set it binds), decline with a union (e.xml, twice) and all content
+// (c.xml), and fail otherwise, charged (invalid.xml) and with no declaration for
+// the document element (u.xml), which decodes into the placeholder; its case old
+// is withheld. Group rec's schema assembles and does not generate, group bad's
+// does not assemble, and group none declares no schemaTest.
 var censusSuite = map[string]string{
 	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink"><testSetRef xlink:href="sets/s.testSet"/></testSuite>`,
 	"sets/s.testSet": `<testSet name="S" xmlns:xlink="http://www.w3.org/1999/xlink">
   <testGroup name="g">` + schemaTest("s.xsd") +
 		instanceTest("decoded", "a.xml", "") + instanceTest("decoded2", "a.xml", "") +
 		instanceTest("simple", "e.xml", "") + instanceTest("simple2", "e.xml", "") + instanceTest("simpledecoded", "f.xml", "") +
-		instanceTest("all", "c.xml", "") + instanceTest("choice", "g.xml", "") + instanceTest("invalid", "invalid.xml", "") +
+		instanceTest("all", "c.xml", "") + instanceTest("choice", "g.xml", "") + instanceTest("precision", "p.xml", "") + instanceTest("invalid", "invalid.xml", "") +
 		instanceTest("undeclared", "u.xml", "") + instanceTest("old", "a.xml", ` version="1.0"`) + `</testGroup>
   <testGroup name="rec">` + schemaTest("rec.xsd") + instanceTest("i", "a.xml", "") + `</testGroup>
   <testGroup name="bad">` + schemaTest("bad.xsd") + instanceTest("i", "a.xml", "") + `</testGroup>
@@ -68,9 +68,10 @@ var censusSuite = map[string]string{
 	"d/s.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="c"><xs:complexType><xs:all><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
-  <xs:element name="e" type="xs:precisionDecimal"/>
+  <xs:element name="e"><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:element>
   <xs:element name="f" type="xs:string"/>
   <xs:element name="g"><xs:complexType><xs:choice><xs:element name="h" type="xs:string"/><xs:element name="i" type="xs:string"/></xs:choice></xs:complexType></xs:element>
+  <xs:element name="p" type="xs:precisionDecimal"/>
 </xs:schema>`,
 	"d/rec.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>
@@ -81,6 +82,7 @@ var censusSuite = map[string]string{
 	"d/e.xml":         `<e>1.0</e>`,
 	"d/f.xml":         `<f>x</f>`,
 	"d/g.xml":         `<g><i>x</i></g>`,
+	"d/p.xml":         `<p>3.00</p>`,
 	"d/invalid.xml":   `<a/>`,
 	"d/u.xml":         `<u/>`,
 	"d/notes.txt":     "not a document",
@@ -89,9 +91,9 @@ var censusSuite = map[string]string{
 
 // wantCounts is the report's head over censusSuite: every count, and its
 // construct lines.
-const wantCounts = `decodecensus: 12 instance case(s) under %ROOT%
-  schema generates: 9
-  decoded: 4
+const wantCounts = `decodecensus: 13 instance case(s) under %ROOT%
+  schema generates: 10
+  decoded: 5
   declined: 3
   undecided: 0
   rejected codegen's own type: 0
@@ -99,7 +101,7 @@ const wantCounts = `decodecensus: 12 instance case(s) under %ROOT%
   decoded where validate rejects: 0
 
 === First decline, by construct: 2 construct(s) ===
-       2  an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary, xs:base64Binary, xs:QName and xs:NOTATION
+       2  a union simple type
        1  all content
 
 === Caveats ===
@@ -108,7 +110,7 @@ const wantCounts = `decodecensus: 12 instance case(s) under %ROOT%
 // wantPaths is the -paths sections over censusSuite.
 const wantPaths = `
 === Cases, by construct ===
-an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary, xs:base64Binary, xs:QName and xs:NOTATION (2):
+a union simple type (2):
   S/g/instance/simple
   S/g/instance/simple2
 all content (1):
@@ -141,9 +143,11 @@ func withCaveats(head string, rep report) string {
 // caveat. It fails with instanceCases' withheld test removed, with plan's
 // generates count removed, and with the decoded, declined or failed other
 // arm of the driver's tallyOutcome removed, and with driverSource's bound
-// branch list dropped, which moves g.xml from decoded to rejected; undecided,
-// rejected and the differential, which no schema document makes codec
-// return, are TestReportPrintsEachMergedCount's and package assess's.
+// branch list dropped, which moves g.xml from decoded to rejected, and with
+// driverSource emitting codec.WithBranches in place of
+// codec.WithPrecisionDecimalArms, which moves p.xml from decoded to rejected;
+// undecided, rejected and the differential, which no schema document makes
+// codec return, are TestReportPrintsEachMergedCount's and package assess's.
 func TestCensusCounts(t *testing.T) {
 	root := writeTree(t, censusSuite)
 	plain := withCaveats(strings.ReplaceAll(wantCounts, "%ROOT%", root), report{placeholder: 1})
@@ -375,15 +379,18 @@ func TestOwnTypeRendersAnAbsoluteLoc(t *testing.T) {
 }
 
 // TestDriverSourceBindsBranches pins the census's branch-set supply: a
-// generated file declaring two interfaces, one with two marker types and one
-// with a union's non-struct variant, beside a method that is no marker, a
-// pointer-receiver method of a marker's name and a generic interface, yields
-// sealedInterfaces' list, and a driver source declaring one WithBranches per
-// non-generic interface, in file order, bound to each decoder of that package
-// alone.
+// generated file declaring three interfaces, one with two marker types and a
+// header of another provenance, one with a union's non-struct variant, and
+// PrecisionDecimal's Value interface, known by its header, with its four
+// arms, beside a method that is no marker, a pointer-receiver method of a
+// marker's name and a generic interface, yields sealedInterfaces' list, and a
+// driver source declaring one WithBranches per other non-generic interface
+// and one WithPrecisionDecimalArms of the arms in file order for the Value
+// interface, in file order, bound to each decoder of that package alone.
 func TestDriverSourceBindsBranches(t *testing.T) {
 	const src = `package p0
 
+// R is generated from element r declared at s.xsd:1:1.
 type R interface {
 	isR()
 }
@@ -411,6 +418,27 @@ func (*RA) isU() {}
 type Nillable[T, A any] interface {
 	isNillable(T, A)
 }
+
+// D is generated from datatype {http://www.w3.org/2001/XMLSchema}precisionDecimal.
+type D interface {
+	isD()
+}
+
+type DN struct{ Coefficient, Scale int }
+
+func (DN) isD() {}
+
+type DP struct{}
+
+func (DP) isD() {}
+
+type DM struct{}
+
+func (DM) isD() {}
+
+type DQ struct{}
+
+func (DQ) isD() {}
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, "xsd_gen.go")
@@ -422,14 +450,15 @@ type Nillable[T, A any] interface {
 		t.Fatal(err)
 	}
 	sealed := sealedInterfaces(file)
-	want := []sealedDecl{{name: "R", branches: []string{"RA", "RB"}}, {name: "U", branches: []string{"UInt"}}}
+	want := []sealedDecl{{name: "R", branches: []string{"RA", "RB"}}, {name: "U", branches: []string{"UInt"}}, {name: "D", branches: []string{"DN", "DP", "DM", "DQ"}, decimal: true}}
 	if !reflect.DeepEqual(sealed, want) {
 		t.Errorf("sealedInterfaces = %+v, want %+v", sealed, want)
 	}
 	got := string(driverSource(batch{packages: []genPackage{{name: "p0", sealed: sealed}, {name: "p1"}}, decoders: []string{"p0.R", "p1.S", "p0.X"}}))
 	for _, line := range []string{
 		"\t\"github.com/kud360/goxsd8/codec\"\n",
-		"var p0Branches = []codec.Option{\n\tcodec.WithBranches[p0.R](*new(p0.RA), *new(p0.RB)),\n\tcodec.WithBranches[p0.U](*new(p0.UInt)),\n}\n",
+		"var p0Branches = []codec.Option{\n\tcodec.WithBranches[p0.R](*new(p0.RA), *new(p0.RB)),\n\tcodec.WithBranches[p0.U](*new(p0.UInt)),\n" +
+			"\tcodec.WithPrecisionDecimalArms[p0.D](*new(p0.DN), *new(p0.DP), *new(p0.DM), *new(p0.DQ)),\n}\n",
 		"\tassess.DecoderFor[p0.R](p0Branches...),\n\tassess.DecoderFor[p1.S](),\n\tassess.DecoderFor[p0.X](p0Branches...),\n",
 	} {
 		if !strings.Contains(got, line) {

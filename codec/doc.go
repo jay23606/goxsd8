@@ -9,6 +9,7 @@
 //	type Option func(*config)
 //	func WithURI(uri string) Option
 //	func WithBranches[I any](branches ...I) Option
+//	func WithPrecisionDecimalArms[I any](numerical, positiveInfinity, negativeInfinity, notANumber I) Option
 //	func WithLogger(l *slog.Logger) Option
 //	type DeclineError struct{ ... }
 //	func (e *DeclineError) Loc() (xsderr.Loc, bool)
@@ -31,22 +32,27 @@
 // codegen's structs carry no tags, so Decode derives each field's name, order
 // and Go type from the declaration by codegen's own rules and refuses a T
 // that differs, and reads a sealed interface's branch types from
-// [WithBranches]. Package codec does not import codegen. Nothing encodes yet.
+// [WithBranches], and a PrecisionDecimal's arms from
+// [WithPrecisionDecimalArms]. Package codec does not import codegen. Nothing
+// encodes yet.
 //
 // # What decodes
 //
 // A simple type decodes when it is atomic with {primitive type definition}
 // xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal,
 // xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay,
-// xs:gDay, xs:gMonth, xs:duration, xs:hexBinary, xs:base64Binary, xs:QName
-// or xs:NOTATION. So xs:normalizedString, xs:token, xs:language, xs:Name,
-// xs:NCName, xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY, xs:integer and every
-// builtin derived from it, xs:dateTimeStamp, xs:dayTimeDuration,
-// xs:yearMonthDuration, and a user restriction of any of them decode. Each
-// decodes into the atomic Go type codegen gives it, by the rules of codegen's
-// package doc, "# Simple types", a date, time or duration type into its
-// datatype struct, and an xs:QName or xs:NOTATION type into QName's, the
-// expanded name its lexical resolves to as [Decode]'s doc states. A list type
+// xs:gDay, xs:gMonth, xs:duration, xs:hexBinary, xs:base64Binary, xs:QName,
+// xs:NOTATION or xs:precisionDecimal. So xs:normalizedString, xs:token,
+// xs:language, xs:Name, xs:NCName, xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY,
+// xs:integer and every builtin derived from it, xs:dateTimeStamp,
+// xs:dayTimeDuration, xs:yearMonthDuration, and a user restriction of any of
+// them decode. Each decodes into the atomic Go type codegen gives it, by the
+// rules of codegen's package doc, "# Simple types", a date, time or duration
+// type into its datatype struct, an xs:QName or xs:NOTATION type into
+// QName's, the expanded name its lexical resolves to as [Decode]'s doc
+// states, and an xs:precisionDecimal type into PrecisionDecimal's, its Value
+// the arm [WithPrecisionDecimalArms] supplies for its lexical's value, with
+// that lexical's ·scale· and ·sign·, as [Decode]'s doc states. A list type
 // decodes when its {item type definition} is such an atomic type, a
 // restriction of a list taking its base's (Structures §3.16.2.3), xs:NMTOKENS
 // among them, into []A, A its item's atomic Go type, one element per list
@@ -124,7 +130,9 @@
 //   - A nillable element.
 //   - A union.
 //   - A special type.
-//   - A primitive other than those nineteen.
+//   - A primitive other than those twenty: an ·implementation-defined· one
+//     (Datatypes dt-primitive), which xsd.NewPrimitiveType mints and no
+//     schema document yields.
 //   - A list whose {item type definition} is a union or of such a primitive,
 //     declining by its item's construct.
 //   - An xsi:type.
