@@ -361,3 +361,121 @@ func TestDeclineErrorTextNested(t *testing.T) {
 		t.Errorf("error = %v, want %q", err, want)
 	}
 }
+
+// The abstract-type schemas, each declaring s:r of the abstract complex type ab,
+// so that no document element validates against ab itself (ctd-abstract,
+// cvc-type clause 2) and each instance names a concrete member by xsi:type,
+// which overrides r's type (cvc-elt clause 4): abstractTypeTwoSchema's ab, of a
+// sequence of a, has the two members c1 and c2, each adding an attribute;
+// abstractTypeOneSchema's has c1 alone; and abstractTypeEmptySchema's ab, of empty
+// content, has e1 alone, adding k.
+const (
+	abstractTypeTwoSchema = `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+  <xs:complexType name="c1"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+  <xs:complexType name="c2"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="m" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+  <xs:element name="r" type="s:ab"/>`
+	abstractTypeOneSchema = `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+  <xs:complexType name="c1"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+  <xs:element name="r" type="s:ab"/>`
+	abstractTypeEmptySchema = `<xs:complexType name="ab" abstract="true"/>
+  <xs:complexType name="e1"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+  <xs:element name="r" type="s:ab"/>`
+)
+
+// abR to abC2 are abstractTypeTwoSchema's R, RC1, RC2, C1 and C2; abOneR is
+// abstractTypeOneSchema's R and abEmptyR abstractTypeEmptySchema's R. Each pin is
+// TestAbstractTypesAreCodegens'.
+type (
+	abR   interface{ isAbR() }
+	abRC1 struct{ C1 abC1 }
+	abRC2 struct{ C2 abC2 }
+	abC1  struct {
+		A string
+		K *string
+	}
+	abC2 struct {
+		A string
+		M *string
+	}
+	abOneR struct {
+		A string
+		K *string
+	}
+	abEmptyR struct{ K *string }
+)
+
+func (abRC1) isAbR() {}
+func (abRC2) isAbR() {}
+
+// TestAbstractTypesAreCodegens pins the types above to those codegen emits
+// for each abstract-type schema, in shape: the governing types' sealed interface
+// for two members, and the one member's struct, which adds a field to ab's,
+// for one (codegen/doc.go "An element declaration's governing types").
+func TestAbstractTypesAreCodegens(t *testing.T) {
+	rows := []struct {
+		decls string
+		want  []string
+	}{
+		{abstractTypeTwoSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RC1 struct {\n\tC1 C1\n}\n\nfunc (RC1) isR() {}\n",
+			"type RC2 struct {\n\tC2 C2\n}\n\nfunc (RC2) isR() {}\n",
+			"type C1 struct {\n\tA string\n\tK *string\n}\n",
+			"type C2 struct {\n\tA string\n\tM *string\n}\n",
+		}},
+		{abstractTypeOneSchema, []string{"type R struct {\n\tA string\n\tK *string\n}\n"}},
+		{abstractTypeEmptySchema, []string{"type R struct {\n\tK *string\n}\n"}},
+	}
+	for _, row := range rows {
+		gen := generated(t, schemaOf(t, row.decls))
+		for _, decl := range row.want {
+			if !bytes.Contains(gen, []byte(decl)) {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+			}
+		}
+	}
+}
+
+// TestDecodeAbstractTypeElement pins the document element's abstract type
+// declining into codegen's own T: ab has no valid instance (ctd-abstract,
+// cvc-type clause 2), codegen emits no struct for it, and CheckDecode and
+// Decode, the instance naming a concrete member by xsi:type (cvc-elt clause
+// 4), each return the constructAbstractTypeElement decline, never
+// ErrTypeMismatch. Without the abstract test in (*bindRun).complex every row
+// returns ErrTypeMismatch: "codec.abR is no struct" for the interface, "has 2
+// fields where codegen emits 1" and "has 1 fields where codegen emits 0" for
+// the members' structs.
+func TestDecodeAbstractTypeElement(t *testing.T) {
+	rows := []struct {
+		name  string
+		decls string
+		data  []byte
+		into  target
+	}{
+		{"two members: the governing types' interface", abstractTypeTwoSchema,
+			instanceOf(` xsi:type="s:c1" k="v"`, `<s:a>x</s:a>`), into[abR](WithBranches[abR](abRC1{}, abRC2{}))},
+		{"one member of element-only content: its struct", abstractTypeOneSchema,
+			instanceOf(` xsi:type="s:c1" k="v"`, `<s:a>x</s:a>`), into[abOneR]()},
+		{"one member of empty content: its struct", abstractTypeEmptySchema,
+			instanceOf(` xsi:type="s:e1" k="v"`, ``), into[abEmptyR]()},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			mustAccept(t, schema, row.data)
+			got, err := row.into.decode(schema, row.data)
+			if got != nil {
+				t.Fatalf("Decode = %v, want no value", got)
+			}
+			if errors.Is(err, ErrTypeMismatch) {
+				t.Fatalf("Decode error = %v, want the decline, not ErrTypeMismatch", err)
+			}
+			assertDecline(t, err, constructAbstractTypeElement, 1, 1)
+			probe := row.into.check(schema)
+			if errors.Is(probe, ErrTypeMismatch) {
+				t.Fatalf("CheckDecode = %v, want the decline, not ErrTypeMismatch", probe)
+			}
+			assertProbeDecline(t, probe, err)
+		})
+	}
+}
