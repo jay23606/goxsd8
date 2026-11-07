@@ -94,10 +94,11 @@ func parseOne(location string, quiet, strict bool, log *slog.Logger, stdout, std
 // rejection, whose first error it prints on stderr. verb is the subcommand the
 // diagnoses are charged to. Every directive the assembly reached whose
 // schemaLocation resolved to no document is named on stderr either way, ahead
-// of the error on the rejected path. A schema that compiled comes back with
-// skipCode's answer over those lines: exitOK, or exitUndecided where strict is
-// set and a line was named. On the rejected path strict changes nothing,
-// exitInvalid outranking exitUndecided.
+// of the error on the rejected path, and on that path every bare <xs:import>
+// it reached is named after the error (reportBareImports). A schema that
+// compiled comes back with skipCode's answer over those lines: exitOK, or
+// exitUndecided where strict is set and a line was named. On the rejected path
+// strict changes nothing, exitInvalid outranking exitUndecided.
 func compileArgument(verb, location string, strict bool, log *slog.Logger, stderr io.Writer) (*xsd.Schema, int) {
 	root, err := rootLocation(location)
 	if err != nil {
@@ -131,6 +132,7 @@ func compileArgument(verb, location string, strict bool, log *slog.Logger, stder
 		// document. Errors reach stderr whatever -q says, so a script can grep
 		// them.
 		_, _ = fmt.Fprintln(stderr, violationLine(err))
+		reportBareImports(stderr, verb, report)
 		return nil, exitInvalid
 	}
 	// Before the caller writes anything and so ahead of parse's -q gate: the
@@ -233,15 +235,20 @@ const (
 // assembly is distinguishable from one answered off a complete one — the fact
 // nothing but -v carried before (#1260).
 //
-// Only parser.UnfollowedLocationUnresolved is named. A bare <import>
-// (parser.UnfollowedNoLocation) names no document to have failed to reach:
-// §4.2.6.2 makes it the spelling for "references into this namespace are
-// expected", which another document of the set may supply, so reporting it
-// would charge a complete set with a shortfall. The other two — a directive
-// with no schemaLocation at all (parser.UnfollowedNoSchemaLocation) and a
-// document that resolved but could not be read (parser.UnfollowedUnreadable) —
-// do reach here now that the error path reports too, and stay unnamed: each
-// arrives with the error that charges it, which says more than this line could.
+// Only parser.UnfollowedLocationUnresolved is named here. A bare <import>
+// (parser.UnfollowedNoLocation) names no document to have failed to reach, and
+// no rule requires it be followed: §4.2.6.1 has its namespace license
+// references into that namespace, and §4.2.6 leaves the processor "free to
+// access or construct components using means of its own choosing", and
+// another document of the set may supply them. This function never names it,
+// since its line would charge a complete set with a shortfall: on a compiled
+// assembly it stays unnamed, and on a rejected one reportBareImports names it
+// after the violation line, in a line of its own that says nothing of a
+// shortfall. The other two — a directive with no schemaLocation at all
+// (parser.UnfollowedNoSchemaLocation) and a document that resolved but could
+// not be read (parser.UnfollowedUnreadable) — do reach here now that the error
+// path reports too, and stay unnamed: each arrives with the error that charges
+// it, which says more than this line could.
 func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *parser.AssemblyReport) bool {
 	named := false
 	for _, u := range report.Unfollowed() {
@@ -256,10 +263,51 @@ func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *pars
 	return named
 }
 
+// reportBareImports names on stderr, one line per directive at its own
+// position, every bare <import> (parser.UnfollowedNoLocation) a REJECTED
+// assembly reached, by its namespace or its absence, so that an operator whose
+// src-resolve charge points into that namespace sees that the <import>
+// declaring it was not followed. verb is the subcommand the line is charged
+// to. Its callers are the rejected paths alone, after the violation line;
+// reportUnfollowed's doc says why a compiled assembly's bare <import> stays
+// unnamed.
+//
+// The line carries no rule ID, because none charges a bare <import>, and moves
+// no exit code: it returns nothing for skipCode, whose "named" is a
+// schemaLocation resolving to no document, and the rejection's own code stands
+// with or without -strict. It names no schemaLocation and no document, the two
+// things describeDirective's and shortfallClause's wording assert and a bare
+// <import> has none of.
+func reportBareImports(stderr io.Writer, verb string, report *parser.AssemblyReport) {
+	for _, u := range report.Unfollowed() {
+		if u.Reason != parser.UnfollowedNoLocation {
+			continue
+		}
+		subject := "this bare <import>"
+		if el := directiveAt(report, u.At); el != nil {
+			subject += importNamespace(el)
+		}
+		// A failed stderr write cannot change the outcome: the exit code is
+		// settled either way, and stderr is the only channel this line has.
+		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: %s was not followed\n", verb, u.At, subject)
+	}
+}
+
+// importNamespace renders an <import>'s namespace attribute as the lines naming
+// it spell it: ", for namespace "<ns>"," or, for an absent one,
+// ", for no namespace,".
+func importNamespace(el *parser.Element) string {
+	namespace, ok := el.Attr("namespace")
+	if !ok {
+		return ", for no namespace,"
+	}
+	return fmt.Sprintf(", for namespace %q,", namespace)
+}
+
 // describeDirective names the directive element at at as reportUnfollowed's
 // line subjects it: "this <kind>'s schemaLocation "<value>"", the value as the
 // attribute spells it rather than as resolved, followed for an <import> by
-// ", for namespace "<ns>"," or ", for no namespace,".
+// importNamespace's clause.
 //
 // It reads the element back out of report.Documents(), the documents the
 // assembly read: the one whose Doc.URI() is at.URI, and among its <schema>'s
@@ -286,11 +334,7 @@ func describeDirective(report *parser.AssemblyReport, at xsderr.Loc) string {
 	if el.Name().Local() != "import" {
 		return subject
 	}
-	namespace, ok := el.Attr("namespace")
-	if !ok {
-		return subject + ", for no namespace,"
-	}
-	return fmt.Sprintf("%s, for namespace %q,", subject, namespace)
+	return subject + importNamespace(el)
 }
 
 // directiveAt returns the top-level element of a document report read whose

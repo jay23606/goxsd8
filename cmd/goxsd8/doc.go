@@ -134,7 +134,10 @@
 //	    unread document had a part in that. The I/O fault above is not
 //	    that skip: it is charged 1, though the faulting run names the
 //	    directive on stderr too, before printing the fault.
-//	    A bare <xs:import>, which names no document, is not reported.
+//	    A bare <xs:import>, which names no document, is not reported
+//	    for a compiled schema; for a rejected one it is named after
+//	    the error line, at its own position and by its namespace or
+//	    its absence, with no rule ID and no change of exit code.
 //
 //	goxsd8 validate [-q] [-v] [-strict] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>...
 //	    For example: goxsd8 validate -schema order.xsd order.xml order.json

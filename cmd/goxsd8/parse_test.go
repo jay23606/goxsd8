@@ -588,9 +588,9 @@ func TestParseStrictChargesASkip(t *testing.T) {
 
 // TestParseSaysNothingOfABareImport pins the other side of the line #1260
 // draws: an <xs:import> with no schemaLocation names no document to have
-// failed to reach — §4.2.6.2 makes it the spelling for "references into this
-// namespace are expected", which another document of a set may supply — so
-// reporting it would charge a complete assembly with a shortfall.
+// failed to reach and no rule requires it be followed (§4.2.6.1, §4.2.6), so
+// naming it beside a compiled schema would charge a complete assembly with a
+// shortfall. TestARejectedSchemaNamesItsBareImports pins the rejected side.
 func TestParseSaysNothingOfABareImport(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bare.xsd")
 	body := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/ns">` +
@@ -604,6 +604,66 @@ func TestParseSaysNothingOfABareImport(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Errorf("stderr = %q, want empty — a bare <xs:import> is not a shortfall", stderr.String())
+	}
+}
+
+// TestARejectedSchemaNamesItsBareImports is #3471's acceptance: a schema
+// rejected with src-resolve for a type in a namespace only a bare <xs:import>
+// declares names that import, and the bare one of no namespace beside it, on
+// stderr after the violation line, with no rule ID and the rejection's exit code
+// unmoved by -strict. The parse rows reach compileArgument, which gen shares;
+// the validate rows reach runValidate. Each row pins the whole stderr.
+func TestARejectedSchemaNamesItsBareImports(t *testing.T) {
+	dir := t.TempDir()
+	schema, instance := filepath.Join(dir, "a.xsd"), filepath.Join(dir, "i.xml")
+	body := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:b="urn:b" targetNamespace="urn:a">` + "\n" +
+		`<xs:import namespace="urn:b"/>` + "\n" +
+		`<xs:import/>` + "\n" +
+		`<xs:element name="e" type="b:T"/></xs:schema>`
+	if err := os.WriteFile(schema, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(instance, []byte(`<e xmlns="urn:a"/>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	violation := schema + `:4:1: [src-resolve] element declaration {urn:a}e {type definition} references type {urn:b}T, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)` + "\n"
+	bare := func(verb string) string {
+		return "goxsd8: " + verb + ": " + schema + `:2:1: this bare <import>, for namespace "urn:b", was not followed` + "\n" +
+			"goxsd8: " + verb + ": " + schema + `:3:1: this bare <import>, for no namespace, was not followed` + "\n"
+	}
+	for _, c := range []struct {
+		name string
+		args []string
+		verb string
+		want int
+	}{
+		{"parse", []string{"parse", schema}, "parse", exitInvalid},
+		{"parse -strict", []string{"parse", "-strict", schema}, "parse", exitInvalid},
+		{"validate", []string{"validate", "-schema", schema, instance}, "validate", exitSchema},
+		{"validate -strict", []string{"validate", "-strict", "-schema", schema, instance}, "validate", exitSchema},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(c.args, &stdout, &stderr); code != c.want {
+			t.Errorf("%s: code = %d, want %d (stderr %q)", c.name, code, c.want, stderr.String())
+		}
+		if want := violation + bare(c.verb); stderr.String() != want {
+			t.Errorf("%s: stderr = %q, want %q", c.name, stderr.String(), want)
+		}
+	}
+
+	// Only the bare <import> is named after the violation: an <xs:include> with
+	// no schemaLocation (parser.UnfollowedNoSchemaLocation) is in the report too,
+	// and is charged by the error line alone.
+	noLocation := filepath.Join(dir, "n.xsd")
+	if err := os.WriteFile(noLocation, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+"\n"+`<xs:include/></xs:schema>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"parse", noLocation}, &stdout, &stderr); code != exitInvalid {
+		t.Errorf("<xs:include/>: code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
+	}
+	if lines := strings.Split(strings.TrimSuffix(stderr.String(), "\n"), "\n"); len(lines) != 1 {
+		t.Errorf("<xs:include/>: stderr = %q, want the error line alone", stderr.String())
 	}
 }
 

@@ -259,9 +259,10 @@ const (
 	UnfollowedLocationUnresolved UnfollowedReason = iota + 1
 
 	// UnfollowedNoLocation is a bare <import>: a namespace declared with no
-	// schemaLocation attribute at all, which §4.2.6.2 makes explicitly legal —
-	// it declares that references into the namespace are expected without naming
-	// a document to satisfy them from.
+	// schemaLocation attribute at all, which no rule requires be followed: its
+	// namespace licenses references into that namespace (§4.2.6.1) without
+	// naming a document to satisfy them from, §4.2.6.2 leaving that schema's
+	// identification "to the instance, application or user".
 	UnfollowedNoLocation
 
 	// UnfollowedNoSchemaLocation is an <include>, <override> or <redefine>

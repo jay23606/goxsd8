@@ -1064,6 +1064,34 @@ func TestValidateSchemaDirectiveIsNotReportedAsAHint(t *testing.T) {
 	}
 }
 
+// TestValidateSaysNothingOfABareImport is TestParseSaysNothingOfABareImport on
+// validate's side (#3471): a -schema set that compiles names none of its bare
+// <xs:import>s, with or without -strict, and its instance's verdict stands.
+func TestValidateSaysNothingOfABareImport(t *testing.T) {
+	dir := t.TempDir()
+	schema, instance := filepath.Join(dir, "bare.xsd"), filepath.Join(dir, "i.xml")
+	body := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:a">` +
+		`<xs:import namespace="urn:b"/><xs:import/><xs:element name="e" type="xs:string"/></xs:schema>`
+	if err := os.WriteFile(schema, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(instance, []byte(`<e xmlns="urn:a">ok</e>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"validate", "-schema", schema, instance},
+		{"validate", "-strict", "-schema", schema, instance},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(args, &stdout, &stderr); code != exitOK {
+			t.Errorf("%q: code = %d, want %d (stderr %q)", args, code, exitOK, stderr.String())
+		}
+		if stderr.Len() != 0 {
+			t.Errorf("%q: stderr = %q, want empty — a bare <xs:import> of a compiled set is not named", args, stderr.String())
+		}
+	}
+}
+
 // TestValidateNonSchemaRootCarriesNoRule is TestParseNonSchemaRootCarriesNoRule
 // on validate's side (#1368): a -schema argument whose document element is not
 // <xs:schema> is rejected in the very line parse prints for it — no rule ID and
