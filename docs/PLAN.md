@@ -50,7 +50,7 @@ one — appending is what this replaces.
 
 | first decline | cases | held by |
 |---|---:|---|
-| an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary and xs:base64Binary | 3512 | #3437, #3438, #3439 (path-name bounds 2548, 534, 273; 91 match none, precisionDecimal among them) |
+| an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:duration, xs:hexBinary, xs:base64Binary, xs:QName and xs:NOTATION | 3512 | #3437, #3438, #3439 (path-name bounds 2548, 534, 273; 91 match none, precisionDecimal among them) |
 | empty content | 828 | #3473 |
 | a wildcard particle | 413 | none filed |
 | a particle's element declaration of type xs:anyType | 319 | none filed |

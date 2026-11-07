@@ -45,7 +45,7 @@ func convertTemporal(a atomic, form string) (reflect.Value, error) {
 	case atomicDuration, atomicDayTimeDuration, atomicYearMonthDuration:
 		v, err = c.duration(a)
 	default:
-		// convert dispatches the mirrored atomics alone.
+		// convert dispatches the temporal mirrors alone.
 		panic(fmt.Sprintf("codec: atomic %s is no datatype struct", a.bare()))
 	}
 	if err != nil {

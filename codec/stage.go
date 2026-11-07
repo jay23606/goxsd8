@@ -103,10 +103,11 @@ type simpleGo struct {
 	item *xsd.SimpleType
 }
 
-// supplied is the {lexical form} of the value constraint of the item subject
-// names, its declaration and that declaration's schema Loc.
+// supplied is the value constraint vc of the item subject names, its
+// declaration and that declaration's schema Loc, whose {lexical form} the
+// post-schema-validation infoset supplies.
 type supplied struct {
-	lexical string
+	vc      xsd.ValueConstraint
 	subject string
 }
 
@@ -116,7 +117,7 @@ func supply(vc xsd.ValueConstraint, has bool, subject string) *supplied {
 	if !has {
 		return nil
 	}
-	return &supplied{lexical: vc.LexicalForm(), subject: subject}
+	return &supplied{vc: vc, subject: subject}
 }
 
 // newScalar returns the scalar of the item subject names, of simple type st,
@@ -151,7 +152,7 @@ func typeLabel(st *xsd.SimpleType, subject string) string {
 
 // The rules each stage's trace record names: Datatypes §4.3.6 rf-whiteSpace,
 // §4.1.4 cvc-datatype-valid clause 2.1, §2.3.1 dt-canonical-mapping, and,
-// for a conversion of the lexical (atomic.readsLexical), §2.3
+// for a conversion of the lexical (readLexical, readExpanded), §2.3
 // dt-lexical-mapping.
 const (
 	ruleWhiteSpace       = "rf-whiteSpace"
@@ -209,9 +210,10 @@ func (s scalar) decode(p *pipeline, raw string, src source) (reflect.Value, erro
 // lexicalStages are Decode's value stages after whiteSpace for lexicals of
 // one atomic simple type, label naming it, from src: for every atomic other
 // than string, the lexical mapping (m's Parse, the governing mapping
-// value.GoverningMapping returns) and the conversion to the Go type
-// (atomic.convert, of the form m's Canonical renders or, where the atomic
-// readsLexical, of the lexical Parse accepted). m is the zero Mapping for
+// value.GoverningMapping returns, given src's bindings) and the conversion to
+// the Go type, by the atomic's reading: atomic.convert of the form m's
+// Canonical renders, or of the lexical Parse accepted, or expandedName of
+// that lexical under the same bindings. m is the zero Mapping for
 // atomicString, whose value is the lexical itself.
 type lexicalStages struct {
 	atom  atomic
@@ -248,18 +250,37 @@ func (ls lexicalStages) run(p *pipeline, lexical string, token int) (reflect.Val
 		return reflect.ValueOf(lexical), nil
 	}
 	p.trace("lexical mapping", ruleDatatypeValid, ls.label, lexical, ls.src, slog.String("clause", "2.1"))
-	v, err := ls.m.Parse(lexical, nil)
+	ctx := ls.src.bindings()
+	v, err := ls.m.Parse(lexical, ctx)
 	if err != nil {
 		return reflect.Value{}, ls.fail(stageLexicalMapping, lexical, token, err)
 	}
-	if ls.atom.readsLexical() {
+	switch ls.atom.reading() {
+	case readLexical:
 		p.trace("conversion", ruleLexicalMapping, ls.label, lexical, ls.src)
 		out, err := ls.atom.convert(lexical)
 		if err != nil {
 			return reflect.Value{}, ls.fail(stageConversion, lexical, token, fmt.Errorf("it is no %s: %w", ls.atom.spell(), err))
 		}
 		return out, nil
+	case readExpanded:
+		p.trace("conversion", ruleLexicalMapping, ls.label, lexical, ls.src)
+		out, err := expandedName(lexical, ctx)
+		if err != nil {
+			return reflect.Value{}, ls.fail(stageConversion, lexical, token, err)
+		}
+		return out, nil
+	case readCanonical:
+		return ls.canonical(p, v, lexical, token)
 	}
+	// The zero reading is an internal bug, never input.
+	panic(fmt.Sprintf("codec: atomic %s has no reading", ls.atom.bare()))
+}
+
+// canonical returns the value of v, which Parse mapped lexical to, at
+// position token, as run does, read from the form ls.m's Canonical renders v
+// in.
+func (ls lexicalStages) canonical(p *pipeline, v value.Value, lexical string, token int) (reflect.Value, error) {
 	if ls.m.Canonical == nil {
 		return reflect.Value{}, ls.fail(stageConversion, lexical, token, errors.New("the governing mapping has no canonical mapping"))
 	}
@@ -351,6 +372,19 @@ type source interface {
 	loc() xsderr.Loc
 	// where names the value's item, and the byte offset where it has one.
 	where() string
+	// bindings returns the namespace bindings the value's lexical is mapped
+	// under and a QName or NOTATION lexical resolves its prefix against, the
+	// ones Decode's doc names for each source.
+	bindings() value.Context
+}
+
+// elementBindings is the value.Context of the namespace bindings in scope at
+// the element e (xmltree.StartElement.LookupPrefix).
+type elementBindings struct{ e *xmltree.StartElement }
+
+// LookupNamespace resolves prefix against the bindings in scope at e.
+func (b elementBindings) LookupNamespace(prefix string) (string, bool) {
+	return b.e.LookupPrefix(prefix)
 }
 
 // contentSource is the character content of the element start, first its
@@ -376,9 +410,15 @@ func (c contentSource) where() string {
 	return fmt.Sprintf("the character content of element %s at byte offset %d", expanded(c.start.Name()), c.first.Offset())
 }
 
-// attributeSource is the present attribute a, which has no byte offset of its
-// own (xmltree.Attribute).
-type attributeSource struct{ a xmltree.Attribute }
+// bindings returns the bindings in scope at start.
+func (c contentSource) bindings() value.Context { return elementBindings{c.start} }
+
+// attributeSource is the present attribute a of the element owner; a has no
+// byte offset of its own (xmltree.Attribute).
+type attributeSource struct {
+	a     xmltree.Attribute
+	owner *xmltree.StartElement
+}
 
 // loc returns the attribute's own Loc (xmltree.Attribute.Loc).
 func (a attributeSource) loc() xsderr.Loc { return a.a.Loc() }
@@ -388,11 +428,14 @@ func (a attributeSource) where() string {
 	return fmt.Sprintf("attribute %s", expanded(a.a.Name()))
 }
 
-// suppliedSource is the value the value constraint of the item subject names
-// supplies to the element start or to an attribute of it.
+// bindings returns the bindings in scope at owner.
+func (a attributeSource) bindings() value.Context { return elementBindings{a.owner} }
+
+// suppliedSource is the value supplied supplies to the element start or to
+// an attribute of it.
 type suppliedSource struct {
-	start   *xmltree.StartElement
-	subject string
+	start    *xmltree.StartElement
+	supplied *supplied
 }
 
 // loc returns start's Loc.
@@ -401,5 +444,9 @@ func (s suppliedSource) loc() xsderr.Loc { return s.start.Loc() }
 // where names the item whose value constraint supplied the value, and the
 // element it is supplied on.
 func (s suppliedSource) where() string {
-	return fmt.Sprintf("the value the value constraint of %s supplies on element %s", s.subject, expanded(s.start.Name()))
+	return fmt.Sprintf("the value the value constraint of %s supplies on element %s", s.supplied.subject, expanded(s.start.Name()))
 }
+
+// bindings returns the value constraint's own, those in scope at the schema
+// document element that wrote it (value.ConstraintContext), never start's.
+func (s suppliedSource) bindings() value.Context { return value.ConstraintContext(s.supplied.vc) }

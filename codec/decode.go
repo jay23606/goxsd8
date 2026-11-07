@@ -30,60 +30,56 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // documents of several roots therefore reads the document element's name
 // itself, through parser/xmltree or encoding/xml, before choosing T.
 //
-// The slice Decode covers is the package doc's "# What decodes". Decode
-// first assesses data against schema with package validate and decodes only
-// an instance whose Result has no source fault and stands
-// validate.NotProvenInvalid; it then reads data a second time with
-// parser/xmltree. Each decoded value, a field's or, for a document element of
-// simple type, T's own, is read from the item's ·normalized value·
-// (Structures §3.1.4 key-nv) under its declaration's simple type: the string
-// [value.ApplyWhiteSpace] returns for the item's characters, an attribute's as
-// XML 1.0 §3.3.3 normalized them, an element's the concatenation of its
-// character children. Where the post-schema-validation infoset supplies a value
-// it is read from that value, the {lexical form} of a value constraint under
-// the same normalization: for an absent attribute whose use has an effective
-// value constraint (§3.5.4 key-evc; §3.4.4.2 key-dflt-att, §3.4.5.1
-// sic-attrDefault), and for an element with neither element nor character
-// children whose declaration has a {value constraint} (§3.3.4.3 cvc-elt clause
-// 5.1, §3.3.5.4 sic-eltType). For a simple type whose atomic Go type is string
-// the value is that string. For every other it is the value backend's
-// governing mapping of the type ([value.GoverningMapping]) maps that string
-// to, through Parse with a nil value.Context (Datatypes §4.1.4
-// cvc-datatype-valid clause 2.1), read back through that mapping's Canonical
-// and converted to the Go type: a boolean's canonical form exactly "true" or
-// "false" (§E.4 f-booleanCanmap), a float's and a double's by
-// strconv.ParseFloat at the Go type's width, a decimal's into big.Rat,
-// big.Int or one of the bounded Go integers int64, int32, int16, int8, uint64,
-// uint32, uint16 and uint8 at its width, a hexBinary's into []byte by
-// encoding/hex, either letter case read (§E.4.1 f-hexBinaryMap), a
-// base64Binary's into []byte by encoding/base64's StdEncoding (§3.3.16.2), and
-// a date, time or duration type's into its datatype struct, by that datatype's
-// lexical grammar (§3.3.6.2, §3.3.7.2–§3.3.14.2, §D.2.2), each property the
-// local value the form shows, never converted to UTC (§D.2.1), the
-// timezoneOffset in minutes, and a duration's Months and Seconds both of the
-// form's one sign (§3.3.6.1, §E.2). A type whose datatype struct is
-// yearMonthDuration's alone is converted from the string Parse accepted, so
-// that zero, which has no canonical representation (§3.4.26.1), decodes as
-// Months 0; its Canonical is never consulted. A float or double literal beyond
-// the type's range is the INF or -INF its mapping rounds it to
-// (·floatingPointRound·, Datatypes §E.1), so it decodes as ±Inf where the
-// backend's Canonical renders that, as builtin/strict's does, and is no item 8
-// error. backend's governing mapping of each such type but those must therefore
-// have a non-nil Canonical, as builtin/strict's do; item 8 states the error
-// where one fails. For a list type, whose whiteSpace is collapse (Datatypes
-// §4.3.6, §2.4.1.2), the normalized string is split at each U+0020 into its
-// list items before any is mapped, an empty one into none (§4.1.1 dt-list), and
-// each item is read as above under the list's {item type definition}, a
-// restriction of a list taking its base's (Structures §3.16.2.3); the value is
-// the []A of the items in order. So the value is the instance's own even where
-// a fixed value constraint holds it to an equal one that is not identical
-// (§3.5.4 cvc-au, cvc-elt clause 5.2.2.2.2): -0 against fixed 0 on xs:double
-// decodes to negative zero. The field of an optional attribute use with an
-// effective value constraint is the Go type codegen gives its simple type
-// itself, as codegen emits it, holding the supplied value when the attribute is
-// absent; a whitespace-only element has a character child and holds its own
-// value; and an element absent from the instance supplies nothing, its field
-// nil or not appended to.
+// The slice Decode covers is the package doc's "# What decodes". Decode first assesses data
+// against schema with package validate and decodes only an instance whose Result has no source
+// fault and stands validate.NotProvenInvalid; it then reads data a second time with
+// parser/xmltree. Each decoded value, a field's or, for a document element of simple type, T's
+// own, is read from the item's ·normalized value· (Structures §3.1.4 key-nv) under its
+// declaration's simple type: the string [value.ApplyWhiteSpace] returns for the item's
+// characters, an attribute's as XML 1.0 §3.3.3 normalized them, an element's the concatenation
+// of its character children. Where the post-schema-validation infoset supplies a value it is
+// read from that value, the {lexical form} of a value constraint under the same normalization:
+// for an absent attribute whose use has an effective value constraint (§3.5.4 key-evc; §3.4.4.2
+// key-dflt-att, §3.4.5.1 sic-attrDefault), and for an element with neither element nor
+// character children whose declaration has a {value constraint} (§3.3.4.3 cvc-elt clause 5.1,
+// §3.3.5.4 sic-eltType). For a simple type whose atomic Go type is string the value is that
+// string. For every other it is the value backend's governing mapping of the type
+// ([value.GoverningMapping]) maps that string to, through Parse with the item's namespace
+// bindings in scope (Datatypes §4.1.4 cvc-datatype-valid clause 2.1): an element's own for its
+// content, its owner element's for an attribute, and for a supplied value those in scope at the
+// schema document element that wrote the value constraint ([value.ConstraintContext]), never
+// the instance's; read back through that mapping's Canonical and converted to the Go type: a
+// boolean's canonical form exactly "true" or "false" (§E.4 f-booleanCanmap), a float's and a
+// double's by strconv.ParseFloat at the Go type's width, a decimal's into big.Rat, big.Int or
+// one of the bounded Go integers int64, int32, int16, int8, uint64, uint32, uint16 and uint8 at
+// its width, a hexBinary's into []byte by encoding/hex, either letter case read (§E.4.1
+// f-hexBinaryMap), a base64Binary's into []byte by encoding/base64's StdEncoding (§3.3.16.2),
+// and a date, time or duration type's into its datatype struct, by that datatype's lexical
+// grammar (§3.3.6.2, §3.3.7.2–§3.3.14.2, §D.2.2), each property the local value the form shows,
+// never converted to UTC (§D.2.1), the timezoneOffset in minutes, and a duration's Months and
+// Seconds both of the form's one sign (§3.3.6.1, §E.2). A type whose datatype struct is
+// yearMonthDuration's alone is converted from the string Parse accepted, so that zero, which
+// has no canonical representation (§3.4.26.1), decodes as Months 0; its Canonical is never
+// consulted. A type whose datatype struct is QName's, an xs:QName or xs:NOTATION type, neither
+// of which has a canonical representation (§3.3.18, §3.3.19), is the expanded name the string
+// Parse accepted resolves to against the same bindings Parse was given, Space its namespace
+// name, "" for none, and Local its local part, no prefix kept; its Canonical is never consulted
+// either. A float or double literal beyond the type's range is the INF or -INF its mapping
+// rounds it to (·floatingPointRound·, Datatypes §E.1), so it decodes as ±Inf where the
+// backend's Canonical renders that, as builtin/strict's does, and is no item 8 error. backend's
+// governing mapping of each such type but those two kinds must therefore have a non-nil
+// Canonical, as builtin/strict's do; item 8 states the error where one fails. For a list type,
+// whose whiteSpace is collapse (Datatypes §4.3.6, §2.4.1.2), the normalized string is split at
+// each U+0020 into its list items before any is mapped, an empty one into none (§4.1.1
+// dt-list), and each item is read as above under the list's {item type definition}, a
+// restriction of a list taking its base's (Structures §3.16.2.3); the value is the []A of the
+// items in order. So the value is the instance's own even where a fixed value constraint holds
+// it to an equal one that is not identical (§3.5.4 cvc-au, cvc-elt clause 5.2.2.2.2): -0
+// against fixed 0 on xs:double decodes to negative zero. The field of an optional attribute use
+// with an effective value constraint is the Go type codegen gives its simple type itself, as
+// codegen emits it, holding the supplied value when the attribute is absent; a whitespace-only
+// element has a character child and holds its own value; and an element absent from the
+// instance supplies nothing, its field nil or not appended to.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -132,7 +128,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     nil, fails, or renders a form the Go type does not read or a finite
 //     form beyond the Go type's range, or, for yearMonthDuration's datatype
 //     struct, which reads no Canonical, Parse accepts a form that struct does
-//     not read; a datatype struct reads no form denoting no value of its
+//     not read, or, for QName's, which reads none either, Parse accepts a
+//     lexical that resolves to no expanded name against the bindings it was
+//     given; a datatype struct reads no form denoting no value of its
 //     datatype, such as a month of 13, an hour of 24 or a dateTimeStamp
 //     without a timezone. For a list, the type is its {item type definition}
 //     and the value one list item. It is a fault of the backend,
@@ -222,7 +220,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     type codegen gives it (the Simple types section of codegen's package
 //     doc): its atomic Go type A, one of string, bool, float32, float64,
 //     big.Rat, big.Int, int64, int32, int16, int8, uint64, uint32, uint16,
-//     uint8, []byte and a date, time or duration datatype struct D, or for a list
+//     uint8, []byte and a datatype struct D, a date, time or duration
+//     datatype's or QName's, which an xs:NOTATION type shares, or for a list
 //     []A, A its {item type definition}'s. So any T over that Go type passes,
 //     such as the type codegen emits for another document element of the same
 //     simple type. Codegen declares D in the caller's package, so D is matched
@@ -1772,15 +1771,15 @@ func itemSubject(subject string, item *xsd.SimpleType) string {
 }
 
 // atomicDecline returns the atomic Go type codegen gives the simple type st,
-// an atomic type whose {primitive type definition} is one of
-// primitiveAtomics' or datatypeAtomics', as codegen/doc.go "# Simple types"
-// picks it: from st's {base type definition} chain (chainAtomic), which meets
-// a date, time or duration primitive at its top, failing that from its
-// primitive. Or else it returns the construct Decode declines st for: a
-// union's, a special type's, or that of its primitive. A list st is a plain
-// error: simpleDecline routes a list to its {item type definition}, which
-// cos-st-restricts clause 2.1 holds to no list. {variety} is a closed sum, so
-// the switch is STYLE T2's sealed-sum exception.
+// an atomic type whose {primitive type definition} is one of primitiveAtomics' or
+// datatypeAtomics', as codegen/doc.go "# Simple types" picks it: from st's {base
+// type definition} chain (chainAtomic), which meets a date, time or duration
+// primitive or xs:QName at its top, failing that from its primitive. Or else it
+// returns the construct Decode declines st for: a union's, a special type's, or
+// that of its primitive. A list st is a plain error: simpleDecline routes a list
+// to its {item type definition}, which cos-st-restricts clause 2.1 holds to no
+// list. {variety} is a closed sum, so the switch is STYLE T2's sealed-sum
+// exception.
 func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
@@ -1887,7 +1886,7 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 			}
 			continue
 		}
-		v, err := bd.attrs[i].decode(bd.p, a.Value(), attributeSource{a: a})
+		v, err := bd.attrs[i].decode(bd.p, a.Value(), attributeSource{a: a, owner: root})
 		if err != nil {
 			return err
 		}
@@ -1898,7 +1897,7 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 		if present[i] || f.supplied == nil {
 			continue
 		}
-		v, err := f.decode(bd.p, f.supplied.lexical, suppliedSource{start: root, subject: f.supplied.subject})
+		v, err := f.decode(bd.p, f.supplied.vc.LexicalForm(), suppliedSource{start: root, supplied: f.supplied})
 		if err != nil {
 			return err
 		}
@@ -1960,7 +1959,7 @@ func elementValue(r *xmltree.Reader, start *xmltree.StartElement, p *pipeline, s
 			return reflect.Value{}, fmt.Errorf("codec: %s: element %s of simple type holds element %s", tok.Loc(), expanded(start.Name()), expanded(tok.Name()))
 		case *xmltree.EndElement:
 			if s.supplied != nil && text.Len() == 0 {
-				return s.decode(p, s.supplied.lexical, suppliedSource{start: start, subject: s.supplied.subject})
+				return s.decode(p, s.supplied.vc.LexicalForm(), suppliedSource{start: start, supplied: s.supplied})
 			}
 			return s.decode(p, text.String(), contentSource{start: start, first: first})
 		}

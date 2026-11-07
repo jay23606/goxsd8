@@ -46,7 +46,9 @@ Value implementations, parsing, validation, and generation live above them.
                                     resolution of an xsi:type lexical
                                     (cvc-resolve-instance), which validate's walk
                                     and validate/jsonsrc's "$type" member must
-                                    resolve alike.
+                                    resolve alike, and of an xs:QName or
+                                    xs:NOTATION value codec decodes into
+                                    QName's datatype struct.
                                   - internal/xmltok, encoding/xml's strict tokenizer
                                     forked to check names against internal/xmlname's
                                     5e tables, which parser/xmltree's reader and
@@ -102,7 +104,7 @@ present-tense sentence in their sections below as "will", not "does".
 `codec` has left this note: it exports `Decode`/`CheckDecode`/`Option`/`WithURI`/`WithBranches`/`WithLogger`,
 `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
 imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
-`xsderr` and `internal/goname` (its section says what ships).
+`xsderr`, `internal/goname` and `internal/xmlqname` (its section says what ships).
 `codegen` has left this note: it exports `Generate`, `CheckTargets` and
 `Target`, with the error types they return, and imports `xsd`, `xsderr`
 and `internal/goname` (its section says what ships).
@@ -177,7 +179,7 @@ is still spelled package-locally across the library, and #3033 gives it
 its one home in `internal/xmlchar`; do not write another copy. The
 [7]-[11] `QName` split and prefix resolution of an xsi:type lexical lives in
 `internal/xmlqname`, read by `validate`'s walk and `validate/jsonsrc`'s
-"$type" member (#2615).
+"$type" member (#2615), and by `codec` for an xs:QName or xs:NOTATION value.
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to

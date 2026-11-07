@@ -131,6 +131,7 @@ var datatypeTypes = map[atomic]reflect.Type{
 	atomicDuration:          reflect.TypeFor[tDuration](),
 	atomicDayTimeDuration:   reflect.TypeFor[tDayTimeDuration](),
 	atomicYearMonthDuration: reflect.TypeFor[tYearMonthDuration](),
+	atomicQName:             reflect.TypeFor[tQName](),
 }
 
 // structBody renders t, a struct type, as codegen declares it under name:
@@ -150,12 +151,12 @@ func structBody(t *testing.T, name string, st reflect.Type) string {
 	return string(out)
 }
 
-// TestDatatypeMirrorsAreCodegens pins each of codec's twelve datatype struct
+// TestDatatypeMirrorsAreCodegens pins each of codec's thirteen datatype struct
 // mirrors (atomicTypes) to the struct codegen emits for its datatype, in
 // field names, order and Go types, and each of this test's datatype structs
 // to its mirror, so that a mirror drifting from codegen fails here.
 func TestDatatypeMirrorsAreCodegens(t *testing.T) {
-	gen := string(generated(t, schemaOf(t, temporalSchema)))
+	gen := string(generated(t, schemaOf(t, temporalSchema))) + string(generated(t, schemaOf(t, qnameSchema)))
 	mirrored := 0
 	for a := atomic(1); int(a) < len(atomicTypes); a++ {
 		if !a.mirrored() {

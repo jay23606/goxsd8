@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kud360/goxsd8/internal/xmlqname"
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 )
 
@@ -17,8 +19,9 @@ import (
 // decodes (codegen/doc.go "# Simple types"), and how its value is read:
 // string, bool, float32, float64, big.Rat, big.Int, a bounded Go integer,
 // []byte read from xs:hexBinary's canonical form or from xs:base64Binary's,
-// or the datatype struct of a date, time or duration datatype. The zero value
-// is invalid (STYLE T1).
+// the datatype struct of a date, time or duration datatype, or QName's
+// datatype struct, which NOTATION shares. The zero value is invalid (STYLE
+// T1).
 type atomic uint8
 
 const (
@@ -50,10 +53,12 @@ const (
 	atomicYearMonthDuration
 	atomicHexBinary
 	atomicBase64Binary
+	atomicQName
 )
 
-// The mirrors of the twelve date, time and duration datatype structs codegen
-// emits (codegen/doc.go "# Simple types"): each holds codegen's exported
+// The mirrors of the thirteen datatype structs codegen emits other than
+// PrecisionDecimal (codegen/doc.go "# Simple types"), the twelve date, time
+// and duration ones and QName's: each holds codegen's exported
 // fields exactly, in name, order and Go type, so that the struct codegen
 // emits in the caller's package, which codec cannot name, converts to it and
 // back (mirrored). TestDatatypeMirrorsAreCodegens pins each to codegen's.
@@ -120,6 +125,10 @@ type (
 	yearMonthDurationMirror struct {
 		Months big.Int
 	}
+	qNameMirror struct {
+		Space string
+		Local string
+	}
 )
 
 // atomicTypes holds, indexed by atomic, each one's Go type: for a datatype
@@ -153,12 +162,15 @@ var atomicTypes = [...]reflect.Type{
 	atomicYearMonthDuration: reflect.TypeFor[yearMonthDurationMirror](),
 	atomicHexBinary:         reflect.TypeFor[[]byte](),
 	atomicBase64Binary:      reflect.TypeFor[[]byte](),
+	atomicQName:             reflect.TypeFor[qNameMirror](),
 }
 
 // datatypeNames holds, indexed by a mirrored atomic, the local name of the
 // XSD datatype whose datatype struct it is, the one encoding of that pairing
 // (datatypeAtomics indexes it by name); codegen names the struct from it
-// (codegen/doc.go, the datatype struct names): dateTime's is DateTime.
+// (codegen/doc.go, the datatype struct names): dateTime's is DateTime and
+// QName's QName. xs:NOTATION, which shares QName's struct, is no entry:
+// primitiveAtomics keys it to atomicQName.
 var datatypeNames = [...]string{
 	atomicDateTime:          "dateTime",
 	atomicDateTimeStamp:     "dateTimeStamp",
@@ -172,6 +184,7 @@ var datatypeNames = [...]string{
 	atomicDuration:          "duration",
 	atomicDayTimeDuration:   "dayTimeDuration",
 	atomicYearMonthDuration: "yearMonthDuration",
+	atomicQName:             "QName",
 }
 
 // bare returns a's Go type itself, unnamed, or for a datatype struct codec's
@@ -192,12 +205,36 @@ func (a atomic) mirrored() bool {
 	return a.bare().PkgPath() == reflect.TypeFor[atomic]().PkgPath()
 }
 
-// readsLexical reports whether a's value is read from the normalized lexical
-// its governing mapping's Parse accepted, never through that mapping's
-// Canonical: yearMonthDuration alone, whose zero value has no canonical
-// representation (Datatypes §3.4.26.1, §2.3.1 dt-canonical-mapping's "where
-// possible").
-func (a atomic) readsLexical() bool { return a == atomicYearMonthDuration }
+// reading is what an atomic's value is read from once its governing
+// mapping's Parse has accepted the normalized lexical. The zero value is
+// invalid (STYLE T1).
+type reading uint8
+
+const (
+	// readCanonical is the form the governing mapping's Canonical renders the
+	// value in (Datatypes §2.3.1 dt-canonical-mapping).
+	readCanonical reading = iota + 1
+	// readLexical is the normalized lexical Parse accepted, never Canonical:
+	// yearMonthDuration's, whose zero value has no canonical representation
+	// (§3.4.26.1, §2.3.1 dt-canonical-mapping's "where possible").
+	readLexical
+	// readExpanded is the expanded name the normalized lexical resolves to
+	// against the bindings Parse was given, never Canonical: QName's, which
+	// NOTATION shares, neither having a canonical representation (§3.3.18,
+	// §3.3.19).
+	readExpanded
+)
+
+// reading returns what a's value is read from.
+func (a atomic) reading() reading {
+	if a == atomicYearMonthDuration {
+		return readLexical
+	}
+	if a == atomicQName {
+		return readExpanded
+	}
+	return readCanonical
+}
 
 // spell spells a's Go type for an error message: its own name, []byte for
 // either binary arm (reflect spells it []uint8), or for a datatype struct "D
@@ -221,11 +258,12 @@ func (a atomic) spell() string {
 // convert returns the value of a's bare type that form denotes, read as
 // Decode's doc states, or the error for a form a's Go type does not read:
 // form is a canonical lexical form the governing mapping's Canonical
-// rendered, or where a readsLexical the normalized lexical Parse accepted. A
-// boolean is never read by strconv.ParseBool, which accepts more than
-// f-booleanCanmap's two forms. atomicString has no conversion and panics.
+// rendered, or where a's reading is readLexical the normalized lexical Parse
+// accepted. A boolean is never read by strconv.ParseBool, which accepts more
+// than f-booleanCanmap's two forms. atomicString has no conversion and
+// panics, and so does atomicQName, read by expandedName.
 func (a atomic) convert(form string) (reflect.Value, error) {
-	if a.mirrored() {
+	if a.mirrored() && a != atomicQName {
 		return convertTemporal(a, form)
 	}
 	v := reflect.New(a.bare()).Elem()
@@ -284,10 +322,24 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 		}
 		v.SetBytes(b)
 	default:
-		// atomicString's value is the normalized lexical itself.
+		// atomicString's value is the normalized lexical itself, and
+		// atomicQName's expandedName's.
 		panic(fmt.Sprintf("codec: atomic %s has no conversion", a.bare()))
 	}
 	return v, nil
+}
+
+// expandedName returns the value of QName's datatype struct, codec's mirror
+// of it, that lexical denotes: the expanded name it resolves to against ctx,
+// the bindings the governing mapping's Parse accepted it under (Datatypes
+// §3.3.18, §3.3.19), Space its namespace name, "" for none, and Local its
+// local part, or the error where it resolves to none.
+func expandedName(lexical string, ctx value.Context) (reflect.Value, error) {
+	space, local, ok := xmlqname.Resolve(lexical, ctx.LookupNamespace)
+	if !ok {
+		return reflect.Value{}, errors.New("it resolves to no expanded name against the bindings in scope")
+	}
+	return reflect.ValueOf(qNameMirror{Space: space, Local: local}), nil
 }
 
 // chainAtomics maps each integer builtin that decides an atomic type's
@@ -321,10 +373,11 @@ var datatypeAtomics = func() map[xsd.QName]atomic {
 	return m
 }()
 
-// primitiveAtomics maps each {primitive type definition} other than a date,
-// time or duration one that Decode decodes to the atomic it gives a type no
-// builtin chainAtomic meets decides (codegen/doc.go "# Simple types"); it is
-// a lookup index only and never iterated (STYLE D2).
+// primitiveAtomics maps each {primitive type definition} Decode decodes that
+// datatypeAtomics does not hold to the atomic it gives a type no builtin
+// chainAtomic meets decides (codegen/doc.go "# Simple types"): xs:NOTATION
+// among them, to QName's datatype struct, which it shares. It is a lookup
+// index only and never iterated (STYLE D2).
 var primitiveAtomics = map[xsd.QName]atomic{
 	{Space: xsd.XMLSchemaNS, Local: "string"}:       atomicString,
 	{Space: xsd.XMLSchemaNS, Local: "anyURI"}:       atomicString,
@@ -334,6 +387,7 @@ var primitiveAtomics = map[xsd.QName]atomic{
 	{Space: xsd.XMLSchemaNS, Local: "decimal"}:      atomicBigRat,
 	{Space: xsd.XMLSchemaNS, Local: "hexBinary"}:    atomicHexBinary,
 	{Space: xsd.XMLSchemaNS, Local: "base64Binary"}: atomicBase64Binary,
+	{Space: xsd.XMLSchemaNS, Local: "NOTATION"}:     atomicQName,
 }
 
 // chainAtomic returns the atomic of st as codegen/doc.go "# Simple types"
