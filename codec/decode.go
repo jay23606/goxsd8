@@ -811,14 +811,15 @@ func (f field) admits(got reflect.StructField) bool {
 //     which is conservative, since its V is a struct matched by shape
 //     (scalarArm.admits), which another datatype struct's or codegen's
 //     struct S may share.
-//   - Both arms scalarArms: the same value type and, for valueBare, the same
-//     Go type of shape over scalar.goType, a repeated xs:int and a list of
-//     xs:int each []int32; for valueNamed, the same shape and the same goType
-//     separately, since the named type sits between them and []N over int32
-//     is no N over []int32; and for one of each, true exactly when the
-//     valueBare field is repeated and the valueNamed one occurs once over a
-//     list of the first's Go type, since a defined slice type over []A is
-//     both a []A's element-wise slice and an N over []A.
+//   - Both arms scalarArms: for two valueBare arms, true exactly when they
+//     have the same Go type of shape over scalar.goType, a repeated xs:int
+//     and a list of xs:int each []int32; for two valueNamed arms, true
+//     exactly when they have the same shape and the same goType separately,
+//     since the named type sits between them and []N over int32 is no N over
+//     []int32; and for one of each, true exactly when the valueBare field is
+//     repeated and the valueNamed one occurs once over a list of the first's
+//     Go type, since a defined slice type over []A is both a []A's
+//     element-wise slice and an N over []A.
 //   - One arm a scalarArm, the other nested: true exactly when the nested arm
 //     is a structArm and the scalar's atomic Go type is a struct, big.Rat or
 //     big.Int, which is conservative, since a structArm admits any struct. No

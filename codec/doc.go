@@ -94,21 +94,29 @@
 // cvc-accept clause 2.3.2), whose field and alternatives item 6 of
 // [Decode]'s doc states.
 //
-// Every other construct is a [*DeclineError], never a zero value: a content
-// choice occurring other than exactly once, two branches of a sealed
-// interface, a choice's alternatives or a substitution group's declarations,
-// whose structs have one shape or which share a name where either holds a
-// datatype struct or a list of one, where one holds codegen's struct and the
-// other big.Rat or big.Int, or where both are of complex type or hold a
-// substitution group's interface, occur alike, and are both a struct or both
-// a sealed interface, an all group, a nested model group or <group ref>,
-// a choice's model-group alternative included, a wildcard, mixed or simple
-// content, a particle's element declaration of type xs:anyType, local or
-// referenced, a complex type with {abstract} true, a nillable element,
-// a union, a special type, a primitive other than those nineteen, a list whose
-// {item type definition} is a union or of such a primitive, declining by its
-// item's construct, and an xsi:type. Two of those are rulings rather than
-// coverage still to come:
+// Every other construct is a [*DeclineError], never a zero value:
+//
+//   - A content choice occurring other than exactly once.
+//   - Two alternatives of a choice, or two declarations of a substitution
+//     group, whose branch structs could share a Go type; item 5 of
+//     [Decode]'s doc states when.
+//   - An all group.
+//   - A nested model group or <group ref>, a choice's model-group
+//     alternative included.
+//   - A wildcard.
+//   - Mixed or simple content.
+//   - A particle's element declaration of type xs:anyType, local or
+//     referenced.
+//   - A complex type with {abstract} true.
+//   - A nillable element.
+//   - A union.
+//   - A special type.
+//   - A primitive other than those nineteen.
+//   - A list whose {item type definition} is a union or of such a primitive,
+//     declining by its item's construct.
+//   - An xsi:type.
+//
+// Two of those are rulings rather than coverage still to come:
 //
 //   - A declaration with a {type table} declines. The slice that decodes it
 //     takes the branch from the type the validator selected

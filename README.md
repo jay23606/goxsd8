@@ -417,8 +417,11 @@ climbing with `../` out of it, as `goxsd8 -help` states: the CLI section's
 
 `codec.Decode` validates an instance against the schema and decodes it into
 the generated type, here `order.Order`; `go doc
-github.com/kud360/goxsd8/codec Decode` states every error it returns. Once
-`Generate` has written `gen/order`, a program in the same module with
+github.com/kud360/goxsd8/codec Decode` states every error it returns.
+`codec.CheckDecode` reports, before an instance arrives, whether `Decode`
+returns its item 5 or item 6 error for a declaration and a generated type;
+`go doc github.com/kud360/goxsd8/codec CheckDecode` states what it returns.
+Once `Generate` has written `gen/order`, a program in the same module with
 `schema` and `backend` as above decodes `order.xml` into it, importing
 `github.com/kud360/goxsd8/codec`, `github.com/kud360/goxsd8/xsderr` and the
 generated package, whose import path is the one `Target.Dir`'s doc derives
