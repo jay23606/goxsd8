@@ -72,7 +72,8 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // declaration· clause 4). Where there is no such declaration and no xsi:type
 // ·resolving· to a type definition, no ·governing type definition· can exist
 // either (key-governing-type-elem clause 8) and cvc-assess-elt clause 1 cannot
-// apply: cvc-assess-elt is charged and the subtree is not walked. Clause 3
+// apply: cvc-assess-elt is charged, naming the top-level element declarations
+// the schema does have, and the subtree is not walked. Clause 3
 // would have the root ·laxly assessed· against xs:anyType, which this package
 // does for a descendant and not for the root; charging instead is §5.2 strict
 // wildcard validation. An undeclared root whose xsi:type DOES resolve is
@@ -154,14 +155,52 @@ func (v *Validator) Assess(root Element) *Result {
 	decided, slot := w.decide(root, nil, nil, nil)
 	if _, unresolved := decided.(unresolvedGovernance); unresolved {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, root.Loc(),
-			"element %s, the ·validation root·, has no top-level element declaration and no xsi:type ·resolving· to a type definition, so it determines neither a ·governing element declaration· nor a ·governing type definition· and cannot be ·strictly assessed·, which strict wildcard validation, entering at cvc-assess-elt, expects of the validation root",
-			root.Name()))
+			"element %s, the ·validation root·, has no top-level element declaration %s and no xsi:type ·resolving· to a type definition, so it determines neither a ·governing element declaration· nor a ·governing type definition· and cannot be ·strictly assessed·, which strict wildcard validation, entering at cvc-assess-elt, expects of the validation root",
+			root.Name(), declaredClause(root.Name(), w.schema.Elements())))
 		return &w.res
 	}
 	g, _ := w.charged(root, decided, slot)
 	w.element(root, g, mark, nil, assertionAncestry{}, nil)
 	w.ids.charge(&w, root)
 	return &w.res
+}
+
+// declaredClause is the parenthesis [Validator.Assess]'s cvc-assess-elt charge
+// carries after "has no top-level element declaration", naming the
+// declarations a reader of an undeclared root named root could have meant.
+// decls is the schema's top-level element declarations in
+// [xsd.Schema.Elements] order, abstract ones included. Every one whose local
+// name is root's comes first, in that order among themselves, then the rest
+// in that order; each such one is in another namespace, since one in root's
+// own would have ·resolved·. At most three are named, by [xsd.QName.String],
+// then how many more there are. An empty decls reads "and the schema declares
+// none".
+func declaredClause(root xsd.QName, decls []xsd.ElementDeclaration) string {
+	if len(decls) == 0 {
+		return "(and the schema declares none)"
+	}
+	names := make([]string, 0, len(decls))
+	for _, d := range decls {
+		if d.Name().Local == root.Local {
+			names = append(names, d.Name().String())
+		}
+	}
+	for _, d := range decls {
+		if d.Name().Local != root.Local {
+			names = append(names, d.Name().String())
+		}
+	}
+	const shown = 3
+	if len(names) > shown {
+		return fmt.Sprintf("(the schema declares %s, %s, %s and %d more)", names[0], names[1], names[2], len(names)-shown)
+	}
+	switch len(names) {
+	case 1:
+		return "(the schema declares " + names[0] + ")"
+	case 2:
+		return "(the schema declares " + names[0] + " and " + names[1] + ")"
+	}
+	return "(the schema declares " + names[0] + ", " + names[1] + " and " + names[2] + ")"
 }
 
 // governance is what cvc-assess-elt (§3.3.4.6) settles about one element

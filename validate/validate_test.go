@@ -284,6 +284,83 @@ func TestAssessTypesAnUndeclaredRootFromAResolvedXSIType(t *testing.T) {
 	}
 }
 
+// The undeclared-root charge names, inside its fact, the top-level element
+// declarations the schema does have (declaredClause): at most three in
+// Elements() order, those sharing the root's local name first, then how many
+// more. Each case pins the whole message.
+func TestAssessNamesTheDeclarationsAnUndeclaredRootMissed(t *testing.T) {
+	// schemaOf finalizes a schema whose {element declarations} are extra in
+	// that order, followed, where withRoot holds, by dSchema's "root" over an
+	// empty sequence.
+	schemaOf := func(withRoot bool, extra ...xsd.ElementDeclaration) *xsd.Schema {
+		add := func(b *xsd.SchemaBuilder) {
+			for _, d := range extra {
+				b.AddElement(d)
+			}
+		}
+		if withRoot {
+			return dSchema(t, add)
+		}
+		b := xsd.NewSchemaBuilder()
+		add(b)
+		s, err := b.Finalize()
+		if err != nil {
+			t.Fatalf("finalizing the empty schema: %v", err)
+		}
+		return s
+	}
+	elsewhere := func(space string) xsd.ElementDeclaration {
+		d, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Space: space, Local: "root"},
+			xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
+			nil, false, nil, nil, nil, false, nil)
+		if err != nil {
+			t.Fatalf("building {%s}root: %v", space, err)
+		}
+		return d
+	}
+	four := []xsd.ElementDeclaration{dTopLevel(t, "a", "RootType"), dTopLevel(t, "b", "RootType"), dTopLevel(t, "c", "RootType")}
+	message := func(name, clause string) string {
+		return "element " + name + ", the ·validation root·, has no top-level element declaration " + clause +
+			" and no xsi:type ·resolving· to a type definition, so it determines neither a ·governing element declaration· nor a ·governing type definition· and cannot be ·strictly assessed·, which strict wildcard validation, entering at cvc-assess-elt, expects of the validation root"
+	}
+
+	for _, tc := range []struct {
+		name   string
+		schema *xsd.Schema
+		root   xsd.QName
+		clause string
+	}{
+		{"one declaration", schemaOf(true), xsd.QName{Local: "other"},
+			"(the schema declares root)"},
+		{"four declarations", schemaOf(true, four...), xsd.QName{Local: "other"},
+			"(the schema declares a, b, c and 1 more)"},
+		{"no declaration", schemaOf(false), xsd.QName{Local: "other"},
+			"(and the schema declares none)"},
+		// Elements() is a, b, c, {urn:q}root, root: both same-local-name
+		// declarations sit fourth and later, and lead in that order.
+		{"same local name elsewhere", schemaOf(true, append(slices.Clone(four), elsewhere("urn:q"))...), xsd.QName{Space: "urn:p", Local: "root"},
+			"(the schema declares {urn:q}root, root, a and 2 more)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			charges := cAssess(t, tc.schema, &testElement{name: tc.root, loc: loc(1, 1)})
+			if len(charges) != 1 {
+				t.Fatalf("Violations() = %v, want exactly one", charges)
+			}
+			got := charges[0]
+			if got.Rule != "cvc-assess-elt" {
+				t.Errorf("Rule = %q, want cvc-assess-elt", got.Rule)
+			}
+			if want := message(tc.root.String(), tc.clause); got.Msg != want {
+				t.Errorf("Msg =\n\t%s\nwant\n\t%s", got.Msg, want)
+			}
+		})
+	}
+
+	// Guard: a root one of those declarations does declare is not charged.
+	wantSilence(t, cAssess(t, schemaOf(true, four...), &testElement{name: xsd.QName{Local: "a"}, loc: loc(1, 1)}),
+		"a top-level declaration resolves the root's expanded name")
+}
+
 // cvc-elt clause 2 requires D.{abstract} = false. The walk still runs after
 // the charge: ·strictly assessed· clauses 2 and 3 assess [[attributes]] and
 // [[children]] whatever clause 1.1.2's evaluation returned.
