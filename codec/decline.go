@@ -99,7 +99,7 @@ const (
 	constructAllContent
 	constructSequenceOccurs
 	constructNestedGroup
-	constructWildcardParticle
+	constructWildcardParticle // a wildcard particle after its sequence's or choice's first
 	constructAnyTypeElement
 	constructAbstractTypeElement
 	constructSharedName

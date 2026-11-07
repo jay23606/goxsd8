@@ -101,7 +101,14 @@ func TestDecodeDeclines(t *testing.T) {
 		{"nested model group", sequenceOf(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructNestedGroup, 1, 1},
 		{"nested <group ref>", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>` + sequenceOf(`<xs:group ref="s:g"/>`),
 			"", a, constructNestedGroup, 1, 1},
-		{"wildcard particle", sequenceOf(`<xs:any processContents="lax"/>`), "", a, constructWildcardParticle, 1, 1},
+		{"a second wildcard particle of a sequence", sequenceOf(`<xs:any namespace="##local" processContents="lax"/><xs:element name="a" type="xs:string"/><xs:any namespace="##other" processContents="lax"/>`),
+			"", `<w/>` + a + `<o:w xmlns:o="urn:o"/>`, constructWildcardParticle, 1, 1},
+		{"a second wildcard alternative of a choice, codegen's either", root(`<xs:choice><xs:any namespace="##local"/><xs:any namespace="##other" processContents="lax"/></xs:choice>`),
+			"", `<o:w xmlns:o="urn:o"/>`, constructWildcardParticle, 1, 1},
+		{"a wildcard particle in mixed content", `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`,
+			"", "t" + a, constructMixedContent, 1, 1},
+		{"a wildcard particle beside an attribute wildcard", root(`<xs:sequence><xs:any processContents="lax"/></xs:sequence><xs:anyAttribute processContents="lax"/>`),
+			"", a, constructAttributeWildcard, 1, 1},
 		{"element ref to a head whose group holds a nillable member", `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" nillable="true" substitutionGroup="s:a"/>` + sequenceOf(`<xs:element ref="s:a"/>`),
 			"", a, constructNillable, 1, 1},
 		{"element ref to a group of two declining members, the nillable one first", `<xs:complexType name="ct" mixed="true"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
@@ -157,6 +164,10 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a name, a struct and an xs:decimal", root(`<xs:choice>` + vStruct("x", "") + `<xs:element name="X" type="xs:decimal"/></xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a name, a struct and a wildcard", root(`<xs:choice>` + vStruct("any", "") + `<xs:any namespace="##other" processContents="lax"/></xs:choice>`),
+			"", `<s:any><s:v>v</s:v></s:any>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a name, a wildcard and an xs:date", root(`<xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:date"/></xs:choice>`),
+			"", `<s:any>2000-01-01</s:any>`, constructSharedBranch, 1, 1},
 		{"particles sharing an expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/>`),
 			"", a + `<s:b>y</s:b>` + a, constructSharedName, 1, 1},
 		{"list of a union", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`), "", a, constructUnion, 1, 1},
@@ -261,14 +272,31 @@ func TestCheckDecodePlainErrors(t *testing.T) {
 }
 
 // TestCheckDecodeMaxOccursZero pins item 5's plain error for a particle with
-// {max occurs} 0: CheckDecode returns the text Decode returns for a valid
-// instance, and neither is a decline, ErrTypeMismatch, errors.ErrUnsupported
-// or a rule. No schema document yields such a particle (§3.3.2: an <element>
+// {max occurs} 0, an element particle's and a wildcard particle's: CheckDecode
+// returns the text Decode returns for a valid instance, and neither is a
+// decline, ErrTypeMismatch, errors.ErrUnsupported or a rule. No schema
+// document yields such a particle (§3.3.2 and §3.10.2: an <element> or <any>
 // with minOccurs=maxOccurs=0 maps to no component), so the schema is built
 // from a parsed one with type v's one inner particle rebuilt through
 // xsd.NewParticle with the vacuous Occurs{0,0}.
 func TestCheckDecodeMaxOccursZero(t *testing.T) {
-	parsed := schemaOf(t, `<xs:complexType name="v"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType><xs:element name="r" type="s:v"/>`)
+	rows := []struct{ name, particle, want string }{
+		{"element", `<xs:element name="a" type="xs:string"/>`,
+			"codec: the particle of element {urn:s}a declared at s.xsd:1:219 has {max occurs} 0, for which codegen emits no type"},
+		{"wildcard", `<xs:any processContents="lax"/>`,
+			"codec: the wildcard particle of the {type definition} of element {urn:s}r declared at s.xsd:1:281, a type defined at s.xsd:1:181 has {max occurs} 0, for which codegen emits no type"},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) { checkMaxOccursZero(t, row.particle, row.want) })
+	}
+}
+
+// checkMaxOccursZero is TestCheckDecodeMaxOccursZero's row: type v's one
+// inner particle, as written spells it, rebuilt vacuous, and want the plain
+// error Decode and CheckDecode each return.
+func checkMaxOccursZero(t *testing.T, written, want string) {
+	t.Helper()
+	parsed := schemaOf(t, `<xs:complexType name="v"><xs:sequence>`+written+`</xs:sequence></xs:complexType><xs:element name="r" type="s:v"/>`)
 	v := xsd.QName{Space: "urn:s", Local: "v"}
 	declared, ok := parsed.Type(v)
 	if !ok {
@@ -314,7 +342,6 @@ func TestCheckDecodeMaxOccursZero(t *testing.T) {
 	}
 	data := instanceOf("", "")
 	mustAccept(t, schema, data)
-	const want = "codec: the particle of element {urn:s}a declared at s.xsd:1:219 has {max occurs} 0, for which codegen emits no type"
 	_, decoded := Decode[struct{}](schema, strict.New(), data)
 	probe := CheckDecode[struct{}](schema, rootName)
 	for _, got := range []struct {
@@ -425,8 +452,8 @@ func TestDeclineConstruct(t *testing.T) {
 			{`<xs:complexType name="ct"><xs:choice minOccurs="0"><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
 		}},
 		{"particle", [2]decl{
-			{sequenceOf(`<xs:any processContents="lax"/>`), "", a},
-			{sequenceOf(`<xs:element name="b" type="xs:string"/><xs:any processContents="skip"/>`), "", `<s:b>y</s:b><s:c/>`},
+			{sequenceOf(`<xs:any processContents="lax"/><xs:any processContents="lax"/>`), "", a + `<s:b/>`},
+			{root(`<xs:choice><xs:any namespace="##local" processContents="lax"/><xs:any namespace="##other" processContents="skip"/></xs:choice>`), "", `<o:c xmlns:o="urn:o"/>`},
 		}},
 		{"attribute use", [2]decl{
 			{xsiImport + root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:nil"/>`), "", a},

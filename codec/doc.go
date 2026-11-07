@@ -66,10 +66,13 @@
 // ref> where codegen gives its field a sealed interface over the referenced
 // declaration's substitution group (codegen's package doc, "# Substitution
 // groups"), and each declaration of the group with {abstract} false is such a
-// declaration, an abstract head's own properties never read. No two particles
+// declaration, an abstract head's own properties never read; or the particle
+// is a wildcard, at most one of the sequence's or choice's particles, whatever
+// its {namespace constraint} and {process contents}. No two element particles
 // share an expanded name, such an interface's particle taking each of those
 // declarations'. Each attribute use is outside the xsi namespace and is typed
-// the same way. No element in the instance carries xsi:type.
+// the same way. No element in the instance carries xsi:type, except inside a
+// wildcard's match.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
@@ -94,6 +97,11 @@
 // cvc-accept clause 2.3.2), whose field and alternatives item 6 of
 // [Decode]'s doc states.
 //
+// A wildcard particle decodes into codegen's AnyElement field, or a choice's
+// branch holding one, each child attributed to the wildcard held raw;
+// [Decode]'s doc states the field, which children are attributed to it, and
+// the raw content.
+//
 // Every other construct is a [*DeclineError], never a zero value:
 //
 //   - A content choice occurring other than exactly once.
@@ -103,7 +111,7 @@
 //   - An all group.
 //   - A nested model group or <group ref>, a choice's model-group
 //     alternative included.
-//   - A wildcard.
+//   - A second wildcard particle among one sequence's or choice's particles.
 //   - Mixed or simple content.
 //   - A particle's element declaration of type xs:anyType, local or
 //     referenced.
