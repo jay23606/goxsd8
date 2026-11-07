@@ -79,7 +79,10 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // with an effective value constraint is the Go type codegen gives its simple type itself, as
 // codegen emits it, holding the supplied value when the attribute is absent; a whitespace-only
 // element has a character child and holds its own value; and an element absent from the
-// instance supplies nothing, its field nil or not appended to.
+// instance supplies nothing, its field nil or not appended to. An element of type xs:anyType
+// holds no such value: its field holds its content raw (item 6), and its {value constraint}
+// supplies none, since its {content type} is mixed and it has no [schema normalized value]
+// (§3.3.5.4 sic-eltType), so an empty one's Text is "" whatever its default or fixed value.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -116,14 +119,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     compares" below states: an error errors.Is reports as
 //     [ErrTypeMismatch], no *DeclineError, so that a T that does not match
 //     the schema is never filled.
-//  7. An element carrying xsi:type, the document element or any descendant
-//     outside a wildcard's match, a child attributed to a wildcard particle
-//     and every element inside it, whose xsi:type is one of its raw
-//     attributes (item 6): a *DeclineError at that element's instance Loc,
-//     the first in document order, whose [DeclineError.Construct] is
-//     xsi:type's. A document element no top-level declaration declares, which
-//     validation accepts only through its xsi:type (§3.3.4.6 cvc-assess-elt),
-//     declines so in place of item 5.
+//  7. An element carrying xsi:type, the document element, any descendant
+//     outside a wildcard's match, and any element outside an element of type
+//     xs:anyType's content, the element of type xs:anyType itself among
+//     them: a *DeclineError at that element's instance Loc, the first in
+//     document order, whose [DeclineError.Construct] is xsi:type's. Inside
+//     a wildcard's match and inside an element of type xs:anyType, xsi:type
+//     is one of an element's raw attributes (item 6). A document element no top-level
+//     declaration declares, which validation accepts only through its
+//     xsi:type (§3.3.4.6 cvc-assess-elt), declines so in place of item 5.
 //  8. The lexical mapping or the conversion to the Go type failing on a value
 //     validate accepted on the same backend: no mapping of backend governs
 //     the type, its Parse rejects the normalized value, or its Canonical is
@@ -155,8 +159,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // present attributes in start-tag order and then the supplied values of
 // absent ones in attribute-use order, then its children in document order,
 // each child of complex type filled in this same order before the next
-// child, and a child attributed to a wildcard particle read raw, which finds
-// neither. A supplied value whose attribute is present is never mapped.
+// child, and a child attributed to a wildcard particle, and an element of
+// type xs:anyType past its own xsi:type, read raw, which finds neither. A
+// supplied value whose attribute is present is never mapped.
 //
 // Each child element fills the field of the particle validation attributes
 // it to (§3.4.4.4 key-att-to): of a content model with no wildcard particle,
@@ -184,13 +189,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     wildcard particle after the content model's first, which gives the
 //     field item 6 states and is examined no further. Then the particle's
 //     element declaration's {type table} and {nillable}, and its {type
-//     definition}: a simple one is examined as the document element's is; a
-//     complex one declines when it is xs:anyType, and is otherwise examined as
-//     the document element's complex type is, from its {abstract} to its
-//     {attribute wildcard}. Then the particle declines by an expanded name an
-//     earlier particle's field takes, a particle's field taking its element's
-//     expanded name, or, for a substitution group's interface, each
-//     declaration the next bullet examines.
+//     definition}: a simple one is examined as the document element's is;
+//     xs:anyType itself, known by its QName, gives the field item 6 states and
+//     is examined no further; and any other complex one, a type derived from
+//     xs:anyType included, is examined as the document element's complex type
+//     is, from its {abstract} to its {attribute wildcard}. Then the particle
+//     declines by an expanded name an earlier particle's field takes, a
+//     particle's field taking its element's expanded name, or, for a
+//     substitution group's interface, each declaration the next bullet
+//     examines.
 //   - Of an <element ref> particle whose field holds a substitution group's
 //     sealed interface (item 6), in place of the referenced declaration's own
 //     properties and type: each declaration of the group with {abstract}
@@ -202,9 +209,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - Of a choice, each alternative's own constructs, then a branch field of
 //     the name an earlier alternative's has where either alternative is of a
 //     simple type whose Go type is a datatype struct or a list of one, where
-//     one alternative is codegen's struct and the other a wildcard or of a
-//     simple type whose atomic Go type is big.Rat or big.Int, or where both
-//     alternatives are of complex type or hold a substitution group's
+//     one alternative is codegen's struct and the other a wildcard, of type
+//     xs:anyType, or of a simple type whose atomic Go type is big.Rat or
+//     big.Int, where both alternatives are of type xs:anyType, occur alike,
+//     and both hold X or both an N over X (item 6), or where both
+//     alternatives are of another complex type or hold a substitution group's
 //     interface, occur alike, and are both a struct or both a sealed
 //     interface, and otherwise of the name and Go type, as item 6 reads it,
 //     which declines as two branches of a sealed interface whose structs
@@ -259,12 +268,13 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     local field's V is an unnamed slice of such a struct and a ref's N a
 //     defined slice type over one.
 //   - The field of a particle whose element declaration, local or
-//     referenced, has a complex {type definition}: S, *S or []S by its
-//     occurrence, S a struct held to that type as T is to the document
-//     element's, its fields exactly codegen's and its name never compared,
-//     or, where codegen emits the type's choice's sealed interface as the
-//     type itself, I or []I, I that interface, held as T is, the bare
-//     interface for an optional one and never a pointer, nil meaning absent.
+//     referenced, has a complex {type definition} other than xs:anyType
+//     itself: S, *S or []S by its occurrence, S a struct held to that type
+//     as T is to the document element's, its fields exactly codegen's and
+//     its name never compared, or, where codegen emits the type's choice's
+//     sealed interface as the type itself, I or []I, I that interface, held
+//     as T is, the bare interface for an optional one and never a pointer,
+//     nil meaning absent.
 //   - The field of a wildcard particle, named as if from local name any
 //     (codegen's package doc, "# Naming"), and a choice's wildcard
 //     alternative's branch field: E, *E or []E by its occurrence, a choice's
@@ -288,6 +298,19 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     next child or the end, each run of character data concatenated across
 //     the comments and processing instructions that break it. Mixed content
 //     declines (item 5), so no field holds AnyChild itself.
+//   - The field of a particle whose element declaration has {type definition}
+//     xs:anyType itself (Structures §3.4.7 any-type-itself), and a choice's
+//     such alternative's branch field, a type derived from xs:anyType being
+//     examined by the complex-particle bullet above: for a local element
+//     declaration's particle, X, *X or []X by its occurrence, a choice's {min
+//     occurs} 0 read as 1, X a struct of the shape the bullet above states
+//     for AnyType, matched through E, the Go type of its Children's Element;
+//     for an <element ref> particle, N, *N or []N, N the named type codegen
+//     emits for the referenced declaration over X, matched as the simple-type
+//     bullet above matches a ref's N over V, X itself not passing. The field
+//     holds the element's content raw, as the bullet above states an E's
+//     Content, so an xsi:type inside it is one of its raw attributes, the
+//     element's own declining (item 7).
 //   - The field of an <element ref> particle that codegen gives a sealed
 //     interface over the referenced declaration's substitution group
 //     (§3.3.6.4 key-eq; codegen's package doc, "# Substitution groups"
@@ -297,9 +320,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     group's declarations with {abstract} false, in group order, each one's
 //     branch field named from its local name and holding what the field of an
 //     <element ref> particle occurring once to that declaration would hold
-//     were its own substitution group that declaration alone: N, S or I, so a
-//     group with no such declaration has no alternative and its field is
-//     nil.
+//     were its own substitution group that declaration alone: N, S or I, N
+//     over X for a declaration of type xs:anyType, so a group with no such
+//     declaration has no alternative and its field is nil.
 //   - A sealed interface, T, a struct's first field or a nested element's, a
 //     choice's or a substitution group's, whose branch types reach Decode
 //     only through [WithBranches]: it does not match when it is not an
@@ -312,11 +335,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     an earlier branch did not match. A branch is held to the one
 //     alternative its field could be: of that alternative's name, its Go
 //     type V or []V by the alternative's occurrence, V the alternative's Go
-//     type for a simple type, any struct for codegen's struct and any
-//     interface for a sealed interface. A branch whose field could be no
-//     alternative is held to the first alternative of its field's name of
-//     complex type or of a substitution group's interface, and the error is
-//     that alternative's mismatch.
+//     type for a simple type, any struct for codegen's struct, any interface
+//     for a sealed interface, and the E, X or N its bullet above matches for
+//     a wildcard or an element of type xs:anyType. A branch whose field could
+//     be no alternative is held to the first alternative of its field's name
+//     of complex type, a wildcard or a substitution group's interface, and
+//     the error is that alternative's mismatch.
 func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error) {
 	cfg := newConfig(opts)
 	v, err := validate.New(schema, backend, validate.WithLogger(cfg.log))
@@ -571,16 +595,18 @@ func convertTo(v reflect.Value, t reflect.Type) reflect.Value {
 }
 
 // valueType is how the Go type V a field's shape holds its value in relates
-// to the Go type codegen gives the field's simple type (scalar.goType), by
+// to the Go type codegen gives the field's simple type (scalar.goType), or
+// to codegen's AnyType for an element of type xs:anyType (anyTypeArm), by
 // codegen's field rules: that type itself for a local element declaration's
-// particle and an attribute use, and, for an <element ref> particle, the
-// named type codegen emits for the referenced top-level declaration, whose
-// underlying type it is. The zero value is invalid (STYLE T1).
+// particle and an attribute use, and, for an <element ref> particle and a
+// substitution group's member's branch field, the named type codegen emits
+// for the referenced top-level declaration, whose underlying type it is. The
+// zero value is invalid (STYLE T1).
 type valueType uint8
 
 const (
-	valueBare  valueType = iota + 1 // the simple type's Go type itself
-	valueNamed                      // a named type over the simple type's Go type
+	valueBare  valueType = iota + 1 // the simple type's Go type, or AnyType, itself
+	valueNamed                      // a named type over the simple type's Go type, or over AnyType
 )
 
 // field is one field a particle gives a struct codegen emits: a complex
@@ -596,17 +622,19 @@ type field struct {
 // a scalarArm, the Go type codegen gives a simple type or a named type over
 // it; a structArm, a nested complex type's struct; an ifaceArm, a nested
 // complex type's bare sealed interface; a groupArm, the sealed interface
-// over a substitution group; or a rawArm, a wildcard particle's AnyElement.
+// over a substitution group; a rawArm, a wildcard particle's AnyElement; or
+// an anyTypeArm, an element of type xs:anyType's AnyType or a named type
+// over it.
 type fieldArm interface {
 	// bind holds v, the V the field's shape holds at at, to the arm, item 6 of
 	// Decode's doc, and returns the elementReader that reads the field's
 	// element into a V, or at's mismatch.
 	bind(v reflect.Type, at fieldAt, cx *checkContext) (elementReader, error)
-	// admits reports whether v could be the V the arm binds: for a scalarArm
-	// and a rawArm, exactly the V bind accepts; for a structArm, a struct; for
-	// an ifaceArm and a groupArm, an interface. bind rejects every v the arm
-	// does not admit before it checks anything further, so such a v stores no
-	// checkContext.bound entry.
+	// admits reports whether v could be the V the arm binds: for a scalarArm,
+	// a rawArm and an anyTypeArm, exactly the V bind accepts; for a
+	// structArm, a struct; for an ifaceArm and a groupArm, an interface. bind
+	// rejects every v the arm does not admit before it checks anything
+	// further, so such a v stores no checkContext.bound entry.
 	admits(v reflect.Type) bool
 	// describe spells V for an ErrTypeMismatch message.
 	describe() string
@@ -795,6 +823,84 @@ func (rawArm) admits(v reflect.Type) bool {
 
 // describe spells V.
 func (rawArm) describe() string { return "E for a struct E of codegen's AnyElement shape" }
+
+// anyTypeArm is a field's V where the field's element is of type xs:anyType
+// itself (§3.4.7 any-type-itself): for valueBare, X, a struct of the shape of
+// codegen's AnyType, and for valueNamed, N, a type other than X whose
+// underlying type is X's, the named type codegen emits for a top-level
+// declaration of type xs:anyType (codegen/doc.go "# xs:anyType"); X is
+// matched through contentShapeOf, and no struct's or N's name is compared.
+type anyTypeArm struct{ value valueType }
+
+// bind returns the reader of v's raw content, when a admits v, and otherwise
+// at's mismatch.
+func (a anyTypeArm) bind(v reflect.Type, at fieldAt, _ *checkContext) (elementReader, error) {
+	s, ok := a.shapeOf(v)
+	if !ok {
+		return nil, at.mismatch()
+	}
+	return rawContent{shape: s}, nil
+}
+
+// admits reports whether v is X for valueBare or N for valueNamed, exactly
+// the V bind accepts.
+func (a anyTypeArm) admits(v reflect.Type) bool {
+	_, ok := a.shapeOf(v)
+	return ok
+}
+
+// shapeOf returns the rawShape contentShapeOf reaches from v, when v is the V
+// a holds: that shape's content itself for valueBare, and for valueNamed a
+// type other than it that converts to it, so of its underlying type.
+func (a anyTypeArm) shapeOf(v reflect.Type) (rawShape, bool) {
+	s, ok := contentShapeOf(v)
+	if !ok {
+		return rawShape{}, false
+	}
+	switch a.value {
+	case valueBare:
+		return s, v == s.content
+	case valueNamed:
+		return s, v != s.content && v.ConvertibleTo(s.content)
+	}
+	// The zero valueType is an internal bug, never input.
+	panic(fmt.Sprintf("codec: invalid value type %d", a.value))
+}
+
+// describe spells V.
+func (a anyTypeArm) describe() string {
+	if a.value == valueNamed {
+		return "N for a named type N over a struct of AnyType's shape"
+	}
+	return "X for a struct X of codegen's AnyType shape"
+}
+
+// contentShapeOf returns the rawShape reached from x through its Children's
+// element type C and C's Element, E, as rawShapeOf matches E, when x is a
+// struct of exactly the fields Attributes, Text and Children, Children a
+// slice, and C a struct of exactly Element and Tail. Its caller holds x to
+// the shape's content; these guards only keep the walk from panicking.
+func contentShapeOf(x reflect.Type) (rawShape, bool) {
+	if !fieldsNamed(x, "Attributes", "Text", "Children") || x.Field(2).Type.Kind() != reflect.Slice {
+		return rawShape{}, false
+	}
+	c := x.Field(2).Type.Elem()
+	if !fieldsNamed(c, "Element", "Tail") {
+		return rawShape{}, false
+	}
+	return rawShapeOf(c.Field(0).Type)
+}
+
+// rawContent reads an element of type xs:anyType into a new value of
+// shape.content, raw, as readContent reads it; a valueNamed field's
+// shape.store converts it to N.
+type rawContent struct{ shape rawShape }
+
+// read returns the content of the element start, read from r up to its end
+// tag.
+func (c rawContent) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement) (reflect.Value, error) {
+	return c.shape.readContent(r, start)
+}
 
 // rawShape is the four raw-content structs codegen emits (codegen/doc.go "#
 // Element declarations"), as a T holds them: element, E, AnyElement's;
@@ -989,7 +1095,7 @@ func (f field) admits(got reflect.StructField) bool {
 // interface, a choice's alternatives' or a substitution group's members', may
 // admit a common Go type, as field.admits reads one, so that no branch type
 // could tell them apart (sealed.alternative). It reads their names, shapes,
-// arm classes and scalar atoms only, never a nested unit's content, which may
+// arm classes, scalar atoms and valueTypes only, never a nested unit's content, which may
 // be unbound or reach itself here, and the first of these that applies
 // answers:
 //
@@ -998,6 +1104,15 @@ func (f field) admits(got reflect.StructField) bool {
 //     which is conservative, since its V is a struct matched by shape
 //     (scalarArm.admits), which another datatype struct's or codegen's
 //     struct S may share.
+//   - Either arm an anyTypeArm: for two anyTypeArms, true exactly when they
+//     have the same valueType and one shape, a valueBare arm's X and a
+//     valueNamed arm's N never one Go type (anyTypeArm.admits); beside a
+//     structArm, true, which is conservative, since a structArm admits any
+//     struct and X and N are structs; and beside a rawArm, a scalarArm, an
+//     ifaceArm or a groupArm, false, since contentShapeOf admits only a
+//     struct of the three exported fields Attributes, Text and Children,
+//     which no rawArm's E is, no scalar's V is but a datatype struct's, which
+//     the bullet above answers, and no interface is.
 //   - Either arm a rawArm: for two rawArms, true exactly when they have one
 //     shape; beside a structArm, true, which is conservative, since a
 //     structArm admits any struct and a rawArm's V is one; and beside a
@@ -1038,6 +1153,14 @@ func (f field) sharesBranch(g field) bool {
 	}
 	_, fStruct := f.arm.(structArm)
 	_, gStruct := g.arm.(structArm)
+	fx, fAny := f.arm.(anyTypeArm)
+	gx, gAny := g.arm.(anyTypeArm)
+	if fAny || gAny {
+		if fAny && gAny {
+			return fx.value == gx.value && f.shape == g.shape
+		}
+		return fStruct || gStruct
+	}
 	_, fRaw := f.arm.(rawArm)
 	_, gRaw := g.arm.(rawArm)
 	if fRaw || gRaw {
@@ -1343,18 +1466,13 @@ func (index unitIndex) store(key xsd.QName, u complexUnit) {
 }
 
 // nested returns the complex unit of ct, the {type definition} of el, a
-// particle's element declaration, or the first decline Decode's doc states
-// for it, item 5: xs:anyType, then the constructs of ct in the order complex
-// states, keyed by el's expanded name for a top-level el, by ct's QName for
-// a local el whose {type definition} names it, and under no key for an
-// inline one.
+// particle's element declaration, other than xs:anyType, which declField
+// binds in its place, or the first decline Decode's doc states for it, item
+// 5: the constructs of ct in the order complex states, keyed by el's
+// expanded name for a top-level el, by ct's QName for a local el whose {type
+// definition} names it, and under no key for an inline one.
 func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (complexUnit, error) {
 	subject := typeSubject(el, ct)
-	// xs:anyType is known by name, as codegen's isAnyType knows it: its
-	// AnyType holds raw content, no struct the slice fills.
-	if ct.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}) {
-		return nil, decline(constructAnyTypeElement, subject)
-	}
 	if el.ScopeVariety() == xsd.ScopeGlobal {
 		return run.complex(ct, subject, run.elements, el.Name())
 	}
@@ -1978,8 +2096,10 @@ func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclar
 // its type, then shapeOf's error, shapeOf returning the field's shape. It
 // never examines el's substitution group. A field of simple type holds the Go
 // type codegen gives el's type, or the named type over it (value); one of
-// complex type holds the type codegen emits for that type, the unit
-// run.nested binds.
+// type xs:anyType itself holds codegen's AnyType, or the named type over it
+// (value), the element's content raw (anyTypeArm), its {value constraint}
+// never read, as Decode's doc states; and one of any other complex type
+// holds the type codegen emits for that type, the unit run.nested binds.
 func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf func() (shape, error)) (field, error) {
 	schema := run.p.schema
 	subject := declSubject(el)
@@ -1995,6 +2115,15 @@ func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf
 	st, simple := td.(*xsd.SimpleType)
 	if !simple {
 		ct, _ := td.(xsd.ComplexType)
+		// xs:anyType is known by name, as codegen's isAnyType knows it, so a
+		// type derived from it binds as its own complex type.
+		if ct.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}) {
+			s, err := shapeOf()
+			if err != nil {
+				return field{}, err
+			}
+			return field{shape: s, arm: anyTypeArm{value: value}}, nil
+		}
 		u, err := run.nested(el, ct)
 		if err != nil {
 			return field{}, err

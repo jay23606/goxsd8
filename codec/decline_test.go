@@ -133,7 +133,8 @@ func TestDecodeDeclines(t *testing.T) {
 		{"element ref to a head of another primitive", `<xs:element name="h" type="xs:precisionDecimal"/>` + sequenceOf(`<xs:element ref="s:h"/>`), "", `<s:h>1.0</s:h>`, constructOtherPrimitive, 1, 1},
 		{"element ref sharing a local particle's expanded name", `<xs:element name="a" type="xs:string"/>` + sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:a"/>`),
 			"", a + a, constructSharedName, 1, 1},
-		{"local element of xs:anyType", sequenceOf(`<xs:element name="a"/>`), "", a, constructAnyTypeElement, 1, 1},
+		{"local element of a mixed restriction of xs:anyType, which declines by its own content", `<xs:complexType name="dt" mixed="true"><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>` +
+			sequenceOf(`<xs:element name="a" type="s:dt"/>`), "", `<s:a>t</s:a>`, constructMixedContent, 1, 1},
 		{"local element of emptiable mixed content with a default", sequenceOf(`<xs:element name="a" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`),
 			"", `<s:a/>`, constructMixedContent, 1, 1},
 		{"local element of simple content", sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),

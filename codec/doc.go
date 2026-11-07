@@ -59,8 +59,8 @@
 // content or element-only content with no {open content} whose {particle} is
 // an inline sequence or choice occurring exactly once. Each particle of that
 // sequence or choice is an element declaration with no {type table} and
-// {nillable} false, of a simple type that decodes or of a complex type that
-// decodes, other than xs:anyType, by these same rules at any depth: a local
+// {nillable} false, of a simple type that decodes, of xs:anyType itself, or
+// of a complex type that decodes by these same rules at any depth: a local
 // one, or the top-level one an <element ref> names where codegen gives the
 // particle's field that declaration's own type; or the particle is an <element
 // ref> where codegen gives its field a sealed interface over the referenced
@@ -72,25 +72,25 @@
 // share an expanded name, such an interface's particle taking each of those
 // declarations'. Each attribute use is outside the xsi namespace and is typed
 // the same way. No element in the instance carries xsi:type, except inside a
-// wildcard's match.
+// wildcard's match or an element of type xs:anyType's raw content.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
-// is filled from the child element as T is from the document element, so a
-// type that reaches itself through an optional or repeated particle decodes
-// to the instance's depth.
+// other than xs:anyType is filled from the child element as T is from the
+// document element, so a type that reaches itself through an optional or
+// repeated particle decodes to the instance's depth.
 //
 // A choice decodes into codegen's sealed interface, the branch of the one
 // alternative the instance matches (§3.8.4.3 cvc-model-group) holding its one
 // field: V, or a []V for an alternative whose {max occurs} is above 1 or
 // unbounded, its {min occurs} 0 read as 1, or, for an <element ref>
 // alternative, the same over the referenced declaration's named type, or, for
-// an alternative of complex type, the same over its S or I.
-// The interface is T itself, or, where the type has an attribute use or one
-// occurrence of the choice is emptiable (§3.9.6.3 cos-group-emptiable), the
-// first field of T, a struct whose further fields are the attribute uses'. An
-// empty match is the nil interface. A particle's complex type gets its
-// interface or struct by the same rule.
+// an alternative of complex type, the same over its S or I, or its AnyType for
+// one of type xs:anyType. The interface is T itself, or, where the type has an
+// attribute use or one occurrence of the choice is emptiable (§3.9.6.3
+// cos-group-emptiable), the first field of T, a struct whose further fields
+// are the attribute uses'. An empty match is the nil interface. A particle's
+// complex type gets its interface or struct by the same rule.
 //
 // A substitution group's interface holds, for each child, the branch of the
 // group's declaration the child's expanded name resolves to (§3.9.4.3
@@ -101,6 +101,13 @@
 // branch holding one, each child attributed to the wildcard held raw;
 // [Decode]'s doc states the field, which children are attributed to it, and
 // the raw content.
+//
+// A particle's element declaration of type xs:anyType itself (Structures
+// §3.4.7), local or referenced, a choice's alternative and a substitution
+// group's member included, decodes into codegen's AnyType field, or the named
+// type codegen emits over it, its content held raw as a wildcard's match's
+// is; [Decode]'s doc states the field. A type derived from xs:anyType decodes
+// or declines as its own complex type.
 //
 // Every other construct is a [*DeclineError], never a zero value:
 //
@@ -113,8 +120,6 @@
 //     alternative included.
 //   - A second wildcard particle among one sequence's or choice's particles.
 //   - Mixed or simple content.
-//   - A particle's element declaration of type xs:anyType, local or
-//     referenced.
 //   - A complex type with {abstract} true.
 //   - A nillable element.
 //   - A union.
@@ -138,7 +143,8 @@
 //     xs:string element's value collapses. That refusal is permanent.
 //
 // A value constraint of an element declaration or attribute use, default or
-// fixed, decodes; [Decode]'s doc states the value it supplies.
+// fixed, decodes; [Decode]'s doc states the value it supplies, and that it
+// supplies none to an element of type xs:anyType.
 //
 // Every error about the instance carries its instance Loc, under the URI
 // [WithURI] names: a violation's, an undecided check's, and a decline's,
