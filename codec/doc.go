@@ -118,15 +118,22 @@
 // Every other construct is a [*DeclineError], never a zero value:
 //
 //   - A content choice occurring other than exactly once.
+//   - A content sequence occurring other than exactly once.
 //   - Two alternatives of a choice, or two declarations of a substitution
 //     group, whose branch structs could share a Go type; item 5 of
 //     [Decode]'s doc states when.
+//   - Two element particles taking one expanded name; item 5 of [Decode]'s
+//     doc states when.
 //   - An all group.
 //   - A nested model group or <group ref>, a choice's model-group
 //     alternative included.
 //   - A second wildcard particle among one sequence's or choice's particles.
 //   - Mixed or simple content.
+//   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.
+//   - A complex type with an {attribute wildcard}.
+//   - An attribute use in the xsi namespace.
+//   - An element declaration with a {type table}.
 //   - A nillable element.
 //   - A union.
 //   - A special type.
