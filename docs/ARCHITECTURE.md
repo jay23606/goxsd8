@@ -183,8 +183,10 @@ its one home in `internal/xmlchar`; do not write another copy. The
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to
-file, not CLI code to write. The CLI has taken the other branch for
-instance-hint reading, under "Parsing & loading" below (#755). The
+file, not CLI code to write. The CLI has taken the other branch twice: for
+instance-hint reading, under "Parsing & loading" below (#755), and for naming
+an unfollowed directive's kind, `schemaLocation` and namespace, which it reads
+back out of the raw tree (#3531). The
 `validate` ENGINE imports no source's decoder (`encoding/xml`,
 `encoding/json`, BER) — only its adapter does, and `validate/imports_test.go`
 pins it. That ban is the engine's and not the library's: `parser/xmltree` is
@@ -713,8 +715,10 @@ slice `codec/doc.go`'s "What decodes" states, declining every other
 construct, `CheckDecode`, which returns `Decode`'s schema-level declines and T mismatches
 for a declaration before an instance arrives, `Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf`, and `ErrTypeMismatch`. Its
 runtime path today runs the whiteSpace stage (`value.ApplyWhiteSpace`)
-and, for a non-string atomic type, the governing `value.Mapping`'s Parse
-and Canonical (`value.GoverningMapping`); every other pipeline stage is
+and, for a non-string atomic type, the governing `value.Mapping`
+(`value.GoverningMapping`), whose `codec.WithLogger` doc says which types
+convert from Canonical's form and which from the lexical Parse accepted;
+every other pipeline stage is
 `validate`'s, run first on the same backend. `value.Emitter` does
 not exist (its API freezes in M10; not declared). A bullet `codegen/doc.go`
 or `codec/doc.go` does not state as shipped is the destination, stated in
@@ -733,14 +737,11 @@ present tense because it is a design contract; read it as "will", not
     code.
   - Generated readers/views expose the narrowest interface a consumer
     needs; optionality and nillability are modeled in types, not comments.
-- **Anonymous types get ancestor-context names.** A single namer component
-  owns all XSD-name → Go-identifier decisions. Anonymous types are named
-  by walking up their schema ancestors to the nearest named declaration
-  (element `shipTo` under element `purchaseOrder` → `PurchaseOrderShipTo`),
-  extending the path only as far as uniqueness requires; residual
-  collisions (case folding, Go keywords, XML-legal-but-Go-illegal names)
-  are disambiguated deterministically by document order (D1/D2). Every
-  generated type's header comment records its schema Loc + original QName.
+- **One namer owns every XSD-name → Go-identifier decision**:
+  `internal/goname`, which `codegen` names its declarations with and `codec`
+  finds a generated struct's fields by. `codegen/doc.go` "# Naming" owns the
+  naming rule, anonymous types' included, and which generated declarations'
+  header comments record their schema origin; do not restate either here.
 - `codec` is the dataset serializer/deserializer: schema-directed decode of
   instance documents into generated (or reflective) Go values and canonical
   encode back out.
@@ -822,17 +823,18 @@ compiles, is documented, and has **zero** callers module-wide.
   to `icpath`); the F&O functions it was built for still arrive at M6/M7.
 - **`parser.Element` / `Node` / `Text` and the raw-tree accessors** — the
   bulk consumer is still `conformance`'s decidability model
-  (`conformance/schema.go`'s `schemaShapeDecidable` and its predicates hold
-  every `parser.Element` reference outside package `parser` itself;
-  `parser.Node` and `Text.Data` have none anywhere). Not a tier violation —
+  (`conformance/schema.go`'s `schemaShapeDecidable` and its predicates;
+  `parser.Node` and `Text.Data` have no reference outside `parser`). Not a tier violation —
   infrastructure may import the library — but the surface exists because
   that model has to re-derive the producer's coverage from the raw tree.
   **#1029** landed the signal that replaces it
   (`parser.AssembledDocument.Unmapped`, whose one consumer today is
   `conformance/census_test.go`'s one-directional soundness hold) and
-  **#1051** is the blocked successor that deletes the model; `cmd/goxsd8`
-  reads none of the raw tree since `parser.ParseSet` replaced its wrapper
-  (#1283). `Text` has two readers inside `parser` (§4.2.5 override
+  **#1051** is the blocked successor that deletes the model. `cmd/goxsd8`
+  reads the raw tree again: `cmd/goxsd8/parse.go`'s `directiveAt` finds an
+  `UnfollowedDirective`'s element by its Loc and reads its `Name` and `Attr`,
+  so `Element`'s accessors stay exported until #3531 moves those facts onto the
+  report. `Text` has two readers inside `parser` (§4.2.5 override
   canonicalization and the `<xs:notation>` content check), so the annotation
   deletion left it a type with a job, and whether it stays EXPORTED is
   #1051's question alone.
@@ -847,16 +849,20 @@ compiles, is documented, and has **zero** callers module-wide.
   decline rather than admitting a name, so `xsd/doc.go`'s Walk API redirect
   does not reach it. `NamespaceConstraint.AllowsName` still has in-package
   callers and `parser`'s tests only, and stands with it as the {namespace
-  constraint} property's own accessor. `Notation.SystemIdentifier`,
-  `Notation.PublicIdentifier` and `xmltree.CharData.Offset` are callerless
-  too and are NOT filed: the first two are §3.14.1 component properties the
-  model contracts to expose, and the third is the byte offset `codec`'s M10
-  debuggability requirement names.
+  constraint} property's own accessor. `Notation.SystemIdentifier` and
+  `Notation.PublicIdentifier` are callerless too and are NOT filed: they are
+  §3.14.1 component properties the model contracts to expose.
+  `xmltree.CharData.Offset` is off this list: `codec`'s stage errors name the
+  byte offset it returns.
 - **`codegen.TargetError.Index`** — no caller outside `codegen`'s tests:
   `cmd/goxsd8` prints each failure's text and `tools/gencensus` reads only
   the `*DeclineError`. **Justified and not to be filed**: it is the slice
   index #3048 exported for an external caller of a multi-target `Generate`,
   on the same footing as `loader`'s helpers. Re-check, do not re-file.
+- **`codec.CheckDecode`, `codec.ViolationsOf`** — no caller outside
+  `codec`'s own examples and tests. **Justified and not to be filed**: each
+  answers a library-user story for an external caller of `Decode` (#3368,
+  #3367), on the same footing as `loader`'s helpers. Re-check, do not re-file.
 - **`xsderr.IsValidRule`** — **resolved (#273); re-check, do not re-file.**
   It still has zero non-test consumers, but the module-wide test
   `xsderr/doc.go` claims now exists and passes:
