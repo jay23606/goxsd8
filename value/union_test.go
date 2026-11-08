@@ -520,3 +520,63 @@ func TestValidateLexicalUnionMemberWithNoApplicableFacets(t *testing.T) {
 		t.Errorf("ValidateLexical = %#v, want the RAW literal %q — no whiteSpace mode is in force, so nothing normalizes", v, raw)
 	}
 }
+
+// patternedPrim builds a collapse-whiteSpace primitive named local carrying the
+// one pattern facet pattern, for a plainBackend-governed union member.
+func patternedPrim(t *testing.T, local, pattern string) *xsd.SimpleType {
+	t.Helper()
+	st, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: local},
+		[]xsd.Facet{
+			xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true),
+			xsd.NewFacet(xsd.FacetPattern, []string{pattern}, false),
+		}, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType(%s): %v", local, err)
+	}
+	return st
+}
+
+// TestDispatchUnionFoldRendersEachMemberReason pins the WHOLE cvc-datatype-valid
+// rejection dispatchUnion folds when no member accepts (§4.1.4 cl.2.3), each
+// member's reason rendered as memberRejection states (#3457). The "wrapped
+// fault" row's member 0 is the typeFault wrapper facets.go builds around a
+// zero-Loc *xsderr.Error, so its inner "?: " stays: that row fails if the fold
+// strips every "?: " textually or unwraps through the wrapper.
+func TestDispatchUnionFoldRendersEachMemberReason(t *testing.T) {
+	num := primType(t, "numeric", "collapse")
+	flag := primType(t, "flag", "collapse")
+	bothReject := unionType2(t, "bothReject", num, flag)
+	mb := memberBackend{num.Name(): allDigits, flag.Name(): func(s string) bool { return s == "x" }}
+
+	badPattern := patternedPrim(t, "badPattern", "[") // unclosed character class: src-pattern-value
+	onlyA := patternedPrim(t, "onlyA", "a")
+	faultThenReject := unionType2(t, "faultThenReject", badPattern, onlyA)
+	pb := plainBackend{badPattern.Name(): true, onlyA.Name(): true}
+
+	for _, tc := range []struct {
+		name    string
+		b       Backend
+		st      *xsd.SimpleType
+		lexical string
+		want    string
+	}{
+		{"bare zero-Loc members", mb, bothReject, "abc",
+			`?: [cvc-datatype-valid] value "abc" is Datatype Valid with respect to no member of the union's 2 {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one: ` +
+				`member 0 ({http://www.w3.org/2001/XMLSchema}numeric): [cvc-datatype-valid] {http://www.w3.org/2001/XMLSchema}numeric: "abc" is not in the lexical space; ` +
+				`member 1 ({http://www.w3.org/2001/XMLSchema}flag): [cvc-datatype-valid] {http://www.w3.org/2001/XMLSchema}flag: "abc" is not in the lexical space`},
+		{"wrapped fault keeps its rendering", pb, faultThenReject, "ab",
+			`?: [cvc-datatype-valid] value "ab" is Datatype Valid with respect to no member of the union's 2 {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one: ` +
+				`member 0 ({http://www.w3.org/2001/XMLSchema}badPattern): value: a fault of the type or the backend, not a verdict about the lexical: ?: [src-pattern-value] regex: unclosed character class '[' (offset 0); ` +
+				`member 1 ({http://www.w3.org/2001/XMLSchema}onlyA): [cvc-pattern-valid] "ab" matches no member of the pattern facet of the simple type {http://www.w3.org/2001/XMLSchema}onlyA, whose {value} holds "a", but cvc-pattern-valid requires one to match`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ValidateLexical(tc.b, noSchema{}, tc.st, tc.lexical, nil, assertionsUndecided{})
+			if err == nil {
+				t.Fatalf("ValidateLexical(%s, %q) accepted, want a cvc-datatype-valid rejection from every member", tc.st.Name(), tc.lexical)
+			}
+			if got := err.Error(); got != tc.want {
+				t.Errorf("ValidateLexical(%s, %q) rejection =\n%s\nwant\n%s", tc.st.Name(), tc.lexical, got, tc.want)
+			}
+		})
+	}
+}
