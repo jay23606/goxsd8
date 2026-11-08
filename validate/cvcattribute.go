@@ -198,13 +198,13 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 		}
 		w.declineAttribute(a, ruleCvcAttribute, "3",
 			"attribute %s's value %q was not decided against %s, its declaration's {type definition}: String Valid was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-attribute clause 3 is undecided",
-			a.Name(), a.Value(), st.Name())
+			a.Name(), a.Value(), typeName(st))
 		return nil, attributeNotKnown
 	}
 	if verdict != nil {
 		w.res.violations = append(w.res.violations, causedBy(ruleCvcAttribute, a.Loc(), verdict,
-			"attribute %s's value %q is not a valid %s, which cvc-attribute clause 3 requires",
-			a.Name(), a.Value(), st.Name()))
+			"attribute %s's value %q is not %s, which cvc-attribute clause 3 requires",
+			a.Name(), a.Value(), aValid(st)))
 		w.logAttribute(a, ruleCvcAttribute, "3", "charged")
 		return nil, attributeInvalid
 	}
@@ -607,15 +607,15 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 		}
 		w.declineDefaulted(e, u,
 			"element %s lacks attribute %s, whose default %q was not decided against %s, its declaration's {type definition}: String Valid was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-complex-type clause 4 is undecided",
-			e.Name(), u.DeclarationName(), vc.LexicalForm(), st.Name())
+			e.Name(), u.DeclarationName(), vc.LexicalForm(), typeName(st))
 		return
 	}
 	if verdict == nil {
 		return
 	}
 	w.res.violations = append(w.res.violations, causedBy(ruleCvcComplexType, e.Loc(), verdict,
-		"element %s lacks attribute %s, whose default %q is not a valid %s, its declaration's {type definition}, which cvc-complex-type clause 4 requires",
-		e.Name(), u.DeclarationName(), vc.LexicalForm(), st.Name()))
+		"element %s lacks attribute %s, whose default %q is not %s, its declaration's {type definition}, which cvc-complex-type clause 4 requires",
+		e.Name(), u.DeclarationName(), vc.LexicalForm(), aValid(st)))
 }
 
 // declineDefaulted is [walk.decline] for cvc-complex-type clause 4 over the

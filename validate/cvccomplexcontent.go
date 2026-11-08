@@ -728,8 +728,8 @@ func (c *contentCheck) simpleTypeValue(w *walk) {
 		return
 	}
 	c.chargeCause(w, ruleCvcType, "3.1.3", c.e.Loc(), verdict,
-		"element %s's value %q is not a valid %s, which cvc-type clause 3.1.3 requires",
-		c.e.Name(), lexical, typeName(st))
+		"element %s's value %q is not %s, which cvc-type clause 3.1.3 requires",
+		c.e.Name(), lexical, aValid(st))
 }
 
 // initialValue settles the ·initial value· half of clause 1.2: the ·initial
@@ -745,7 +745,7 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 		}
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2",
 			"element %s's value %q was not decided against %s, the {simple type definition} of its ·governing type definition·'s {content type}: String Valid was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-complex-type clause 1.2 is undecided",
-			c.e.Name(), lexical, st.Name())
+			c.e.Name(), lexical, typeName(st))
 		return
 	}
 	if verdict == nil {
@@ -753,8 +753,8 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 		return
 	}
 	c.chargeCause(w, ruleCvcComplexType, "1.2", c.e.Loc(), verdict,
-		"element %s's value %q is not a valid %s, the {simple type definition} of its ·governing type definition·'s {content type}, which cvc-complex-type clause 1.2 requires",
-		c.e.Name(), lexical, st.Name())
+		"element %s's value %q is not %s, the {simple type definition} of its ·governing type definition·'s {content type}, which cvc-complex-type clause 1.2 requires",
+		c.e.Name(), lexical, aValid(st))
 }
 
 // sequenceEnd settles clause 1.4 for a sequence that ran out: every item was

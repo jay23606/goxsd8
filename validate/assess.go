@@ -485,6 +485,16 @@ func typeName(t xsd.TypeDefinition) string {
 	return name.String()
 }
 
+// aValid phrases t as what a String Valid charge says a value "is not": "a
+// valid" before a named type's ·expanded name·, or "valid against" before
+// typeName's description of an anonymous one, which carries its own article.
+func aValid(t xsd.TypeDefinition) string {
+	if t.Name() == (xsd.QName{}) {
+		return "valid against " + typeName(t)
+	}
+	return "a valid " + typeName(t)
+}
+
 // childGoverning is key-sva (§3.3.4.6) clause 3 for one child element
 // information item, read off the ·attribution· its parent's content model just
 // gave it (§3.4.4.4): the ·governing element declaration· and ·governing type

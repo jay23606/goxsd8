@@ -234,6 +234,43 @@ func TestValidateRendersALexicalSpaceFaultWhole(t *testing.T) {
 	}
 }
 
+// TestValidateRendersAnAnonymousTypeChargeAsASentence pins the whole line
+// validate prints when String Valid fails against an anonymous restriction of
+// xs:int, at the cvc-attribute clause 3 charge and the cvc-type clause 3.1.3
+// one: the type has no ·expanded name· to put after "a valid", so the sentence
+// reads "valid against an anonymous type definition" (#3458).
+func TestValidateRendersAnAnonymousTypeChargeAsASentence(t *testing.T) {
+	const anonInt = `<xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType>`
+	const pattern = `[cvc-pattern-valid] "x3" matches no member of the pattern facet that an anonymous simple type inherits from the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`
+	for _, tc := range []struct {
+		name, decl, doc, want string
+	}{
+		{"attribute", `<xs:element name="b"><xs:complexType><xs:attribute name="a">` + anonInt + `</xs:attribute></xs:complexType></xs:element>`, `<b a="x3"/>`,
+			`:1:4: [cvc-attribute] attribute a's value "x3" is not valid against an anonymous type definition, which cvc-attribute clause 3 requires: ` + pattern},
+		{"element", `<xs:element name="n">` + anonInt + `</xs:element>`, `<n>x3</n>`,
+			`:1:1: [cvc-type] element n's value "x3" is not valid against an anonymous type definition, which cvc-type clause 3.1.3 requires: ` + pattern},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			schema := filepath.Join(dir, "s.xsd")
+			instance := filepath.Join(dir, "a.xml")
+			if err := os.WriteFile(schema, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+tc.decl+`</xs:schema>`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(instance, []byte(tc.doc), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"validate", "-schema", schema, instance}, &stdout, &stderr); code != exitInvalid {
+				t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
+			}
+			if got, want := stdout.String(), instance+tc.want+"\n"; got != want {
+				t.Errorf("stdout =\n%s\nwant\n%s", got, want)
+			}
+		})
+	}
+}
+
 // runIntPattern validates <n>x3</n> against an element of type xs:int, a
 // lexical outside xs:integer's built-in pattern, which xs:int inherits
 // (Datatypes integer.pattern), and returns the instance path and the run's
