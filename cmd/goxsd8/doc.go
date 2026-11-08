@@ -134,10 +134,12 @@
 //	    unread document had a part in that. The I/O fault above is not
 //	    that skip: it is charged 1, though the faulting run names the
 //	    directive on stderr too, before printing the fault.
-//	    A bare <xs:import>, which names no document, is not reported
-//	    for a compiled schema; for a rejected one it is named after
-//	    the error line, at its own position and by its namespace or
-//	    its absence, with no rule ID and no change of exit code.
+//	    A bare <xs:import>, which names no schemaLocation, is not
+//	    reported for a compiled schema; for a rejected one it is named
+//	    after the error line, at its own position and by its namespace
+//	    or its absence, with no rule ID and no change of exit code, in
+//	    a line saying no document was read for it and to add a
+//	    schemaLocation to it, since each argument is compiled alone.
 //
 //	goxsd8 validate [-q] [-v] [-strict] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>...
 //	    For example: goxsd8 validate -schema order.xsd order.xml order.json
@@ -150,8 +152,12 @@
 //	    stderr the same way, once for the set, before any instance is
 //	    assessed — and when the set does not compile, for whichever
 //	    documents the assembly reached, so one document's rejection
-//	    does not silence another's shortfall. Under -strict that
-//	    line charges the run 4 and every instance is still assessed,
+//	    does not silence another's shortfall. A bare <xs:import> of a
+//	    set that does not compile is named as parse names it, its line
+//	    saying to pass the document it imports as another -schema or
+//	    to add a schemaLocation to it. Under -strict an
+//	    unresolved-directive line charges the run 4 and every instance
+//	    is still assessed,
 //	    and an XML instance's xsi:schemaLocation hint (below) that
 //	    resolves to no document, named on stderr against that
 //	    instance, charges that instance 4 likewise.
@@ -322,8 +328,10 @@
 //	    The comments of the generated file name each document by its
 //	    path relative to the -out directory, climbing with ../ out of
 //	    it. A rejected -schema prints its first error on stderr as
-//	    parse's does, the no-rule-to-cite lines and the
-//	    unresolved-directive lines included. Under -strict an
+//	    parse's does, the no-rule-to-cite lines, the
+//	    unresolved-directive lines and the bare <xs:import> lines
+//	    included, the last naming the -schema where parse's names the
+//	    argument. Under -strict an
 //	    unresolved-directive line of a compiled -schema is a failure
 //	    to compile charged 4, so nothing is written.
 //	    Pairs whose -out lies under the same nearest go.mod share a

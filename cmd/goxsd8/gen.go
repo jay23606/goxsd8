@@ -110,7 +110,7 @@ func runGen(args []string, stderr io.Writer) int {
 		code = worse(code, subcommandFault(stderr, line))
 	}
 	for i, p := range pairs {
-		schema, c := compileArgument("gen", p.schema, *strict, log, stderr)
+		schema, c := compileArgument("gen", genBareImportRemedy, p.schema, *strict, log, stderr)
 		code = worse(code, c)
 		targets[i].Schema = schema
 	}

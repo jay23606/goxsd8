@@ -76,7 +76,7 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 // does not hide the next argument's verdict. A schema that compiled prints its
 // summary whatever code compileArgument charged it, which is skipCode's.
 func parseOne(location string, quiet, strict bool, log *slog.Logger, stdout, stderr io.Writer) int {
-	schema, code := compileArgument("parse", location, strict, log, stderr)
+	schema, code := compileArgument("parse", parseBareImportRemedy, location, strict, log, stderr)
 	if schema == nil || quiet {
 		return code
 	}
@@ -92,14 +92,15 @@ func parseOne(location string, quiet, strict bool, log *slog.Logger, stdout, std
 // way parse and gen both do, and returns the schema, or nil and the exit code
 // its failure is charged: 2 for an argument that cannot be read, 1 for a
 // rejection, whose first error it prints on stderr. verb is the subcommand the
-// diagnoses are charged to. Every directive the assembly reached whose
-// schemaLocation resolved to no document is named on stderr either way, ahead
-// of the error on the rejected path, and on that path every bare <xs:import>
-// it reached is named after the error (reportBareImports). A schema that
-// compiled comes back with skipCode's answer over those lines: exitOK, or
-// exitUndecided where strict is set and a line was named. On the rejected path
-// strict changes nothing, exitInvalid outranking exitUndecided.
-func compileArgument(verb, location string, strict bool, log *slog.Logger, stderr io.Writer) (*xsd.Schema, int) {
+// diagnoses are charged to, and bareRemedy closes its reportBareImports lines.
+// Every directive the assembly reached whose schemaLocation resolved to no
+// document is named on stderr either way, ahead of the error on the rejected
+// path, and on that path every bare <xs:import> it reached is named after the
+// error (reportBareImports). A schema that compiled comes back with skipCode's
+// answer over those lines: exitOK, or exitUndecided where strict is set and a
+// line was named. On the rejected path strict changes nothing, exitInvalid
+// outranking exitUndecided.
+func compileArgument(verb, bareRemedy, location string, strict bool, log *slog.Logger, stderr io.Writer) (*xsd.Schema, int) {
 	root, err := rootLocation(location)
 	if err != nil {
 		return nil, subcommandFault(stderr, fmt.Sprintf("goxsd8: %s: %v", verb, err))
@@ -132,7 +133,7 @@ func compileArgument(verb, location string, strict bool, log *slog.Logger, stder
 		// document. Errors reach stderr whatever -q says, so a script can grep
 		// them.
 		_, _ = fmt.Fprintln(stderr, violationLine(err))
-		reportBareImports(stderr, verb, report)
+		reportBareImports(stderr, verb, bareRemedy, report)
 		return nil, exitInvalid
 	}
 	// Before the caller writes anything and so ahead of parse's -q gate: the
@@ -263,33 +264,45 @@ func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *pars
 	return named
 }
 
+// The remedies a reportBareImports line closes with, one per subcommand, each
+// passed by that subcommand's call site; the usage text in main.go says why
+// only validate's offers another -schema. None promises the schemaLocation is
+// followed: §4.2.6.2 makes it a hint.
+const (
+	validateBareImportRemedy = "pass the document it imports as another -schema, or add a schemaLocation to it"
+	parseBareImportRemedy    = "add a schemaLocation to it, since each argument is compiled alone"
+	genBareImportRemedy      = "add a schemaLocation to it, since each -schema is compiled alone"
+)
+
 // reportBareImports names on stderr, one line per directive at its own
 // position, every bare <import> (parser.UnfollowedNoLocation) a REJECTED
 // assembly reached, by its namespace or its absence, so that an operator whose
-// src-resolve charge points into that namespace sees that the <import>
-// declaring it was not followed. verb is the subcommand the line is charged
-// to. Its callers are the rejected paths alone, after the violation line;
-// reportUnfollowed's doc says why a compiled assembly's bare <import> stays
-// unnamed.
+// src-resolve charge points into that namespace reads that the <import>
+// declaring it names no schemaLocation, so no document was read for it, and
+// what to do about that: remedy, the caller's subcommand's text among
+// validateBareImportRemedy, parseBareImportRemedy and genBareImportRemedy. verb
+// is the subcommand the line is charged to. Its callers are the rejected paths
+// alone, after the violation line; reportUnfollowed's doc says why a compiled
+// assembly's bare <import> stays unnamed.
 //
 // The line carries no rule ID, because none charges a bare <import>, and moves
 // no exit code: it returns nothing for skipCode, whose "named" is a
 // schemaLocation resolving to no document, and the rejection's own code stands
-// with or without -strict. It names no schemaLocation and no document, the two
-// things describeDirective's and shortfallClause's wording assert and a bare
-// <import> has none of.
-func reportBareImports(stderr io.Writer, verb string, report *parser.AssemblyReport) {
+// with or without -strict. It quotes no schemaLocation value and names no
+// document, the two things describeDirective's and shortfallClause's wording
+// assert and a bare <import> has none of.
+func reportBareImports(stderr io.Writer, verb, remedy string, report *parser.AssemblyReport) {
 	for _, u := range report.Unfollowed() {
 		if u.Reason != parser.UnfollowedNoLocation {
 			continue
 		}
-		subject := "this bare <import>"
+		subject := "this <import>"
 		if el := directiveAt(report, u.At); el != nil {
 			subject += importNamespace(el)
 		}
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: %s was not followed\n", verb, u.At, subject)
+		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: %s names no schemaLocation, so no document was read for it; %s\n", verb, u.At, subject, remedy)
 	}
 }
 

@@ -611,8 +611,9 @@ func TestParseSaysNothingOfABareImport(t *testing.T) {
 // rejected with src-resolve for a type in a namespace only a bare <xs:import>
 // declares names that import, and the bare one of no namespace beside it, on
 // stderr after the violation line, with no rule ID and the rejection's exit code
-// unmoved by -strict. The parse rows reach compileArgument, which gen shares;
-// the validate rows reach runValidate. Each row pins the whole stderr.
+// unmoved by -strict. The parse and gen rows reach compileArgument, which they
+// share; the validate rows reach runValidate. Each row pins the whole stderr,
+// the remedy its verb's own (#3505).
 func TestARejectedSchemaNamesItsBareImports(t *testing.T) {
 	dir := t.TempDir()
 	schema, instance := filepath.Join(dir, "a.xsd"), filepath.Join(dir, "i.xml")
@@ -626,27 +627,39 @@ func TestARejectedSchemaNamesItsBareImports(t *testing.T) {
 	if err := os.WriteFile(instance, []byte(`<e xmlns="urn:a"/>`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	violation := schema + `:4:1: [src-resolve] element declaration {urn:a}e {type definition} references type {urn:b}T, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)` + "\n"
-	bare := func(verb string) string {
-		return "goxsd8: " + verb + ": " + schema + `:2:1: this bare <import>, for namespace "urn:b", was not followed` + "\n" +
-			"goxsd8: " + verb + ": " + schema + `:3:1: this bare <import>, for no namespace, was not followed` + "\n"
+	// gen's -out needs an import path before it compiles the -schema.
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/m\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
+	violation := schema + `:4:1: [src-resolve] element declaration {urn:a}e {type definition} references type {urn:b}T, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)` + "\n"
+	// The remedy is the verb's own (#3505).
+	bare := func(verb, remedy string) string {
+		return "goxsd8: " + verb + ": " + schema + `:2:1: this <import>, for namespace "urn:b", names no schemaLocation, so no document was read for it; ` + remedy + "\n" +
+			"goxsd8: " + verb + ": " + schema + `:3:1: this <import>, for no namespace, names no schemaLocation, so no document was read for it; ` + remedy + "\n"
+	}
+	const (
+		parseRemedy    = "add a schemaLocation to it, since each argument is compiled alone"
+		genRemedy      = "add a schemaLocation to it, since each -schema is compiled alone"
+		validateRemedy = "pass the document it imports as another -schema, or add a schemaLocation to it"
+	)
 	for _, c := range []struct {
-		name string
-		args []string
-		verb string
-		want int
+		name   string
+		args   []string
+		verb   string
+		remedy string
+		want   int
 	}{
-		{"parse", []string{"parse", schema}, "parse", exitInvalid},
-		{"parse -strict", []string{"parse", "-strict", schema}, "parse", exitInvalid},
-		{"validate", []string{"validate", "-schema", schema, instance}, "validate", exitSchema},
-		{"validate -strict", []string{"validate", "-strict", "-schema", schema, instance}, "validate", exitSchema},
+		{"parse", []string{"parse", schema}, "parse", parseRemedy, exitInvalid},
+		{"parse -strict", []string{"parse", "-strict", schema}, "parse", parseRemedy, exitInvalid},
+		{"gen", []string{"gen", "-schema", schema, "-out", filepath.Join(dir, "out")}, "gen", genRemedy, exitInvalid},
+		{"validate", []string{"validate", "-schema", schema, instance}, "validate", validateRemedy, exitSchema},
+		{"validate -strict", []string{"validate", "-strict", "-schema", schema, instance}, "validate", validateRemedy, exitSchema},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(c.args, &stdout, &stderr); code != c.want {
 			t.Errorf("%s: code = %d, want %d (stderr %q)", c.name, code, c.want, stderr.String())
 		}
-		if want := violation + bare(c.verb); stderr.String() != want {
+		if want := violation + bare(c.verb, c.remedy); stderr.String() != want {
 			t.Errorf("%s: stderr = %q, want %q", c.name, stderr.String(), want)
 		}
 	}

@@ -191,7 +191,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 		// is no assessment to run, and one line beats the same line per
 		// instance.
 		_, _ = fmt.Fprintln(stderr, violationLine(err))
-		reportBareImports(stderr, "validate", report)
+		reportBareImports(stderr, "validate", validateBareImportRemedy, report)
 		return exitSchema
 	}
 	// Reported once for the same reason, and before any instance is assessed so
