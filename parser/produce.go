@@ -69,11 +69,13 @@ const (
 	// because no particle exists yet (#932), a length or digits facet's value lexical
 	// outside the xs:nonNegativeInteger/xs:positiveInteger its facet element declares
 	// (facetCountValue), which facet compilation reaches only when an instance does
-	// (#1774), and a processContents lexical outside the skip/lax/strict enumeration
-	// Appendix A's wildcard attribute group declares (processContentsOf), which
-	// w-props-correct cannot reach because no wildcard exists yet (#950), an id
-	// value outside xs:ID (rejectInvalidID), and a block=/final= family value
-	// outside its s4s derivation-set type (rejectInvalidDerivationSet).
+	// (#1774), a whiteSpace or explicitTimezone value token outside its s4s
+	// enumeration (facetTokenValue), and a processContents lexical outside the
+	// skip/lax/strict enumeration Appendix A's wildcard attribute group declares
+	// (processContentsOf), which w-props-correct cannot reach because no wildcard
+	// exists yet (#950), an id value outside xs:ID (rejectInvalidID), and a
+	// block=/final= family value outside its s4s derivation-set type
+	// (rejectInvalidDerivationSet).
 	ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 	// ruleValidationRootValid is Validation Root Valid (ID/IDREF) (§3.3.4.5,
 	// cvc-id). The producer charges only clause 2 — no two elements of the
@@ -3019,6 +3021,9 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 		if err := facetCountValue(el, kind); err != nil {
 			return nil, err
 		}
+		if err := facetTokenValue(el, kind); err != nil {
+			return nil, err
+		}
 		fixed, err := facetFixed(el)
 		if err != nil {
 			return nil, err
@@ -4153,6 +4158,47 @@ func facetCountValue(el *Element, kind xsd.FacetKind) error {
 	default:
 		return nil
 	}
+}
+
+// facetTokenValue checks a <whiteSpace> or <explicitTimezone> element's value
+// attribute against the type the schema for schema documents declares for it:
+// an anonymous xs:NMTOKEN restriction enumerating preserve, replace and collapse
+// on <whiteSpace> (xmlschema11-2.md:4136; f-w-value §4.3.6.1, element-whiteSpace
+// §4.3.6.2), and optional, required and prohibited on <explicitTimezone> (:4189;
+// f-tz-value §4.3.14.1 — element-explicitTimezone §4.3.14.2 reads value= NCName,
+// so this enumeration rests on the schema for schema documents alone). A token
+// outside it is the schema document failing validation against the schema for
+// schema documents (Structures §5.1), charged cvc-datatype-valid (§4.1.4) at the
+// value attribute, as facetCountValue charges a length. It is not
+// timezone-valid-restriction (§4.3.14.4), which compares a restriction's {value}
+// with its base type's and is not the rule for a token outside the enumeration.
+//
+// The token is read after facetValueLexical's collapse, the ·normalized value·
+// under xs:NMTOKEN's whiteSpace = collapse, so " collapse " is admitted and
+// "col lapse", "Collapse" and the empty string are not.
+//
+// GAP(parser): an absent value attribute is left alone, as facetCountValue
+// leaves it (#1777).
+func facetTokenValue(el *Element, kind xsd.FacetKind) error {
+	attr, ok := el.attr("value")
+	if !ok {
+		return nil
+	}
+	lexical := attr.Value()
+	var domain []string
+	switch kind {
+	case xsd.FacetWhiteSpace:
+		domain = []string{"preserve", "replace", "collapse"}
+	case xsd.FacetExplicitTimezone:
+		domain = []string{"optional", "required", "prohibited"}
+	default:
+		return nil
+	}
+	if slices.Contains(domain, facetValueLexical(kind, lexical)) {
+		return nil
+	}
+	return xsderr.New(ruleDatatypeValid, attr.Loc(),
+		"<%s> value %q is not one of %s", el.Name().Local(), lexical, strings.Join(domain, ", "))
 }
 
 // nonNegativeIntegerLexical reports whether the collapsed literal s is in

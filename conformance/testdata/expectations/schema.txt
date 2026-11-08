@@ -15238,7 +15238,7 @@ explicitTimezone/d4_3_16ii04/schema/d4_3_16ii04s pass
 explicitTimezone/d4_3_16ii05/schema/d4_3_16ii05s pass
 explicitTimezone/d4_3_16ii06/schema/d4_3_16ii06s pass
 explicitTimezone/d4_3_16ii07/schema/d4_3_16ii07s pass
-explicitTimezone/d4_3_16si01/schema/d4_3_16si01s fail
+explicitTimezone/d4_3_16si01/schema/d4_3_16si01s pass
 explicitTimezone/d4_3_16si02/schema/d4_3_16si02s pass
 explicitTimezone/d4_3_16si03/schema/d4_3_16si03s pass
 explicitTimezone/d4_3_16si04/schema/d4_3_16si04s pass

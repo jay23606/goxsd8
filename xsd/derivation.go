@@ -1111,7 +1111,7 @@ func checkTimezoneRestriction(loc xsderr.Loc, t *SimpleType, baseEff []Effective
 		return nil
 	}
 	baseV, ok := singleValue(baseF)
-	if !ok || baseV == "optional" {
+	if !ok || baseV == "optional" || !timezoneToken(baseV) {
 		return nil
 	}
 	ownF, ok := findFacet(t.ownFacets, FacetExplicitTimezone)
@@ -1119,12 +1119,22 @@ func checkTimezoneRestriction(loc xsderr.Loc, t *SimpleType, baseEff []Effective
 		return nil
 	}
 	ownV, ok := singleValue(ownF)
-	if !ok || ownV == baseV {
+	if !ok || ownV == baseV || !timezoneToken(ownV) {
 		return nil
 	}
 	return xsderr.New(ruleTimezoneValidRestriction, loc,
 		"simple type restriction sets explicitTimezone {value} %s but the {base type definition}'s effective {value} is %s, which is not optional and so must be repeated verbatim (%s)",
 		ownV, baseV, ruleTimezoneValidRestriction)
+}
+
+// timezoneToken reports whether v is in an explicitTimezone {value}'s
+// three-token domain, optional, required or prohibited (§4.3.14.1 f-tz-value).
+func timezoneToken(v string) bool {
+	switch v {
+	case "optional", "required", "prohibited":
+		return true
+	}
+	return false
 }
 
 // checkFacetConsistency charges the count-facet consistency SCCs. They are NOT

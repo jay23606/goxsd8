@@ -147,7 +147,7 @@ func TestWhiteSpaceValidRestriction(t *testing.T) {
 
 // TestTimezoneValidRestriction covers §4.3.14.4: a base {value} of optional may
 // be narrowed to anything, while required or prohibited must be repeated
-// verbatim.
+// verbatim, and the check is vacuous on a {value} outside the domain.
 func TestTimezoneValidRestriction(t *testing.T) {
 	cases := []struct {
 		baseVal  string
@@ -161,6 +161,10 @@ func TestTimezoneValidRestriction(t *testing.T) {
 		{"required", "optional", true},
 		{"required", "prohibited", true},
 		{"prohibited", "required", true},
+		// A {value} outside the three-token domain on either side is not this
+		// SCC's to charge (#3495).
+		{"bogus", "required", false},
+		{"required", "bogus", false},
 	}
 	for _, c := range cases {
 		t.Run(c.baseVal+"->"+c.ownVal, func(t *testing.T) {

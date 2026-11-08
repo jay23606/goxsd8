@@ -325,7 +325,9 @@
 // unrecognized ## token in notQName, §3.10.2, a minOccurs/maxOccurs
 // outside xs:nonNegativeInteger/xs:allNNI, a length, minLength, maxLength
 // or fractionDigits value outside xs:nonNegativeInteger or a totalDigits
-// value outside xs:positiveInteger, a processContents outside the
+// value outside xs:positiveInteger, a whiteSpace value outside
+// preserve/replace/collapse or an explicitTimezone value outside
+// optional/required/prohibited, a processContents outside the
 // enumeration skip/lax/strict, an id outside xs:ID, a block, final,
 // blockDefault or finalDefault value outside the derivation-set type its
 // element declares it with), which no Schema Representation Constraint
