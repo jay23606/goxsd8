@@ -14,6 +14,7 @@ import (
 	"github.com/kud360/goxsd8/codec/testdata/readme/order"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/xsd"
 )
 
 // ExampleDecode parses README's order.xsd, decodes README's order.xml into
@@ -47,6 +48,46 @@ func ExampleDecode() {
 	// [a b] x
 	// order.xml:1:35 cvc-complex-type
 	// order.xml:2:3 cvc-complex-content
+}
+
+// ExampleCheckDecode runs CheckDecode once at start-up, before any instance
+// arrives, on an inline schema's two top-level element declarations: s:r,
+// which decodes into r, and s:n, whose {nillable} true is a construct outside
+// the decoded slice. It then checks s:r against a T that is not the type
+// codegen emits for it.
+func ExampleCheckDecode() {
+	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:s" elementFormDefault="qualified">
+  <xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="n" type="xs:string" nillable="true"/>
+</xs:schema>`
+	resolve := loader.ResolverFunc(func(_, location string) (io.ReadCloser, string, error) {
+		if location != "s.xsd" {
+			return nil, "", fmt.Errorf("no document %q", location)
+		}
+		return io.NopCloser(strings.NewReader(doc)), location, nil
+	})
+	schema, err := parser.Parse("s.xsd", parser.WithResolver(resolve))
+	if err != nil {
+		log.Fatal(err)
+	}
+	type r struct{ A string }
+	fmt.Println(codec.CheckDecode[r](schema, xsd.QName{Space: "urn:s", Local: "r"}))
+
+	// Item 5 of Decode's doc: a construct outside the decoded slice.
+	err = codec.CheckDecode[string](schema, xsd.QName{Space: "urn:s", Local: "n"})
+	var de *codec.DeclineError
+	if !errors.As(err, &de) {
+		log.Fatalf("CheckDecode: %v, want a *DeclineError", err)
+	}
+	fmt.Println(de.Construct())
+
+	// Item 6 of Decode's doc: a T that is not the type codegen emits.
+	err = codec.CheckDecode[int](schema, xsd.QName{Space: "urn:s", Local: "r"})
+	fmt.Println(errors.Is(err, codec.ErrTypeMismatch))
+	// Output:
+	// <nil>
+	// an element declaration with {nillable} true
+	// true
 }
 
 // ExampleUndecidedError parses an inline schema whose document element's

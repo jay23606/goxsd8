@@ -418,9 +418,12 @@ climbing with `../` out of it, as `goxsd8 -help` states: the CLI section's
 `codec.Decode` validates an instance against the schema and decodes it into
 the generated type, here `order.Order`; `go doc
 github.com/kud360/goxsd8/codec Decode` states every error it returns.
-`codec.CheckDecode` reports, before an instance arrives, whether `Decode`
-returns its item 5 or item 6 error for a declaration and a generated type;
-`go doc github.com/kud360/goxsd8/codec CheckDecode` states what it returns.
+Run `codec.CheckDecode` once at start-up, before any instance arrives: it
+reports whether `Decode` returns, for a declaration and a generated type, its
+item 5 error, a construct outside the decoded slice, or its item 6 error, a
+type that is not the one codegen emits for the declaration. `go doc
+github.com/kud360/goxsd8/codec CheckDecode` states what it returns, and
+`ExampleCheckDecode` in `codec/example_test.go` runs it.
 Once `Generate` has written `gen/order`, a program in the same module with
 `schema` and `backend` as above decodes `order.xml` into it, importing
 `github.com/kud360/goxsd8/codec`, `github.com/kud360/goxsd8/xsderr` and the
@@ -531,7 +534,8 @@ directly: `validate/jsonsrc/example_test.go` (`ExampleValidate`),
 `builtin/example_test.go` (`ExampleSeed`, `ExampleSeed_missingPrimitive`),
 `builtin/strict/example_test.go` (`ExampleNew`),
 `codegen/example_test.go` (`ExampleGenerate`),
-`codec/example_test.go` (`ExampleDecode`),
+`codec/example_test.go` (`ExampleDecode`, `ExampleCheckDecode`,
+`ExampleUndecidedError`, `ExampleWithBranches`),
 `loader/example_test.go` (`Example_chain`), `xsd/example_test.go`
 (`Example_termOrRefDiscrimination`, `Example_buildFinalizeQuery`,
 `Example_schemaEnumeration`, `Example_contentModelTraversal`,

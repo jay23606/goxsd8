@@ -426,11 +426,11 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 //     a plain error naming name.
 //  3. The declaration has {abstract} true: a plain error, since no document
 //     element validates against it (Structures §3.3.4.3 cvc-elt clause 2).
-//  4. Item 5 of Decode's doc: its *DeclineError, charged to no instance Loc
-//     ([DeclineError.Loc]), or the plain error it states in a decline's
-//     place.
-//  5. Item 6 of Decode's doc: its error, which errors.Is reports as
-//     [ErrTypeMismatch].
+//  4. A construct outside the decoded slice, item 5 of Decode's doc: its
+//     *DeclineError, charged to no instance Loc ([DeclineError.Loc]), or the
+//     plain error it states in a decline's place.
+//  5. A T that is not the type codegen emits for the declaration, item 6 of
+//     Decode's doc: its error, which errors.Is reports as [ErrTypeMismatch].
 //
 // A plain error is no *DeclineError, wraps neither [ErrTypeMismatch] nor
 // errors.ErrUnsupported, and carries no xsderr rule. nil means Decode returns

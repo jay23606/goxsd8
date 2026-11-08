@@ -38,6 +38,24 @@
 //
 // # What decodes
 //
+// Decoded, each construct under the conditions and into the Go type the
+// paragraphs after the list state:
+//
+//   - An atomic simple type of one of the twenty primitives the next
+//     paragraph names, xs:precisionDecimal only with
+//     [WithPrecisionDecimalArms].
+//   - A list simple type.
+//   - A top-level element declaration, as the document element's.
+//   - A complex type with empty or element-only content.
+//   - An inline sequence or choice occurring exactly once.
+//   - An element particle, local or <element ref>.
+//   - A substitution group, into a sealed interface.
+//   - A choice, into a sealed interface.
+//   - A wildcard particle.
+//   - A particle of type xs:anyType.
+//   - An attribute use.
+//   - A value constraint, default or fixed.
+//
 // A simple type decodes when it is atomic with {primitive type definition}
 // xs:string, xs:anyURI, xs:boolean, xs:float, xs:double, xs:decimal,
 // xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay,
