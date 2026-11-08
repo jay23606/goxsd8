@@ -48,7 +48,8 @@
 //   - A union simple type, into a sealed interface.
 //   - A top-level element declaration, as the document element's.
 //   - A complex type with empty or element-only content.
-//   - An inline sequence or choice occurring exactly once.
+//   - A sequence or choice, inline or through <group ref>, occurring exactly
+//     once.
 //   - An element particle, local or <element ref>.
 //   - A substitution group, into a sealed interface.
 //   - A choice, into a sealed interface.
@@ -91,7 +92,8 @@
 // simple type that decodes, its value T's own, or a complex type that decodes:
 // one with {abstract} false and no {attribute wildcard}, and either empty
 // content or element-only content with no {open content} whose {particle} is
-// an inline sequence or choice occurring exactly once. Each particle of that
+// a sequence or choice, inline or the {model group} of the definition a
+// <group ref> names, occurring exactly once. Each particle of that
 // sequence or choice is an element declaration with no {type table} and
 // {nillable} false, of a simple type that decodes, of xs:anyType itself, or
 // of a complex type that decodes by these same rules at any depth: a local
@@ -153,8 +155,8 @@
 //   - Two element particles taking one expanded name; item 5 of [Decode]'s
 //     doc states when.
 //   - An all group.
-//   - A nested model group or <group ref>, a choice's model-group
-//     alternative included.
+//   - A nested model group, inline or through <group ref>, a choice's
+//     model-group alternative included.
 //   - A second wildcard particle among one sequence's or choice's particles.
 //   - Mixed or simple content.
 //   - Element-only content with {open content}.

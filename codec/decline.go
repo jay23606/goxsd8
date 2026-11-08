@@ -95,7 +95,6 @@ const (
 	constructSimpleContent
 	constructMixedContent
 	constructOpenContent
-	constructGroupRefContent
 	constructChoiceOccurs
 	constructAllContent
 	constructSequenceOccurs
@@ -120,7 +119,6 @@ var constructNames = [...]string{
 	constructSimpleContent:       "simple content",
 	constructMixedContent:        "mixed content",
 	constructOpenContent:         "{open content}",
-	constructGroupRefContent:     "a <group ref> content particle",
 	constructChoiceOccurs:        "a content choice occurring other than exactly once",
 	constructAllContent:          "all content",
 	constructSequenceOccurs:      "a content sequence occurring other than exactly once",
