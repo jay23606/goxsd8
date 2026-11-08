@@ -125,11 +125,7 @@ func convertDecimal(lexical string) (reflect.Value, error) {
 // not embedded, struct tags aside, whose type is an interface of one
 // unexported method, as codegen's sealed interface PrecisionDecimalValue is.
 func decimalShape(v reflect.Type) bool {
-	if !fieldsNamed(v, "Value") {
-		return false
-	}
-	it := v.Field(0).Type
-	return it.Kind() == reflect.Interface && it.NumMethod() == 1 && !it.Method(0).IsExported()
+	return fieldsNamed(v, "Value") && sealedShape(v.Field(0).Type)
 }
 
 // checkDecimalArms returns nil when cx holds, for it, the Value interface of

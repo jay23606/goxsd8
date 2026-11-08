@@ -31,7 +31,7 @@
 // declaration before an instance arrives. It reads the schema, not T:
 // codegen's structs carry no tags, so Decode derives each field's name, order
 // and Go type from the declaration by codegen's own rules and refuses a T
-// that differs, and reads a sealed interface's branch types from
+// that differs, and reads a sealed interface's branch or variant types from
 // [WithBranches], and a PrecisionDecimal's arms from
 // [WithPrecisionDecimalArms]. Package codec does not import codegen. Nothing
 // encodes yet.
@@ -45,6 +45,7 @@
 //     paragraph names, xs:precisionDecimal only with
 //     [WithPrecisionDecimalArms].
 //   - A list simple type.
+//   - A union simple type, into a sealed interface.
 //   - A top-level element declaration, as the document element's.
 //   - A complex type with empty or element-only content.
 //   - An inline sequence or choice occurring exactly once.
@@ -71,10 +72,19 @@
 // states, and an xs:precisionDecimal type into PrecisionDecimal's, its Value
 // the arm [WithPrecisionDecimalArms] supplies for its lexical's value, with
 // that lexical's ·scale· and ·sign·, as [Decode]'s doc states. A list type
-// decodes when its {item type definition} is such an atomic type, a
-// restriction of a list taking its base's (Structures §3.16.2.3), xs:NMTOKENS
-// among them, into []A, A its item's atomic Go type, one element per list
-// item; the empty list is a slice of length 0.
+// decodes when its {item type definition} is such an atomic type or a union
+// that decodes, a restriction of a list taking its base's (Structures
+// §3.16.2.3), xs:NMTOKENS among them, into []A, A its item's atomic Go type,
+// or []I, I its item's sealed interface, one element per list item; the
+// empty list is a slice of length 0.
+//
+// A union type (Datatypes §2.4.1.3) decodes when each of its basic members,
+// in codegen's basic-member order (codegen's package doc, "# Simple types"),
+// is such an atomic or list type, no two of them get one Go type, and no
+// assertions facet lies where its value's identification reads one, item 5
+// of [Decode]'s doc stating each. It decodes into codegen's sealed
+// interface, the variant of the value's ·active basic member·, as
+// [Decode]'s doc states.
 //
 // A document element decodes when its declaration, a top-level one, has no
 // {type table} and {nillable} false, and its {type definition} is either a
@@ -153,13 +163,17 @@
 //   - An attribute use in the xsi namespace.
 //   - An element declaration with a {type table}.
 //   - A nillable element.
-//   - A union.
 //   - A special type.
 //   - A primitive other than those twenty: an ·implementation-defined· one
 //     (Datatypes dt-primitive), which xsd.NewPrimitiveType mints and no
 //     schema document yields.
-//   - A list whose {item type definition} is a union or of such a primitive,
-//     declining by its item's construct.
+//   - A list whose {item type definition} declines, by its item's construct.
+//   - A union one of whose basic members declines, by that member's
+//     construct.
+//   - A union two of whose basic members get one Go type; item 5 of
+//     [Decode]'s doc states when.
+//   - A union whose value's identification reads an assertions facet; item
+//     5 of [Decode]'s doc states where.
 //   - An xsi:type.
 //
 // Two of those are rulings rather than coverage still to come:
@@ -190,13 +204,15 @@
 // Decode runs three stages on a value: whiteSpace, then, for an atomic Go
 // type other than string, the lexical mapping and the conversion to the Go
 // type. On a list value whiteSpace runs once, under the list type, and the
-// other two on each list item, under its {item type definition}. Pattern,
-// facet and assertion stages are validate's, decided on the same backend
-// first. A whiteSpace failure, a fault of the simple type, never reaches
-// Decode's return: validate runs the same whiteSpace stage first and leaves
-// the instance undecided, item 4 of [Decode]'s doc. A lexical mapping or
-// conversion that fails is the error [Decode]'s doc states in item 8, naming
-// the stage, the type, the normalized value or the list item and its
+// other two on each list item, under its {item type definition}. On a union
+// value, or a list item of a union, Decode first identifies the ·active
+// basic member· (value.ValidatingType), and runs the stages under that
+// member. Pattern, facet and assertion stages are validate's, decided on the
+// same backend first. A whiteSpace failure, a fault of the simple type, never
+// reaches Decode's return: validate runs the same whiteSpace stage first and
+// leaves the instance undecided, item 4 of [Decode]'s doc. An identification,
+// lexical mapping or conversion that fails is the error [Decode]'s doc states
+// in item 8, naming the stage, the type, the value or the list item and its
 // position, the instance Loc and, for an element's character content, its
 // byte offset. Decode traces each stage it runs on the logger [WithLogger]
 // sets, whose doc states each record. No package reads GOXSD_DEBUG.
@@ -204,7 +220,7 @@
 // # Planned decode paths
 //
 // Decode today is the slice above, validate's facet pipeline followed by the
-// three stages the Debuggability section names; no value.Emitter exists. Two
+// stages the Debuggability section names; no value.Emitter exists. Two
 // paths are planned, neither implemented: a runtime path, always available,
 // of the facet pipeline and value.Mapping driven by the compiled schema,
 // general, reflective and allocation-tolerant, whose hot-path APIs follow the

@@ -17,31 +17,58 @@ import (
 
 // pipeline is what Decode's value stages read beside the item: the schema,
 // the backend validate assessed the instance on, the logger Decode traces
-// each stage on, under the "codec" group, and decimals, the arm sets
-// [WithPrecisionDecimalArms] supplied, from the config field the item-6
-// check reads (checkContext), which the fill builds a PrecisionDecimal's
-// Value from (pipeline.decimal).
+// each stage on, under the "codec" group, decimals, the arm sets
+// [WithPrecisionDecimalArms] supplied, and branches, the sets [WithBranches]
+// supplied, each from the config field the item-6 check reads
+// (checkContext), from which the fill builds a PrecisionDecimal's Value
+// (pipeline.decimal) and a union's variant (pipeline.union).
 type pipeline struct {
 	schema   *xsd.Schema
 	backend  value.Backend
 	log      *slog.Logger
 	decimals decimalArmSets
+	branches branchSets
 }
 
-// scalar is one item Decode decodes a value for: atom, the atomic Go type of
-// its simple type or, for a list, of its {item type definition}; st, the
-// simple type its value is decoded under; label, the type as a stage error and
-// a trace name it (typeLabel); item, st's {item type definition} where st is a
-// list and nil otherwise; and supplied, the value Decode's doc states the
-// post-schema-validation infoset supplies for it, nil exactly when there is no
-// value constraint: an element's {value constraint}, an attribute use's
-// effective one (§3.5.4 key-evc).
+// scalar is one item Decode decodes a value for: elem, the element of the Go
+// type codegen gives its simple type, of the type itself or, for a list, of
+// its {item type definition}; st, the simple type its value is decoded under;
+// label, the type as a stage error and a trace name it (typeLabel); item,
+// st's {item type definition} where st is a list and nil otherwise; and
+// supplied, the value Decode's doc states the post-schema-validation infoset
+// supplies for it, nil exactly when there is no value constraint: an
+// element's {value constraint}, an attribute use's effective one (§3.5.4
+// key-evc).
 type scalar struct {
-	atom     atomic
+	elem     scalarElem
 	st       *xsd.SimpleType
 	label    string
 	item     *listItem
 	supplied *supplied
+}
+
+// scalarElem is the element of the Go type codegen gives a scalar's simple
+// type, as Decode decodes it: an atomic, the atomic Go type of an atomic type
+// or of a list's atomic {item type definition}, or a *unionScalar, the basic
+// members of a union or of a list's union {item type definition}. It is a
+// closed sum, sealed by its unexported methods, so a union's scalar holds no
+// atomic Go type. list, in each method, reports whether the scalar's simple
+// type is a list of the element.
+type scalarElem interface {
+	// bare returns the Go type codec decodes the element's value as: an
+	// atomic's bare, and for a union, whose interface codec holds none of,
+	// unionValue, which pipeline.union builds the caller's variant from.
+	bare() reflect.Type
+	// spell spells the element's Go type for an error message, as
+	// scalar.spell states.
+	spell() string
+	// datatypeStruct reports whether the element's Go type is a datatype
+	// struct (atomic.datatypeStruct); a union's interface is none.
+	datatypeStruct() bool
+	// underlies answers scalar.underlies for a scalar of this element.
+	underlies(v reflect.Type, list bool) bool
+	// holdSets answers scalar.holdSets for a scalar of this element.
+	holdSets(v reflect.Type, list bool, site string, cx *checkContext) error
 }
 
 // listItem is the {item type definition} of a list type (Datatypes §2.4.1.2):
@@ -54,74 +81,172 @@ type listItem struct {
 
 // goType returns the Go type codegen gives s's simple type: s's atomic Go type
 // A, or []A for a list (codegen/doc.go "# Simple types"), A codec's mirror
-// for a datatype struct (atomic.bare).
+// for a datatype struct (atomic.bare), and for a union, whose interface codec
+// holds none of, unionValue, which pipeline.union builds the caller's variant
+// from.
 func (s scalar) goType() reflect.Type {
 	if s.item == nil {
-		return s.atom.bare()
+		return s.elem.bare()
 	}
-	return reflect.SliceOf(s.atom.bare())
+	return reflect.SliceOf(s.elem.bare())
 }
 
 // underlies reports whether v is a type over the Go type codegen gives s's
 // simple type, its name never compared, as Decode's doc, item 6, reads a
-// simple document element's T. For an atomic Go type other than a datatype
-// struct, v's underlying type is goType's: equal Kinds of two scalar types
-// mean one underlying type; for big.Rat and big.Int, ConvertibleTo means an
-// identical underlying type, which math/big's unexported fields keep any
-// other struct from having; and for two slice types, a list's or []byte's,
-// Kind Slice and ConvertibleTo mean an identical underlying type, since Go
-// converts between slice types only then. For a datatype struct, which
-// codegen declares in the caller's package, v is a struct of its shape
-// (atomic.shapes), ConvertibleTo codec's mirror, which only a struct of its
-// exported fields exactly, in name, order and Go type, struct tags aside, is,
-// or for PrecisionDecimal's, which has no mirror, a struct decimalShape
-// holds, or for a list v is a slice of such a struct: []D converts to no
-// []mirror.
-func (s scalar) underlies(v reflect.Type) bool {
-	if !s.atom.datatypeStruct() {
-		want := s.goType()
+// simple document element's T: atomic.underlies' answer, or for a union
+// unionScalar.underlies'.
+func (s scalar) underlies(v reflect.Type) bool { return s.elem.underlies(v, s.item != nil) }
+
+// underlies reports whether v is a type over a's Go type, or for a list over
+// []A, as scalar.underlies reads it. For an atomic Go type other than a
+// datatype struct, v's underlying type is that Go type: equal Kinds of two
+// scalar types mean one underlying type; for big.Rat and big.Int,
+// ConvertibleTo means an identical underlying type, which math/big's
+// unexported fields keep any other struct from having; and for two slice
+// types, a list's or []byte's, Kind Slice and ConvertibleTo mean an identical
+// underlying type, since Go converts between slice types only then. For a
+// datatype struct, which codegen declares in the caller's package, v is a
+// struct of its shape (atomic.shapes), ConvertibleTo codec's mirror, which
+// only a struct of its exported fields exactly, in name, order and Go type,
+// struct tags aside, is, or for PrecisionDecimal's, which has no mirror, a
+// struct decimalShape holds, or for a list v is a slice of such a struct: []D
+// converts to no []mirror.
+func (a atomic) underlies(v reflect.Type, list bool) bool {
+	if !a.datatypeStruct() {
+		want := a.bare()
+		if list {
+			want = reflect.SliceOf(want)
+		}
 		return v.Kind() == want.Kind() && v.ConvertibleTo(want)
 	}
-	if s.item != nil {
+	if list {
 		if v.Kind() != reflect.Slice {
 			return false
 		}
 		v = v.Elem()
 	}
-	return s.atom.shapes(v)
+	return a.shapes(v)
 }
 
-// decimalSite returns nil unless s's atomic Go type is PrecisionDecimal's,
-// and otherwise checkDecimalArms' answer for the Value interface of v, a
-// type underlies holds, or of its element type for a list, at the site site
-// names: so a PrecisionDecimal's V holds, beside its shape, the arms cx
-// supplies for its interface (Decode's doc, item 6).
-func (s scalar) decimalSite(v reflect.Type, site string, cx *checkContext) error {
-	if s.atom != atomicPrecisionDecimal {
+// underlies reports whether v is a type over a union's interface, or for a
+// list of a union over []I, as scalar.underlies reads it: codegen declares
+// the interface in the caller's package, so v is any interface of one
+// unexported method (sealedShape), or for a list a slice of one.
+func (u *unionScalar) underlies(v reflect.Type, list bool) bool {
+	if list {
+		if v.Kind() != reflect.Slice {
+			return false
+		}
+		v = v.Elem()
+	}
+	return sealedShape(v)
+}
+
+// holdSets holds v, a type underlies holds, at the site site names, to the
+// sets cx supplies for the interfaces it holds, item 6 of Decode's doc:
+// atomic.holdSets' answer, or for a union unionScalar.holdSets'.
+func (s scalar) holdSets(v reflect.Type, site string, cx *checkContext) error {
+	return s.elem.holdSets(v, s.item != nil, site, cx)
+}
+
+// holdSets returns nil unless a is PrecisionDecimal's atomic, and otherwise
+// checkDecimalArms' answer for the Value interface of v, a type underlies
+// holds, or of its element type for a list, at the site site names: so a
+// PrecisionDecimal's V holds, beside its shape, the arms cx supplies for its
+// interface (Decode's doc, item 6).
+func (a atomic) holdSets(v reflect.Type, list bool, site string, cx *checkContext) error {
+	if a != atomicPrecisionDecimal {
 		return nil
 	}
-	if s.item != nil {
+	if list {
 		v = v.Elem()
 	}
 	return checkDecimalArms(v.Field(0).Type, site, cx)
 }
 
+// holdSets holds v, a type underlies holds, or its element type for a list,
+// at the site site names, to u's variants (unionScalar.check).
+func (u *unionScalar) holdSets(v reflect.Type, list bool, site string, cx *checkContext) error {
+	if list {
+		v = v.Elem()
+	}
+	return u.check(v, site, cx)
+}
+
 // spell spells the Go type codegen gives s's simple type for an error
-// message, A as atomic.spell spells it: A, or []A for a list.
+// message, A as atomic.spell spells it, or for a union I as
+// unionScalar.spell does: A or I, or []A or []I for a list.
 func (s scalar) spell() string {
 	if s.item == nil {
-		return s.atom.spell()
+		return s.elem.spell()
 	}
-	return "[]" + s.atom.spell()
+	return "[]" + s.elem.spell()
+}
+
+// callerDeclared reports whether codegen declares the element of the Go type
+// it gives s's simple type in the caller's package, so that codec holds no Go
+// type to compare a caller's with: a datatype struct, or a union's interface.
+func (s scalar) callerDeclared() bool {
+	// scalarElem is a closed sum, so the assertion is STYLE T2's sealed-sum
+	// exception.
+	_, isUnion := s.elem.(*unionScalar)
+	return isUnion || s.elem.datatypeStruct()
 }
 
 // simpleGo is the Go type codegen gives a simple type Decode decodes, as
-// simpleDecline reads it: atom, its atomic Go type or, for a list, its {item
-// type definition}'s, and item, that {item type definition} for a list and nil
-// otherwise.
+// simpleDecline reads it: elem, the element of that Go type, of the type
+// itself or, for a list, of its {item type definition}; and item, that {item
+// type definition} for a list and nil otherwise.
 type simpleGo struct {
-	atom atomic
+	elem goElem
 	item *xsd.SimpleType
+}
+
+// goElem is the element of the Go type codegen gives a simple type, as
+// simpleDecline reads it: an atomic, the atomic Go type of an atomic type or
+// of a list's atomic {item type definition}, or a *unionGo, the sealed
+// interface of a union or of a list's union {item type definition}. It is a
+// closed sum, sealed by its unexported methods, so a union's simpleGo holds
+// no atomic Go type.
+type goElem interface {
+	// bare returns the Go type codec decodes the element's value as, the one
+	// the scalarElem forScalar returns answers.
+	bare() reflect.Type
+	// forScalar returns the element of a scalar of this element, labelled
+	// label: an atomic itself, or a union's unionScalar (unionGo.forScalar).
+	forScalar(label string) scalarElem
+}
+
+// forScalar returns a itself.
+func (a atomic) forScalar(string) scalarElem { return a }
+
+// oneGoType reports whether g and h, the Go types of two basic members of one
+// union, are one Go type as item 6 of Decode's doc compares a variant's, by
+// shape alone, so that no variant could tell them apart: the same A or []A
+// (goType), so that xs:string and xs:token are one, and so are xs:QName and
+// xs:NOTATION, or both lists of a union, each a slice of any sealed
+// interface, whose element's bare type is unionValue, no atomic's. No basic
+// member is a union (basicMembers), and the datatype structs of two
+// datatypes have different fields, so no variant is over both.
+func (g simpleGo) oneGoType(h simpleGo) bool { return g.goType() == h.goType() }
+
+// sealed reports whether g is a sealed interface, a union's own, which
+// codegen holds in an optional field bare, never behind a pointer
+// (codegen/doc.go "# Particles"); a list of a union is a slice.
+func (g simpleGo) sealed() bool {
+	// goElem is a closed sum, so the assertion is STYLE T2's sealed-sum
+	// exception.
+	_, isUnion := g.elem.(*unionGo)
+	return isUnion && g.item == nil
+}
+
+// goType returns the Go type codec decodes a value of g as, as scalar.goType
+// does: g's element's bare type, or a slice of it for a list.
+func (g simpleGo) goType() reflect.Type {
+	if g.item == nil {
+		return g.elem.bare()
+	}
+	return reflect.SliceOf(g.elem.bare())
 }
 
 // supplied is the value constraint vc of the item subject names, its
@@ -144,10 +269,22 @@ func supply(vc xsd.ValueConstraint, has bool, subject string) *supplied {
 // newScalar returns the scalar of the item subject names, of simple type st,
 // whose Go type is g, its value constraint vc where has is true.
 func newScalar(g simpleGo, st *xsd.SimpleType, subject string, vc xsd.ValueConstraint, has bool) scalar {
-	s := scalar{atom: g.atom, st: st, label: typeLabel(st, subject), supplied: supply(vc, has, subject)}
+	s := scalarOf(g, st, typeLabel(st, subject))
+	s.supplied = supply(vc, has, subject)
+	return s
+}
+
+// scalarOf returns the scalar of simple type st, whose Go type is g, labelled
+// label, with no supplied value: for a union, or a list of one, each basic
+// member's scalar too, labelled by memberLabel after the union's label.
+func scalarOf(g simpleGo, st *xsd.SimpleType, label string) scalar {
+	s := scalar{st: st, label: label}
+	elemLabel := label
 	if g.item != nil {
-		s.item = &listItem{st: g.item, label: itemLabel(g.item, s.label)}
+		s.item = &listItem{st: g.item, label: itemLabel(g.item, label)}
+		elemLabel = s.item.label
 	}
+	s.elem = g.elem.forScalar(elemLabel)
 	return s
 }
 
@@ -190,9 +327,14 @@ const (
 // normalized value is split at each U+0020 before any item is mapped
 // (§2.4.1.2), an empty one into no items (§4.1.1 dt-list), and the lexical
 // stages run on each item under s.item.st, the governing mapping read once,
-// only when there is an item. It traces one Debug record per stage it runs. A
-// lexical-mapping or conversion failure is the *stageError Decode's doc
-// states, item 8.
+// only when there is an item. For a union, the ·active basic member· is
+// identified on raw first (unionScalar.identify), and the value is that
+// member's, decoded by these same stages under it, whiteSpace included, as a
+// unionValue; for a list of a union, it is identified on each list item, and
+// the lexical stages run on the item under it. Identification runs no stage
+// of its own and traces nothing. It traces one Debug record per stage it
+// runs. An identification, lexical-mapping or conversion failure is the
+// *stageError Decode's doc states, item 8.
 //
 // A whiteSpace fault never reaches Decode's return. On a schema Finalize
 // accepted it is an error wrapping the *xsderr.Error of rule
@@ -204,13 +346,28 @@ const (
 // — and records the fault, which is no datatype verdict, as Unevaluated, so
 // Decode returns its item 4 first.
 func (s scalar) decode(p *pipeline, raw string, src source) (reflect.Value, error) {
+	// scalarElem is a closed sum, so the assertion is STYLE T2's sealed-sum
+	// exception.
+	u, isUnion := s.elem.(*unionScalar)
+	if isUnion && s.item == nil {
+		member, err := u.identify(p, s.st, s.label, raw, src, 0)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		v, err := member.decode(p, raw, src)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		return reflect.ValueOf(unionValue{member: member, v: v}), nil
+	}
 	p.trace("whiteSpace", ruleWhiteSpace, s.label, raw, src)
 	normalized, err := value.ApplyWhiteSpace(p.schema, s.st, raw)
 	if err != nil {
 		return reflect.Value{}, fmt.Errorf("codec: %s: normalizing %s: %w", src.loc(), src.where(), err)
 	}
+	// Past isUnion, s.elem is the sum's other arm, an atomic.
 	if s.item == nil {
-		ls, err := newLexicalStages(p, s.atom, s.st, s.label, src, normalized, 0)
+		ls, err := newLexicalStages(p, s.elem.(atomic), s.st, s.label, src, normalized, 0)
 		if err != nil {
 			return reflect.Value{}, err
 		}
@@ -224,7 +381,17 @@ func (s scalar) decode(p *pipeline, raw string, src source) (reflect.Value, erro
 	if len(tokens) == 0 {
 		return out, nil
 	}
-	ls, err := newLexicalStages(p, s.atom, s.item.st, s.item.label, src, tokens[0], 1)
+	if isUnion {
+		for i, tok := range tokens {
+			v, err := u.item(p, s.item, tok, src, i+1)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			out = reflect.Append(out, v)
+		}
+		return out, nil
+	}
+	ls, err := newLexicalStages(p, s.elem.(atomic), s.item.st, s.item.label, src, tokens[0], 1)
 	if err != nil {
 		return reflect.Value{}, err
 	}
@@ -355,19 +522,23 @@ func (p *pipeline) trace(msg, rule, label, input string, src source, extra ...sl
 	p.log.LogAttrs(ctx, slog.LevelDebug, msg, attrs...)
 }
 
-// stage is a value stage Decode tags its errors with: the lexical mapping
-// and the conversion to the Go type, its canonical rendering included. The
-// zero value is invalid (STYLE T1).
+// stage is a value stage Decode tags its errors with: a union's
+// identification of its ·active basic member·, the lexical mapping and the
+// conversion to the Go type, its canonical rendering included. The zero value
+// is invalid (STYLE T1).
 type stage uint8
 
 const (
-	stageLexicalMapping stage = iota + 1
+	stageIdentification stage = iota + 1
+	stageLexicalMapping
 	stageConversion
 )
 
 // name returns the stage's name.
 func (s stage) name() string {
 	switch s {
+	case stageIdentification:
+		return "the identification of the ·active basic member·"
 	case stageLexicalMapping:
 		return "the lexical mapping"
 	case stageConversion:
@@ -378,8 +549,9 @@ func (s stage) name() string {
 }
 
 // stageError is the error Decode's doc states in item 8: stage failed on
-// fragment, the normalized lexical of a value of the type label names, from
-// src, for cause. For a list value, fragment is one list item, label names
+// fragment, the normalized lexical of a value of the type label names, or for
+// a union's identification the characters it was identified on, from src, for
+// cause. For a list value, fragment is one list item, label names
 // the list's {item type definition}, and token is the item's 1-based position
 // among the value's items; for an atomic value token is 0. It has no Unwrap:
 // validate accepted the value on the same backend, so no rule cause carries is

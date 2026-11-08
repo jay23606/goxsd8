@@ -41,10 +41,10 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // particle's element declaration has at any depth, or of the document
 // element's simple type, that type labelled as its declaration's {type
 // definition}, with no path from the document element, and, for a construct of
-// a list type's {item type definition}, that item, by its QName where it has
-// one, each with its schema Loc, which is the zero Loc for a built-in
-// component; for xsi:type, it names the element and the type the xsi:type
-// names.
+// a list type's {item type definition} or a union's basic member, that item
+// or member, by its QName where it has one, each with its schema Loc, which is
+// the zero Loc for a built-in component; for xsi:type, it names the element
+// and the type the xsi:type names.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -84,10 +84,11 @@ type construct uint8
 // particle's complex type, examined at the particle, declines by the same
 // constructs from constructSimpleContent on, and by
 // constructAbstractTypeElement, which sits with the particle's though the
-// document element's type declines by it too, ahead of its content. The three
-// of a simple type, constructUnion to constructOtherPrimitive, sit with the
-// particle's, though a document element of simple type, an attribute use, and
-// a list type, by its {item type definition}, decline by them too.
+// document element's type declines by it too, ahead of its content. The four
+// of a simple type, constructSpecial to constructUnionAssertions, sit with the
+// particle's, though a document element of simple type, an attribute use, a
+// list type, by its {item type definition}, and a union, by a basic member,
+// decline by them too.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
@@ -103,9 +104,10 @@ const (
 	constructAbstractTypeElement
 	constructSharedName
 	constructSharedBranch
-	constructUnion
 	constructSpecial
 	constructOtherPrimitive
+	constructSharedVariant
+	constructUnionAssertions
 	constructXsiAttribute
 	constructAttributeWildcard
 	constructXsiType
@@ -127,9 +129,10 @@ var constructNames = [...]string{
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
 	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",
 	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",
-	constructUnion:               "a union simple type",
 	constructSpecial:             "a special simple type",
 	constructOtherPrimitive:      "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
+	constructSharedVariant:       "a union simple type two of whose basic members get one Go type",
+	constructUnionAssertions:     "a union simple type with an assertions facet on itself, a member or a list member's item type",
 	constructXsiAttribute:        "an attribute use in the xsi namespace",
 	constructAttributeWildcard:   "an {attribute wildcard}",
 	constructXsiType:             "an element carrying xsi:type",

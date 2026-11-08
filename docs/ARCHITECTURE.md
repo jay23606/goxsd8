@@ -714,8 +714,10 @@ instance into the type `codegen` emits for its document element, for the
 slice `codec/doc.go`'s "What decodes" states, declining every other
 construct, `CheckDecode`, which returns `Decode`'s schema-level declines and T mismatches
 for a declaration before an instance arrives, `Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf`, and `ErrTypeMismatch`. Its
-runtime path today runs the whiteSpace stage (`value.ApplyWhiteSpace`)
-and, for a non-string atomic type, the governing `value.Mapping`
+runtime path today runs, for a union, the identification of its ·active
+basic member· (`value.ValidatingType`), then the whiteSpace stage
+(`value.ApplyWhiteSpace`) and, for a non-string atomic type, the governing
+`value.Mapping`
 (`value.GoverningMapping`), whose `codec.WithLogger` doc says which types
 convert from Canonical's form and which from the lexical Parse accepted;
 every other pipeline stage is

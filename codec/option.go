@@ -39,7 +39,10 @@ func newConfig(opts []Option) config {
 // Decode logs one Debug record per stage it runs on a value: whiteSpace, then,
 // for an atomic Go type other than string, the lexical mapping and the
 // conversion, which on a list value run on each list item. A value of a
-// string Go type therefore logs its whiteSpace record alone. Each record's
+// string Go type therefore logs its whiteSpace record alone. A union value
+// logs its ·active basic member·'s records, as a value of that member logs
+// them, and a list item of a union its member's lexical mapping and
+// conversion; identifying the member logs no record of its own. Each record's
 // attributes sit in the "codec" group, its message outside it:
 //
 //   - "whiteSpace": rule "rf-whiteSpace" (Datatypes §4.3.6), input the
@@ -74,17 +77,21 @@ func WithURI(uri string) Option {
 
 // WithBranches supplies the branch types of I, a sealed interface codegen
 // emitted, which [Decode] cannot find from T: a Go interface names none of its
-// implementers. Pass one value of each branch, in any order, such as
-// codec.WithBranches[order.Pay](order.PayCard{}, order.PayCash{}); only each
-// value's dynamic type is read. A later WithBranches for the same I replaces
-// an earlier one's set. Decode uses the set wherever T holds I as a choice's
-// or a substitution group's interface, at any depth: T itself, a field, a
-// nested element's struct or interface, or a branch, and ignores a set for
-// any type T does not hold so, so one option list may serve every document
-// element of a package; a set for a type that is no interface is never used.
-// The Value interface of codegen's PrecisionDecimal takes its arms from
+// implementers. Pass one value of each branch or variant, in any order, such
+// as codec.WithBranches[order.Pay](order.PayCard{}, order.PayCash{}); only
+// each value's dynamic type is read. Decode uses the set wherever T holds I as
+// a choice's, a substitution group's or a union's interface, at any depth: T
+// itself, a field, a list's element, a nested element's struct or interface,
+// a branch, or a variant, and ignores a set for any type T does not hold so,
+// so one option list may serve every document element of a package; a set for
+// a type that is no interface is never used. A set for I serves every
+// interface type of I's method set, such as the named type codegen emits over
+// I for a top-level element of I's union type, and a later WithBranches for
+// an interface of I's method set replaces an earlier one's set. The Value
+// interface of codegen's PrecisionDecimal takes its arms from
 // [WithPrecisionDecimalArms] alone. With no WithBranches for I, I's set is
-// empty. Decode's doc, item 6, states when a set is [ErrTypeMismatch].
+// empty. Decode's doc, item 6, states how a set is matched and when it is
+// [ErrTypeMismatch].
 func WithBranches[I any](branches ...I) Option {
 	set := branchSet{iface: reflect.TypeFor[I](), branches: make([]reflect.Type, len(branches))}
 	for i, b := range branches {
@@ -100,29 +107,43 @@ type branchSet struct {
 	branches []reflect.Type
 }
 
-// branchSets holds one branchSet per interface, in the order a WithBranches
-// first named each; it is searched by identity and never ranged over into
+// branchSets holds one branchSet per method set, in the order a WithBranches
+// first named each; it is searched by sameMethods and never ranged over into
 // output (STYLE D2).
 type branchSets []branchSet
 
-// with returns s with set in place of the entry for its interface, or
-// appended when s has none; it may reuse s's array.
+// with returns s with set in place of the entry whose interface has its
+// interface's method set, or appended when s has none; it may reuse s's
+// array.
 func (s branchSets) with(set branchSet) branchSets {
-	if i := slices.IndexFunc(s, func(e branchSet) bool { return e.iface == set.iface }); i >= 0 {
+	if i := slices.IndexFunc(s, func(e branchSet) bool { return sameMethods(e.iface, set.iface) }); i >= 0 {
 		s[i] = set
 		return s
 	}
 	return append(s, set)
 }
 
-// of returns the branch types s holds for the interface it, and whether any
-// WithBranches supplied them.
+// of returns the branch types s holds for the interface it, those of the
+// entry whose interface has its method set, and whether any WithBranches
+// supplied them.
 func (s branchSets) of(it reflect.Type) ([]reflect.Type, bool) {
-	i := slices.IndexFunc(s, func(e branchSet) bool { return e.iface == it })
+	i := slices.IndexFunc(s, func(e branchSet) bool { return sameMethods(e.iface, it) })
 	if i < 0 {
 		return nil, false
 	}
 	return s[i].branches, true
+}
+
+// sameMethods reports whether a and b are one type or two interface types of
+// one method set, each implementing the other, so that a set WithBranches
+// supplies for one serves the other: codegen's named type over a union's
+// interface, such as type Pin PinUnion, is such an interface. An unexported
+// method is its package's, so two packages' interfaces never share one.
+func sameMethods(a, b reflect.Type) bool {
+	if a == b {
+		return true
+	}
+	return a.Kind() == reflect.Interface && b.Kind() == reflect.Interface && a.Implements(b) && b.Implements(a)
 }
 
 // WithPrecisionDecimalArms supplies the four arms of I, the sealed interface

@@ -48,11 +48,12 @@ func schemaTest(doc string) string {
 // censusSuite is the fixture suite. Group g's schema generates, and its
 // cases decode (a.xml, twice, f.xml, of simple type, g.xml, a choice, through
 // the branch set the census binds, and p.xml, of xs:precisionDecimal, through
-// the arm set it binds), decline with a union (e.xml, twice) and all content
-// (c.xml), and fail otherwise, charged (invalid.xml) and with no declaration for
-// the document element (u.xml), which decodes into the placeholder; its case old
-// is withheld. Group rec's schema assembles and does not generate, group bad's
-// does not assemble, and group none declares no schemaTest.
+// the arm set it binds), decline with a union of two basic members of one Go
+// type (e.xml, twice) and all content (c.xml), and fail otherwise, charged
+// (invalid.xml) and with no declaration for the document element (u.xml), which
+// decodes into the placeholder; its case old is withheld. Group rec's schema
+// assembles and does not generate, group bad's does not assemble, and group none
+// declares no schemaTest.
 var censusSuite = map[string]string{
 	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink"><testSetRef xlink:href="sets/s.testSet"/></testSuite>`,
 	"sets/s.testSet": `<testSet name="S" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -68,7 +69,7 @@ var censusSuite = map[string]string{
 	"d/s.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="c"><xs:complexType><xs:all><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
-  <xs:element name="e"><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:element>
+  <xs:element name="e"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>
   <xs:element name="f" type="xs:string"/>
   <xs:element name="g"><xs:complexType><xs:choice><xs:element name="h" type="xs:string"/><xs:element name="i" type="xs:string"/></xs:choice></xs:complexType></xs:element>
   <xs:element name="p" type="xs:precisionDecimal"/>
@@ -101,7 +102,7 @@ const wantCounts = `decodecensus: 13 instance case(s) under %ROOT%
   decoded where validate rejects: 0
 
 === First decline, by construct: 2 construct(s) ===
-       2  a union simple type
+       2  a union simple type two of whose basic members get one Go type
        1  all content
 
 === Caveats ===
@@ -110,7 +111,7 @@ const wantCounts = `decodecensus: 13 instance case(s) under %ROOT%
 // wantPaths is the -paths sections over censusSuite.
 const wantPaths = `
 === Cases, by construct ===
-a union simple type (2):
+a union simple type two of whose basic members get one Go type (2):
   S/g/instance/simple
   S/g/instance/simple2
 all content (1):
