@@ -53,24 +53,42 @@ site list; the sites you happened to read are not the list (#3158).
 A pre-flight settles **shape**: signatures, sums, which package owns what,
 which return channel carries which distinction. It does not settle a
 lane-affecting gate or a list of sites. **Every claim it makes about what
-code does or will do is marked read, probed or inferred** — a site, a kept
-rule's result, a golden's predicted change, the premise of doc wording or a
-test row it dictates — with the owning text located by file and sentence
-(another package's `doc.go` included, a spec rule ID by its line in
-`docs/specs/md/`) or the probe named by its input and commit. Mason checks
-each inferred claim before building on it (#863). Wording or a row resting
-on a premise it cannot locate is not dictated (#3007, #3168). An item that
-keeps an existing rule unchanged is checked against every shape the same
-pre-flight rules for that construct; where the kept rule yields another
-shape, the pre-flight says which binds and what makes it win (#3240). That
-a detection or traversal over a graph is complete or sound is not shape:
-the ruling names the randomized differential behind it — input count,
-independent checker — or says it is unverified (#3057). A contract it approves
-types each field and parameter to the arms legal at that site, never to a
-wider sum that contains them, and states what each `ok` or boolean result
-answers at the input the spec makes a boundary; a ruling that a construct
-declines or keeps its behaviour is checked against the landed tests for
-that production (#2503).
+code does or will do is marked read, probed or inferred** — a site, a
+rule's result, a golden's predicted change, a text it dictates — with the
+owning text located by file and sentence (another package's `doc.go`
+included, a spec rule ID by its line in `docs/specs/md/`) or the probe
+named by its input and commit. Mason checks each inferred claim before
+building on it (#863). An item with no mark is not a ruling. The claims
+that most often ship false, and what marks each:
+
+- **A text it dictates** — doc wording, a message's subject or label, a
+  test row's expected string, a "use helper X at site Y" composition.
+  Its premise is located, or it is not dictated (#3007, #3168). It is
+  rendered on each shape its site admits — named and anonymous types,
+  local and top-level declarations, present and absent values — or marked
+  inferred (#3416). Doc wording names the one doc that owns its fact and
+  is placed nowhere else; the other docs get a pointer (#3345).
+- **A rule over shapes, kept or new.** It names each shape it was checked
+  against — for a rule over pairs, each pair — with the answer for each,
+  and a "true" or "declines" answer is the conservative direction for
+  that pair. "Unchanged" is not a check: a kept rule is checked against
+  every shape the same pre-flight rules for that construct, and where it
+  yields another shape the pre-flight says which binds and what makes it
+  win. A rule that names no shapes is not a ruling (#3240, #3492).
+- **A surface prediction** counts every line `go tool surface` prints for
+  the shape, a `method` line for each exported method of a new type
+  included, whether the type is exported or not — an unexported error
+  type's `Error` and `Unwrap` among them. One not counted that way is
+  marked inferred and never quoted as exactly the tool's output (#3417).
+- **Completeness over a graph.** That a detection or traversal is
+  complete or sound is not shape: the ruling names the randomized
+  differential behind it — input count, independent checker — or says it
+  is unverified (#3057).
+- **A contract it approves** types each field and parameter to the arms
+  legal at that site, never to a wider sum that contains them, and states
+  what each `ok` or boolean result answers at the input the spec makes a
+  boundary; a ruling that a construct declines or keeps its behaviour is
+  checked against the landed tests for that production (#2503).
 
 Your verdict is read by agents with no other context, and is often
 transcribed into an issue body. So make it internally consistent: if a

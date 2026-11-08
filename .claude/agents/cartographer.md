@@ -81,6 +81,11 @@ already done, and the commit body says so.
    each with the open issues naming it (#1740). The largest cluster, and
    the one decision that holds it, is the milestone's north star; say
    whether an open issue targets it and file one if none does (#1738).
+   A slice that should wait on another — the next census row once the
+   current one lands — is filed in this pass, `blocked` with that slice in
+   its `## Depends on`, so the post-land pass that closes the first
+   unblocks it: no post-land pass reads Status, so a filing Status defers
+   to one is made by nobody.
    A milestone with no lane is read by the measure its PLAN.md paragraph
    or epic names, as M9 is by `go tool gencensus`. When its exit sentence
    has fired, or its measure has nothing left to lift, it is done: say so
@@ -174,7 +179,8 @@ Fill every section; write "n/a" or "none" rather than dropping one.
 ## Acceptance
 <tests / conformance cases that prove it done — the ratchet lane it moves;
  a test bullet says which rows fail with the fix removed and which guard
- against over-charging or pin existing behaviour (#1913)>
+ against over-charging or pin existing behaviour, each guard row failing
+ under the misreading it guards against (#1913)>
 
 ## Surface
 <exported-identifier additions or changes — or "none">

@@ -33,7 +33,9 @@ every other place that states that fact, then delete each copy or point it
 at the owner (#2739). `go tool restatements -base origin/main` is that
 search through package docs, exported identifiers' docs and `cmd/goxsd8`'s
 usage, as its package doc states; grep unexported doc comments and test
-comments by the fact's words and by its identifiers.
+comments by the fact's words and by its identifiers. A pair it flags is
+resolved to one owner even when a pre-flight dictated both copies, and
+your account names the departure from the dictation (#3345).
 
 Before writing: read the issue, its whole thread and its `GROUNDING:`
 comment. **A brief whose `GROUNDING:` part is missing, is not headed by
@@ -117,7 +119,11 @@ Your cwd is an **isolated git worktree** on its own local branch, not the
 session's checkout — that isolation is what lets you break lines on
 purpose to test a test. Commit there and stop: never push, never switch
 branches, and read an unfamiliar `git log` as that worktree's own state.
-An uncommitted edit at handoff is an edit that does not exist.
+An uncommitted edit at handoff is an edit that does not exist. If that
+worktree is missing — your cwd is gone, or is a checkout a brief names —
+write nothing anywhere, make no worktree of your own, and return
+`NO WORKTREE: <what you found>`; `/develop` answers it with a fresh
+delegation (#3489).
 
 Run `git submodule update --init testdata/xsdtests` before the gate:
 `git worktree add` never populates submodules, so your worktree starts
@@ -156,10 +162,17 @@ break the line, watch the test, and put it back:
   present, so an assertion pins a subject only by pinning the opening
   `parser: <subject> at <loc>` as a prefix (#1048).
 - **Negative and universal claims** — "none", "always", "never", "a
-  permanent limitation", "no case found" — name the probe set behind
-  them, and that set includes the exception the governing marker's scope
-  clause or the package's own list states; a negative you did not probe
-  is written as unverified (#2733, #2784).
+  permanent limitation", "no case found", "every row …" — name the probe
+  set behind them, and that set includes the exception the governing
+  marker's scope clause or the package's own list states; a negative you
+  did not probe is written as unverified (#2733, #2784). This binds your
+  claims about your own `## Acceptance` rows too. A claim that every row
+  meets a bar's condition names the check over the rows, and where the
+  condition is mechanical the test asserts it over its own rows. A row
+  stays owed, its reachability written as unverified, until every
+  producer the repo uses for its input has been probed — for a schema,
+  the parser and the `xsd` constructors through `SchemaBuilder.Finalize`
+  (#3415).
 - **Unchanged answers.** A claim that your change leaves another caller's
   answers unchanged is a differential: run the functions it names against
   verbatim `origin/main` copies in a throwaway file, state the input count

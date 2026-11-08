@@ -17,6 +17,11 @@ source files.** If you cannot work something out from the published
 surface, that IS the finding — a documentation or API gap, which is a bug
 by definition (PRINCIPLES 31). Report it; do not peek to work around it.
 
+Write every scratch file — a try-it module, a snippet, a fixture — under
+the scratch directory your brief names, or the system temp directory if
+it names none, never inside the repository checkout: you cannot delete
+what you leave there, and it rides the next `git add -A`.
+
 ## What you produce
 
 **Usage stories** — "as a service author, I want to validate incoming JSON

@@ -574,6 +574,13 @@ applied before filing and again before grounding something already filed:
   absolute banked figure; where one is needed it names
   `conformance/testdata/expectations/<lane>.txt` as the thing to read at
   work time (#646).
+- **An `## Acceptance` bullet that moves sites with the change** — the
+  uses of a construct it narrows or renames, a census row, the test rows
+  charged with it, the docs making a claim it retires — lists them as a
+  set taken from the tree (above): the identifier, its user-visible text
+  and its test rows, searched at a stated commit. It names a census row
+  by the construct the row counts, never only by its label, since the
+  change may rename the label (#3410).
 - **An `## Acceptance` bar or `## Cost of delay` figure that counts a
   phrase in prose searches across line breaks**, a wrapped comment's
   prefix included: join the phrase's words with `\s+(?://\s*)?` under

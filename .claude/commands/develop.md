@@ -18,24 +18,35 @@ push the heartbeat WORKFLOW's lease invariant requires before a round.
 
 **A brief carries the issue and never narrows the delegate's own file.**
 
-- **It pastes, verbatim and whole,** the body's `## Goal`, `## Spec` and
-  `## Acceptance` and every thread comment that declares itself
-  normative — the oracle has no tool that reads GitHub (#2142) — and, for
-  a mason or judge round, the `GROUNDING:` comment, the latest `MASON:`
-  account and the verdict a repair or round-2 judge follows, so the
-  delegate states its outcome with no GitHub read of the thread (#2449).
-  **A part too long to paste goes as a file** in the session scratchpad,
-  written from a byte-faithful REST read of that comment or body
-  (docs/ROUTINES.md) and named in the brief under the part's heading; the
-  delegate reads it whole before anything else. A condensed part is a
-  placeholder, in a file or inline (#3137).
-- **Each part is headed by its source** — the body section, or the
-  comment's `issuecomment-<id>`. The mason's, the arbiter's and the
-  warden's own files have them refuse a brief with a part missing,
-  unheaded, condensed or a placeholder, or named by a file they cannot
-  read, `BRIEF INCOMPLETE: <part>`, whatever the brief says (#2683, #2868).
-  Answer that return by sending the brief again, whole; it is not a
-  round, and no cap counts it.
+- **It carries its normative parts as files the REST read wrote, never
+  as text you typed.** The parts are the issue body — its `## Goal`,
+  `## Spec` and `## Acceptance` — and every thread comment that declares
+  itself normative, since the oracle has no tool that reads GitHub
+  (#2142); for a mason or judge round, also the `GROUNDING:` comment, the
+  latest `MASON:` account and the verdict a repair or round-2 judge
+  follows, so the delegate states its outcome with no GitHub read of the
+  thread (#2449). Write each one with one plain command into the session
+  scratchpad, and name the file in the brief under the part's source
+  heading — `issue #<N> body`, or `issuecomment-<id>`:
+
+  ```sh
+  gh api repos/kud360/goxsd8/issues/<N> --jq .body > /abs/scratchpad/issue-<N>-body.md
+  gh api repos/kud360/goxsd8/issues/comments/<id> --jq .body > /abs/scratchpad/<id>.md
+  ```
+
+  The single-comment path carries no issue number. Never paste, summarize
+  or excerpt a part in the brief: a condensed part is a placeholder, in a
+  file or inline (#3137, #3314).
+- **The delegate refuses a part it cannot read whole as its source.** The
+  mason's, the arbiter's and the warden's own files have them return
+  `BRIEF INCOMPLETE: <part>` for a part missing, unheaded, condensed, a
+  placeholder or named by a file they cannot read, whatever the brief
+  says (#2683, #2868), and the mason returns `NO WORKTREE` when its
+  isolated worktree is missing. Answer either with a **fresh delegation**
+  carrying the whole brief — for a mason, with worktree isolation like
+  any mason round — never a `SendMessage` to the agent that returned,
+  whose worktree may already be gone (#3489). It is not a round, and no
+  cap counts it.
 - **It never reshapes a duty.** It names the gate only as CLAUDE.md's
   gate, whole (#1959); never bars or reshapes a duty the delegate's agent
   file assigns it, the arbiter's ratchet run on accept above all (#1812);
@@ -69,7 +80,11 @@ counts.
    fresh clone carries no local config), then `git fetch --prune origin`
    — without `--prune` the local view keeps refs for branches GitHub
    deleted at merge. A dirty local tree gets pushed to
-   `parked/untriaged-<YYYYMMDD-HHMMSS>` and logged — never cleaned.
+   `parked/untriaged-<YYYYMMDD-HHMMSS>` and logged — never cleaned. The
+   log entry names each file the park holds and, where every hunk removes
+   text `origin/main` already carries, the landing whose text it removes,
+   so a `/backlog` pass can report the ref deletable without reading it
+   (#3398).
 
 2. **Pick.** Run `go tool wipsurvey` — CLAUDE.md spells its input — rather
    than re-deriving the branch namespace by hand (#399). It reports each
@@ -142,8 +157,9 @@ counts.
      the mason copies those into code comments (#3248). An issue whose
      `## Spec` is n/a has no oracle block, and says so.
    - the **arbiter** rules every other `## Acceptance` bullet, rules
-     `## Surface`, rules each claim the `## Goal` makes about what the code
-     does today by probing it at the base, and makes the PREDICTION: each
+     `## Surface`, rules each claim the `## Goal` or an `## Acceptance`
+     bullet makes about what the code does today by probing it at the
+     base, never by restating it (#3329), and makes the PREDICTION: each
      of those is a fact about the tree or the corpus, answered by running
      an instrument the oracle has no tools for (#1588, #3276). The bars it
      rules are the ones its own verdict will apply.
@@ -274,9 +290,10 @@ counts.
 
    A mason return of `RULING AMBIGUOUS: <item>` goes to that ruling's
    author — the warden, the grounding arbiter or the `RULING:` writer —
-   for a one-item ruling posted on the thread; send it to the mason with
-   `SendMessage`, or in a fresh brief beside the original. Like `BRIEF
-   INCOMPLETE`, it is not a round.
+   for a one-item ruling posted on the thread, then delegate a fresh
+   isolated mason with the original brief and the ruling as a part beside
+   it, naming the returned mason's worktree if it holds commits so the
+   round resumes from them. Like `BRIEF INCOMPLETE`, it is not a round.
 
    Mason may absorb adjacent work under docs/WORKFLOW.md's scope rule.
    Absorbed items belong in the commit body, not in a new issue.
@@ -296,7 +313,8 @@ counts.
    `go build` skips, and must exit 0, else make the follow-up fixes the
    merge implies per WORKFLOW's **Merge-conflict resolution**, as a
    follow-up commit and never an amend (#2026). Then delegate to
-   **arbiter**, with worktree isolation like any subagent that writes: on
+   **arbiter**, its brief's parts as files the REST read wrote (the brief
+   rule above), with worktree isolation like any subagent that writes: on
    accept it runs and banks the ratchet as its agent file requires, and its
    bank commit comes onto `wip/issue-<N>` under the same hand-off clause as
    mason's (#1812). A bank commit behind a reject — a superseded-pass bank

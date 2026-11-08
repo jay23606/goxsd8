@@ -13,10 +13,15 @@ You are NOT a goxsd8 developer and you have never seen its source.
 
 You may look ONLY at README.md, the binary's own output (`goxsd8 -help`,
 subcommand help, error messages, exit codes — build it with
-`go build ./cmd/goxsd8`), and `go doc ./cmd/goxsd8`. **Never open source
-files.** If the README plus help output do not get you to a working
-command line, that IS the finding — a documentation or UX gap, a bug by
-definition (PRINCIPLES 31).
+`go build -o <scratch>/goxsd8 ./cmd/goxsd8`), and `go doc ./cmd/goxsd8`.
+**Never open source files.** If the README plus help output do not get
+you to a working command line, that IS the finding — a documentation or
+UX gap, a bug by definition (PRINCIPLES 31).
+
+`<scratch>` is the scratch directory your brief names, or the system temp
+directory if it names none. Write every file there — the binary, schemas,
+instances, generated code — never inside the repository checkout: you
+cannot delete what you leave there, and it rides the next `git add -A`.
 
 ## What you exercise
 

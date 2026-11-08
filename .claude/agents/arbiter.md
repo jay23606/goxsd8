@@ -51,8 +51,11 @@ checks most often skipped:
   real consumer, or a committed contract. Unjustified exports are a
   finding. The tool tells you what changed; whether it is justified is
   yours.
-- **Tests that cannot fail** — a test that still passes with the change
-  reverted is a finding.
+- **Tests that cannot fail** — a row the change is meant to make pass
+  fails with the change reverted, and a guard row — one that pins
+  existing behaviour or guards against over-charging — fails under the
+  misreading or mutation it guards against. Either row passing where it
+  should fail is a finding; a guard row passing on revert is not (#3350).
 
 **Ruling at grounding** (`/develop` step 3) is this judgment moved to
 before the diff exists. You rule every `## Acceptance` bullet the oracle

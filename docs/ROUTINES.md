@@ -29,7 +29,11 @@ translate the local times above and mind DST drift. Keep develop slots
   forever.
 - **A GitHub channel for issue operations.** Try them in this order, and
   **fall through on any error**: a channel that fails at call time means
-  try the next one, never that the operation is impossible.
+  try the next one, never that the operation is impossible. A channel
+  that vanishes mid-session — the MCP tools gone after a worker restart —
+  has failed at call time: fall through, and read back any write the
+  dropped call may have made before repeating it, as the 5xx rule below
+  says (#3452).
   1. *Cloud sessions*: the platform's built-in GitHub tools — zero setup
      via the Claude GitHub app, and the token never enters the container.
   2. *GitHub MCP server* (`.mcp.json`): OAuth interactively; headless
