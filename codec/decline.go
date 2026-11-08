@@ -41,10 +41,11 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // particle's element declaration has at any depth, or of the document
 // element's simple type, that type labelled as its declaration's {type
 // definition}, with no path from the document element, and, for a construct of
-// a list type's {item type definition} or a union's basic member, that item
-// or member, by its QName where it has one, each with its schema Loc, which is
-// the zero Loc for a built-in component; for xsi:type, it names the element
-// and the type the xsi:type names.
+// a complex type's simple content, its {content type}'s {simple type
+// definition}, and of a list type's {item type definition} or a union's basic
+// member, that item or member, by its QName where it has one, each with its
+// schema Loc, which is the zero Loc for a built-in component; for xsi:type, it
+// names the element and the type the xsi:type names.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -82,17 +83,17 @@ type construct uint8
 // element's declaration, its type, its content, each particle in order, its
 // attribute uses in order, its attribute wildcard, and the instance. A
 // particle's complex type, examined at the particle, declines by the same
-// constructs from constructSimpleContent on, and by
+// constructs from constructMixedContent on, and by
 // constructAbstractTypeElement, which sits with the particle's though the
 // document element's type declines by it too, ahead of its content. The four
 // of a simple type, constructSpecial to constructUnionAssertions, sit with the
-// particle's, though a document element of simple type, an attribute use, a
-// list type, by its {item type definition}, and a union, by a basic member,
+// particle's, though a document element of simple type, a complex type's
+// simple content, by its {simple type definition}, an attribute use, a list
+// type, by its {item type definition}, and a union, by a basic member,
 // decline by them too.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
-	constructSimpleContent
 	constructMixedContent
 	constructOpenContent
 	constructChoiceOccurs
@@ -116,7 +117,6 @@ const (
 var constructNames = [...]string{
 	constructTypeTable:           "an element declaration with a {type table}",
 	constructNillable:            "an element declaration with {nillable} true",
-	constructSimpleContent:       "simple content",
 	constructMixedContent:        "mixed content",
 	constructOpenContent:         "{open content}",
 	constructChoiceOccurs:        "a content choice occurring other than exactly once",

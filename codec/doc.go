@@ -47,7 +47,7 @@
 //   - A list simple type.
 //   - A union simple type, into a sealed interface.
 //   - A top-level element declaration, as the document element's.
-//   - A complex type with empty or element-only content.
+//   - A complex type with empty, simple or element-only content.
 //   - A sequence or choice, inline or through <group ref>, occurring exactly
 //     once.
 //   - An element particle, local or <element ref>.
@@ -91,21 +91,23 @@
 // {type table} and {nillable} false, and its {type definition} is either a
 // simple type that decodes, its value T's own, or a complex type that decodes:
 // one with {abstract} false and no {attribute wildcard}, and either empty
-// content or element-only content with no {open content} whose {particle} is
-// a sequence or choice, inline or the {model group} of the definition a
-// <group ref> names, occurring exactly once. Each particle of that
-// sequence or choice is an element declaration with no {type table} and
-// {nillable} false, of a simple type that decodes, of xs:anyType itself, or
-// of a complex type that decodes by these same rules at any depth: a local
-// one, or the top-level one an <element ref> names where codegen gives the
-// particle's field that declaration's own type; or the particle is an <element
-// ref> where codegen gives its field a sealed interface over the referenced
-// declaration's substitution group (codegen's package doc, "# Substitution
-// groups"), and each declaration of the group with {abstract} false is such a
-// declaration, an abstract head's own properties never read; or the particle
-// is a wildcard, at most one of the sequence's or choice's particles, whatever
-// its {namespace constraint} and {process contents}. No two element particles
-// share an expanded name, such an interface's particle taking each of those
+// content, simple content whose {simple type definition} is a simple type
+// that decodes (Structures §3.4.2.2 dcl.ctd.ctsc), its value field's, or
+// element-only content with no {open content} whose {particle} is a sequence
+// or choice, inline or the {model group} of the definition a <group ref>
+// names, occurring exactly once. Each particle of that sequence or choice is
+// an element declaration with no {type table} and {nillable} false, of a
+// simple type that decodes, of xs:anyType itself, or of a complex type that
+// decodes by these same rules at any depth: a local one, or the top-level one
+// an <element ref> names where codegen gives the particle's field that
+// declaration's own type; or the particle is an <element ref> where codegen
+// gives its field a sealed interface over the referenced declaration's
+// substitution group (codegen's package doc, "# Substitution groups"), and
+// each declaration of the group with {abstract} false is such a declaration,
+// an abstract head's own properties never read; or the particle is a wildcard,
+// at most one of the sequence's or choice's particles, whatever its {namespace
+// constraint} and {process contents}. No two element particles share an
+// expanded name, such an interface's particle taking each of those
 // declarations'. Each attribute use is outside the xsi namespace and is typed
 // the same way. No element in the instance carries xsi:type, except inside a
 // wildcard's match or an element of type xs:anyType's raw content.
@@ -158,7 +160,7 @@
 //   - A nested model group, inline or through <group ref>, a choice's
 //     model-group alternative included.
 //   - A second wildcard particle among one sequence's or choice's particles.
-//   - Mixed or simple content.
+//   - Mixed content.
 //   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.
 //   - A complex type with an {attribute wildcard}.

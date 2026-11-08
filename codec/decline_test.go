@@ -61,7 +61,9 @@ func TestDecodeDeclines(t *testing.T) {
 		{"document element of an abstract complex type of element-only content, under xsi:type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, `<s:a>x</s:a>`, constructAbstractTypeElement, 1, 1},
-		{"simple content", root(`<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`), "", "x", constructSimpleContent, 1, 1},
+		{"simple content of a special type", root(`<xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent>`), "", "x", constructSpecial, 1, 1},
+		{"simple content of a union of xs:string and xs:token", root(`<xs:simpleContent><xs:extension base="s:st"/></xs:simpleContent>`) +
+			`<xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>`, "", "x", constructSharedVariant, 1, 1},
 		{"mixed content", `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
 			"", a, constructMixedContent, 1, 1},
 		{"open content", root(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>`),
@@ -143,8 +145,12 @@ func TestDecodeDeclines(t *testing.T) {
 			sequenceOf(`<xs:element name="a" type="s:dt"/>`), "", `<s:a>t</s:a>`, constructMixedContent, 1, 1},
 		{"local element of emptiable mixed content with a default", sequenceOf(`<xs:element name="a" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`),
 			"", `<s:a/>`, constructMixedContent, 1, 1},
-		{"local element of simple content", sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
-			"", a, constructSimpleContent, 1, 1},
+		{"local element of simple content of a special type, ahead of its attribute uses", sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:anyAtomicType"><xs:attribute name="k"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:attribute><xs:anyAttribute processContents="lax"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
+			"", a, constructSpecial, 1, 1},
+		{"local element of simple content, its attribute use of a special type", sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="k" type="xs:anySimpleType"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
+			"", a, constructSpecial, 1, 1},
+		{"local element of simple content with an attribute wildcard", sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:anyAttribute processContents="lax"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
+			"", a, constructAttributeWildcard, 1, 1},
 		{"local element of an abstract complex type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>` + sequenceOf(`<xs:element name="a" type="s:ab" minOccurs="0"/>`),
 			"", "", constructAbstractTypeElement, 1, 1},
