@@ -48,6 +48,12 @@ func TestDecodeDeclines(t *testing.T) {
 	}{
 		{"type table", `<xs:complexType name="rt"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:element name="r" type="s:rt"><xs:alternative test="@k" type="s:rt"/></xs:element>`, "", a, constructTypeTable, 1, 1},
+		{"type table on a document element of type xs:anyType", `<xs:element name="r" type="xs:anyType"><xs:alternative test="@k" type="xs:anyType"/></xs:element>`, "", a, constructTypeTable, 1, 1},
+		{"type table on a nillable document element of type xs:anyType", `<xs:element name="r" nillable="true"><xs:alternative test="@k" type="xs:anyType"/></xs:element>`, "", a, constructTypeTable, 1, 1},
+		{"type table on a local element of type xs:anyType", sequenceOf(`<xs:element name="a"><xs:alternative test="@k" type="xs:anyType"/></xs:element>`), "", a, constructTypeTable, 1, 1},
+		{"type table on a nillable local element of type xs:anyType", sequenceOf(`<xs:element name="a" type="xs:anyType" nillable="true"><xs:alternative test="@k" type="xs:anyType"/></xs:element>`), "", a, constructTypeTable, 1, 1},
+		{"document element of a mixed restriction of xs:anyType, which declines by its own content", `<xs:complexType name="dt" mixed="true"><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>` +
+			`<xs:element name="r" type="s:dt"/>`, "", "t", constructMixedContent, 1, 1},
 		{"nillable", `<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
 			"", a, constructNillable, 1, 1},
 		{"nillable local element with a fixed value", sequenceOf(`<xs:element name="a" type="xs:string" nillable="true" fixed="x"/>`), "", `<s:a>x</s:a>`, constructNillable, 1, 1},

@@ -39,6 +39,35 @@ const (
 		`<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="s:dt"/></xs:sequence></xs:complexType></xs:element>`
 )
 
+// The nillable xs:anyType schemas, each declaring s:r: nilOneAnySchema's a,
+// nilRefAnySchema's f, nilPickAnySchema's choice alternative a and
+// nilGroupAnySchema's member m are nillable declarations of xs:anyType,
+// shaped as oneAnySchema's, refAnySchema's, pickAnySchema's and
+// groupAnySchema's are, so they decode into the same types.
+const (
+	nilOneAnySchema   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" nillable="true"/></xs:sequence></xs:complexType></xs:element>`
+	nilRefAnySchema   = `<xs:element name="f" nillable="true"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:f"/></xs:sequence></xs:complexType></xs:element>`
+	nilPickAnySchema  = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" nillable="true"/><xs:element name="b" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
+	nilGroupAnySchema = `<xs:element name="h" abstract="true"/><xs:element name="m" substitutionGroup="s:h" nillable="true"/><xs:element name="n" substitutionGroup="s:h" type="xs:string"/>` +
+		`<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+)
+
+// The schemas whose document element s:r is of type xs:anyType itself:
+// rootAnySchema's of no type, typedRootAnySchema's type="xs:anyType",
+// nilRootAnySchema's nillable, and defaultRootAnySchema's and
+// fixedRootAnySchema's with a value constraint. Codegen emits rootAny, its R,
+// for each.
+const (
+	rootAnySchema        = `<xs:element name="r"/>`
+	typedRootAnySchema   = `<xs:element name="r" type="xs:anyType"/>`
+	nilRootAnySchema     = `<xs:element name="r" nillable="true"/>`
+	defaultRootAnySchema = `<xs:element name="r" default="d"/>`
+	fixedRootAnySchema   = `<xs:element name="r" fixed="d"/>`
+)
+
+// rootAny is codegen's R for a document element of type xs:anyType.
+type rootAny anyType
+
 // The types codegen emits for those schemas' s:r, each named here by its
 // schema, which TestAnyTypeTypesAreCodegens pins; free, member and capA are
 // codegen's F, M and A, each a named type over AnyType.
@@ -134,6 +163,23 @@ func TestAnyTypeTypesAreCodegens(t *testing.T) {
 		{fixedAnySchema, []string{"type R struct {\n\tA AnyType\n}\n"}},
 		{oneAnySchema, []string{"type R struct {\n\tA AnyType\n}\n"}},
 		{derivedAnySchema, []string{"type R struct {\n\tA Dt\n}\n", "type Dt struct {\n\tB string\n}\n"}},
+		{nilOneAnySchema, []string{"type R struct {\n\tA AnyType\n}\n"}},
+		{nilRefAnySchema, []string{"type F AnyType\n", "type R struct {\n\tF F\n}\n"}},
+		{nilPickAnySchema, []string{
+			"type RA struct {\n\tA AnyType\n}\n\nfunc (RA) isR() {}\n",
+			"type RB struct {\n\tB string\n}\n\nfunc (RB) isR() {}\n",
+		}},
+		{nilGroupAnySchema, []string{
+			"type M AnyType\n",
+			"type R struct {\n\tH HSubstitutionGroup\n}\n",
+			"type HSubstitutionGroupM struct {\n\tM M\n}\n",
+			"type HSubstitutionGroupN struct {\n\tN N\n}\n",
+		}},
+		{rootAnySchema, []string{"type R AnyType\n"}},
+		{typedRootAnySchema, []string{"type R AnyType\n"}},
+		{nilRootAnySchema, []string{"type R AnyType\n"}},
+		{defaultRootAnySchema, []string{"type R AnyType\n"}},
+		{fixedRootAnySchema, []string{"type R AnyType\n"}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -155,7 +201,10 @@ func TestAnyTypeTypesAreCodegens(t *testing.T) {
 // xsi:noNamespaceSchemaLocation on it, and an xsi:type inside it, are raw
 // attributes, the xsi:type's value unresolved. A value constraint supplies
 // nothing: an empty element's Text is "" (§3.3.5.4 sic-eltType, case 2). A
-// restriction of xs:anyType decodes as its own complex type.
+// restriction of xs:anyType decodes as its own complex type. A nillable one,
+// local, referenced, a choice's alternative or a substitution group's member,
+// decodes into the same unwrapped field, its xsi:nil, true or false, one of
+// its raw attributes.
 func TestDecodeAnyType(t *testing.T) {
 	const xsi = "http://www.w3.org/2001/XMLSchema-instance"
 	text := func(s string) anyType { return anyType{Text: s} }
@@ -172,6 +221,7 @@ func TestDecodeAnyType(t *testing.T) {
 		},
 	}
 	const rawBody = ` xmlns:o="urn:o" k="1" o:m=" 2 3"><!--c-->le<!--c-->ad<o:c j="x">in<d/></o:c>mid<e/> end `
+	nilled := anyType{Attributes: []anyAttribute{{Space: xsi, Local: "nil", Value: "true"}}}
 	rows := []struct {
 		name  string
 		decls string
@@ -204,6 +254,13 @@ func TestDecodeAnyType(t *testing.T) {
 		{"an empty element with a fixed value", fixedAnySchema, `<s:a/>`, into[oneAny](), oneAny{}},
 		{"an element with a fixed value, holding it", fixedAnySchema, `<s:a>d</s:a>`, into[oneAny](), oneAny{A: text("d")}},
 		{"a restriction of xs:anyType, its own struct", derivedAnySchema, `<s:a><s:b>x</s:b></s:a>`, into[derivedAny](), derivedAny{A: struct{ B string }{B: "x"}}},
+		{"a nillable local element, nilled", nilOneAnySchema, `<s:a xsi:nil="true"/>`, into[oneAny](), oneAny{A: nilled}},
+		{"a nillable local element, xsi:nil false", nilOneAnySchema, `<s:a xsi:nil="false">t</s:a>`, into[oneAny](),
+			oneAny{A: anyType{Attributes: []anyAttribute{{Space: xsi, Local: "nil", Value: "false"}}, Text: "t"}}},
+		{"a nillable local element, not nilled", nilOneAnySchema, `<s:a` + rawBody + `</s:a>`, into[oneAny](), oneAny{A: raw}},
+		{"an element ref to a nillable declaration of no type, nilled", nilRefAnySchema, `<s:f xsi:nil="true"/>`, into[refAny](), refAny{F: free(nilled)}},
+		{"a choice's nillable alternative, nilled", nilPickAnySchema, `<s:a xsi:nil="true"/>`, into[pickAny](pickAnyBranches), pickAny(pickAnyA{A: nilled})},
+		{"a nillable substitution group's member, nilled", nilGroupAnySchema, `<s:m xsi:nil="true"/>`, into[groupAny](groupAnyBranches), groupAny{H: groupAnyM{M: member(nilled)}}},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -221,6 +278,88 @@ func TestDecodeAnyType(t *testing.T) {
 				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
 			}
 		})
+	}
+}
+
+// TestDecodeAnyTypeRoot pins the document element of type xs:anyType itself,
+// of no type or type="xs:anyType", nillable or not: it decodes into
+// codegen's R, a named type over AnyType, and into AnyType itself, item 6
+// matching T by shape alone, its attributes in start-tag order, xsi: ones
+// included and namespace declarations not, its text and its children with
+// their Tails held raw. A value constraint supplies nothing, so an empty
+// one's Text is "".
+func TestDecodeAnyTypeRoot(t *testing.T) {
+	const xsi = "http://www.w3.org/2001/XMLSchema-instance"
+	const body = `le<!--c-->ad<o:c xmlns:o="urn:o" j="x">in<d/></o:c>mid<e/> end `
+	content := anyType{
+		Attributes: []anyAttribute{{Local: "k", Value: "1"}, {Space: xsi, Local: "schemaLocation", Value: "urn:x x.xsd"}, {Local: "j", Value: "2"}},
+		Text:       "lead",
+		Children: []anyChild{
+			{Element: anyElement{Space: "urn:o", Local: "c", Content: anyType{
+				Attributes: []anyAttribute{{Local: "j", Value: "x"}},
+				Text:       "in",
+				Children:   []anyChild{{Element: anyElement{Local: "d"}}},
+			}}, Tail: "mid"},
+			{Element: anyElement{Local: "e"}, Tail: " end "},
+		},
+	}
+	const attrs = ` k="1" xsi:schemaLocation="urn:x x.xsd" j="2"`
+	nilAttr := func(v string) anyType {
+		return anyType{Attributes: []anyAttribute{{Space: xsi, Local: "nil", Value: v}}}
+	}
+	rows := []struct {
+		name        string
+		decls       string
+		attrs, body string
+		into        target
+		want        any
+	}{
+		{"of no type", rootAnySchema, attrs, body, into[rootAny](), rootAny(content)},
+		{"of no type, into AnyType itself", rootAnySchema, attrs, body, into[anyType](), content},
+		{"of type xs:anyType", typedRootAnySchema, attrs, body, into[rootAny](), rootAny(content)},
+		{"empty", rootAnySchema, "", "", into[rootAny](), rootAny{}},
+		{"nillable, nilled", nilRootAnySchema, ` xsi:nil="true"`, "", into[rootAny](), rootAny(nilAttr("true"))},
+		{"nillable, xsi:nil false", nilRootAnySchema, ` xsi:nil="false"`, "t", into[rootAny](), rootAny(anyType{Attributes: nilAttr("false").Attributes, Text: "t"})},
+		{"nillable, not nilled", nilRootAnySchema, attrs, body, into[rootAny](), rootAny(content)},
+		{"an empty one with a default", defaultRootAnySchema, "", "", into[rootAny](), rootAny{}},
+		{"an empty one with a fixed value", fixedRootAnySchema, "", "", into[rootAny](), rootAny{}},
+		{"one with a fixed value, holding it", fixedRootAnySchema, "", "d", into[rootAny](), rootAny{Text: "d"}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf(row.attrs, row.body)
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
+			}
+		})
+	}
+}
+
+// TestDecodeAnyTypeRootXsiType pins that an xsi:type on a document element of
+// type xs:anyType declines as xsi:type at the document element's instance
+// Loc (item 7 of Decode's doc), past item 5, which it passes.
+func TestDecodeAnyTypeRootXsiType(t *testing.T) {
+	for _, decls := range []string{rootAnySchema, nilRootAnySchema} {
+		schema := schemaOf(t, decls)
+		data := instanceOf(` xsi:type="xs:string"`, "x")
+		mustAccept(t, schema, data)
+		got, err := Decode[rootAny](schema, strict.New(), data)
+		if got != nil {
+			t.Fatalf("Decode = %v, want no value", got)
+		}
+		assertDecline(t, err, constructXsiType, 1, 1)
+		if err := CheckDecode[rootAny](schema, rootName); err != nil {
+			t.Errorf("CheckDecode = %v, want nil, the decline being the instance's", err)
+		}
 	}
 }
 
@@ -258,6 +397,8 @@ func TestDecodeAnyTypeMismatch(t *testing.T) {
 			A anyType
 			B *anyType
 		}](), "field 0 of struct { A codec.anyType; B *codec.anyType } is A codec.anyType where codegen emits A []X for a struct X of codegen's AnyType shape"},
+		{"a document element's T of E", rootAnySchema, ``, into[anyElement](), "codec.anyElement is neither a struct X of codegen's AnyType shape nor a named type over one"},
+		{"a document element's T of no field", rootAnySchema, ``, into[struct{}](), "struct {} is neither a struct X of codegen's AnyType shape nor a named type over one"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
