@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -165,4 +166,74 @@ func ExampleWithBranches() {
 	}
 	// Output:
 	// card 4111
+}
+
+// precisionDecimal, its Value interface precisionDecimalValue and the four
+// arms are the datatype struct, sealed interface and arms codegen emits for
+// xs:precisionDecimal, and decimals the struct it emits for
+// ExampleWithPrecisionDecimalArms' s:r, written by hand so the example
+// generates nothing.
+type (
+	precisionDecimal               struct{ Value precisionDecimalValue }
+	precisionDecimalValue          interface{ isPrecisionDecimalValue() }
+	precisionDecimalValueNumerical struct {
+		Coefficient big.Int
+		Scale       big.Int
+		Negative    bool
+	}
+	precisionDecimalValuePositiveInfinity struct{}
+	precisionDecimalValueNegativeInfinity struct{}
+	precisionDecimalValueNotANumber       struct{}
+	decimals                              struct{ V []precisionDecimal }
+)
+
+func (precisionDecimalValueNumerical) isPrecisionDecimalValue()        {}
+func (precisionDecimalValuePositiveInfinity) isPrecisionDecimalValue() {}
+func (precisionDecimalValueNegativeInfinity) isPrecisionDecimalValue() {}
+func (precisionDecimalValueNotANumber) isPrecisionDecimalValue()       {}
+
+// ExampleWithPrecisionDecimalArms parses an inline schema whose document
+// element holds repeated xs:precisionDecimal elements, decodes 3E2, -0 and
+// INF into the sealed interface precisionDecimalValue, given its arms in their
+// roles by WithPrecisionDecimalArms, and type-switches on each value's arm.
+func ExampleWithPrecisionDecimalArms() {
+	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="urn:s" targetNamespace="urn:s" elementFormDefault="qualified">
+  <xs:element name="r"><xs:complexType><xs:sequence>
+    <xs:element name="v" type="xs:precisionDecimal" maxOccurs="unbounded"/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>`
+	resolve := loader.ResolverFunc(func(_, location string) (io.ReadCloser, string, error) {
+		if location != "s.xsd" {
+			return nil, "", fmt.Errorf("no document %q", location)
+		}
+		return io.NopCloser(strings.NewReader(doc)), location, nil
+	})
+	schema, err := parser.Parse("s.xsd", parser.WithResolver(resolve))
+	if err != nil {
+		log.Fatal(err)
+	}
+	instance := []byte(`<s:r xmlns:s="urn:s"><s:v>3E2</s:v><s:v>-0</s:v><s:v>INF</s:v></s:r>`)
+	arms := codec.WithPrecisionDecimalArms[precisionDecimalValue](precisionDecimalValueNumerical{},
+		precisionDecimalValuePositiveInfinity{}, precisionDecimalValueNegativeInfinity{}, precisionDecimalValueNotANumber{})
+	r, err := codec.Decode[decimals](schema, strict.New(), instance, arms)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for _, v := range r.V {
+		switch a := v.Value.(type) {
+		case precisionDecimalValueNumerical:
+			fmt.Println("numerical", a.Coefficient.String(), a.Scale.String(), a.Negative)
+		case precisionDecimalValuePositiveInfinity:
+			fmt.Println("positive infinity")
+		case precisionDecimalValueNegativeInfinity:
+			fmt.Println("negative infinity")
+		case precisionDecimalValueNotANumber:
+			fmt.Println("not a number")
+		}
+	}
+	// Output:
+	// numerical 3 -2 false
+	// numerical 0 0 true
+	// positive infinity
 }

@@ -57,76 +57,91 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // content, its owner element's for an attribute, and for a supplied value
 // those in scope at the schema document element that wrote the value
 // constraint ([value.ConstraintContext]), never the instance's; read back
-// through that mapping's Canonical and converted to the Go type: a boolean's
-// canonical form exactly "true" or "false" (§E.4 f-booleanCanmap), a float's
-// and a double's by strconv.ParseFloat at the Go type's width, a decimal's
-// into big.Rat, big.Int or one of the bounded Go integers int64, int32,
-// int16, int8, uint64, uint32, uint16 and uint8 at its width, a hexBinary's
-// into []byte by encoding/hex, either letter case read (§E.4.1
-// f-hexBinaryMap), a base64Binary's into []byte by encoding/base64's
-// StdEncoding (§3.3.16.2), and a date, time or duration type's into its
-// datatype struct, by that datatype's lexical grammar (§3.3.6.2,
-// §3.3.7.2–§3.3.14.2, §D.2.2), each property the local value the form shows,
-// never converted to UTC (§D.2.1), the timezoneOffset in minutes, and a
-// duration's Months and Seconds both of the form's one sign (§3.3.6.1, §E.2).
-// A type whose datatype struct is yearMonthDuration's alone is converted from
-// the string Parse accepted, so that zero, which has no canonical
-// representation (§3.4.26.1), decodes as Months 0; its Canonical is never
-// consulted. A type whose datatype struct is QName's, an xs:QName or
-// xs:NOTATION type, neither of which has a canonical representation (§3.3.18,
-// §3.3.19), is the expanded name the string Parse accepted resolves to
-// against the same bindings Parse was given, Space its namespace name, "" for
-// none, and Local its local part, no prefix kept; its Canonical is never
-// consulted either. A type whose datatype struct is PrecisionDecimal's, an
-// xs:precisionDecimal type, is converted from the string Parse accepted by
-// ·precisionDecimalLexicalMap· (precisionDecimal §6 f-precDecLexmap), since
-// its canonical mapping keeps neither the ·scale· of zero nor its ·sign·
-// (f-precDecCanmap); its Canonical is never consulted. Its Value holds the
-// arm [WithPrecisionDecimalArms] supplies for the value's ·numericalValue·
-// (§3.1 vp-pd-numVal): INF and +INF the positive infinity's, -INF the
-// negative infinity's and NaN the not-a-number's, each a struct of no field;
-// and a numeral the numerical arm, its Coefficient the numeral's digits read
-// as one decimal integer, the value's magnitude times 10^Scale, its Scale the
-// numeral's ·scale· (vp-pd-precision), its digits after the '.' less its
-// exponent, and its Negative true exactly when the numeral opens with '-'
-// (vp-pd-sign). So 3 and 3.00 decode to Scale 0 and 2, 0 and -0 to Negative
-// false and true, and 3E2 to Coefficient 3 and Scale -2. A float or double
-// literal beyond the type's range is the INF or -INF its mapping rounds it to
-// (·floatingPointRound·, Datatypes §E.1), so it decodes as ±Inf where the
-// backend's Canonical renders that, as builtin/strict's does, and is no item
-// 8 error. backend's governing mapping of each such type but those three
-// kinds must therefore have a non-nil Canonical, as builtin/strict's do; item
-// 8 states the error where one fails. For a list type, whose whiteSpace is
-// collapse (Datatypes §4.3.6, §2.4.1.2), the normalized string is split at
-// each U+0020 into its list items before any is mapped, an empty one into
-// none (§4.1.1 dt-list), and each item is read as above under the list's
-// {item type definition}, a restriction of a list taking its base's
-// (Structures §3.16.2.3); the value is the []A of the items in order. For a
-// union type, which has no whiteSpace of its own, so that its normalized
-// string is the characters themselves (Datatypes §4.3.6), the value is the
-// variant of its ·active basic member· (dt-active-member,
-// dt-active-basic-member): the member [value.ValidatingType] identifies on
-// that string, under the same bindings as Parse, the first member in order
-// that accepts it, descended through a member that is itself a union, a
-// {lexical form} included for a supplied value. The variant is the type
-// [WithBranches] supplies for the union's interface whose Go type is that
-// member's (item 6), and it holds the member's value read as above, from the
-// string normalized by the member's own whiteSpace (cvc-datatype-valid clause
-// 2.3, the note on its pre-lexical facets), under the member as a list or an
-// atomic type. A list of a union is []I, I the item's interface, each list
-// item's member identified on the item. So the value is the instance's own
-// even where a fixed value constraint holds it to an equal one that is not
-// identical (§3.5.4 cvc-au, cvc-elt clause 5.2.2.2.2): -0 against fixed 0 on
-// xs:double decodes to negative zero. The field of an optional attribute use
-// with an effective value constraint is the Go type codegen gives its simple
-// type itself, as codegen emits it, holding the supplied value when the
-// attribute is absent; a whitespace-only element has a character child and
-// holds its own value; and an element absent from the instance supplies
-// nothing, its field nil or not appended to. An element of type xs:anyType
-// holds no such value: its field holds its content raw (item 6), and its
-// {value constraint} supplies none, since its {content type} is mixed and it
-// has no [schema normalized value] (§3.3.5.4 sic-eltType), so an empty one's
-// Text is "" whatever its default or fixed value.
+// through that mapping's Canonical and converted to the Go type. backend's
+// governing mapping of each such type but one whose datatype struct is
+// yearMonthDuration's, QName's or PrecisionDecimal's must therefore have a
+// non-nil Canonical, as builtin/strict's do; item 8 states the error where
+// one fails. The value converts so:
+//
+//   - A boolean's: its canonical form exactly "true" or "false" (§E.4
+//     f-booleanCanmap).
+//   - A float's and a double's: by strconv.ParseFloat at the Go type's width.
+//     A literal beyond the type's range is the INF or -INF its mapping rounds
+//     it to (·floatingPointRound·, Datatypes §E.1), so it decodes as ±Inf
+//     where the backend's Canonical renders that, as builtin/strict's does,
+//     and is no item 8 error.
+//   - A decimal's: into big.Rat, big.Int or one of the bounded Go integers
+//     int64, int32, int16, int8, uint64, uint32, uint16 and uint8 at its
+//     width.
+//   - A hexBinary's: into []byte by encoding/hex, either letter case read
+//     (§E.4.1 f-hexBinaryMap).
+//   - A base64Binary's: into []byte by encoding/base64's StdEncoding
+//     (§3.3.16.2).
+//   - A date, time or duration type's: into its datatype struct, by that
+//     datatype's lexical grammar (§3.3.6.2, §3.3.7.2–§3.3.14.2, §D.2.2), each
+//     property the local value the form shows, never converted to UTC
+//     (§D.2.1), the timezoneOffset in minutes, and a duration's Months and
+//     Seconds both of the form's one sign (§3.3.6.1, §E.2).
+//   - A type whose datatype struct is yearMonthDuration's alone: converted
+//     from the string Parse accepted, so that zero, which has no canonical
+//     representation (§3.4.26.1), decodes as Months 0; its Canonical is never
+//     consulted.
+//   - A type whose datatype struct is QName's, an xs:QName or xs:NOTATION
+//     type, neither of which has a canonical representation (§3.3.18,
+//     §3.3.19): the expanded name the string Parse accepted resolves to
+//     against the same bindings Parse was given, Space its namespace name, ""
+//     for none, and Local its local part, no prefix kept; its Canonical is
+//     never consulted either.
+//   - A type whose datatype struct is PrecisionDecimal's, an
+//     xs:precisionDecimal type: converted from the string Parse accepted by
+//     ·precisionDecimalLexicalMap· (precisionDecimal §6 f-precDecLexmap),
+//     since its canonical mapping keeps neither the ·scale· of zero nor its
+//     ·sign· (f-precDecCanmap); its Canonical is never consulted. Its Value
+//     holds the arm [WithPrecisionDecimalArms] supplies for the value's
+//     ·numericalValue· (§3.1 vp-pd-numVal): INF and +INF the positive
+//     infinity's, -INF the negative infinity's and NaN the not-a-number's,
+//     each a struct of no field; and a numeral the numerical arm, its
+//     Coefficient the numeral's digits read as one decimal integer and its
+//     Scale the numeral's ·scale· (vp-pd-precision), its digits after the '.'
+//     less its exponent, which give the value codegen's package doc states in
+//     "# Simple types", and its Negative true exactly when the
+//     numeral opens with '-' (vp-pd-sign). So 3 and 3.00 decode to Scale 0
+//     and 2, 0 and -0 to Negative false and true, and 3E2 to Coefficient 3
+//     and Scale -2.
+//   - A list type's, whose whiteSpace is collapse (Datatypes §4.3.6,
+//     §2.4.1.2): the normalized string is split at each U+0020 into its list
+//     items before any is mapped, an empty one into none (§4.1.1 dt-list), and
+//     each item is read as above under the list's {item type definition}, a
+//     restriction of a list taking its base's (Structures §3.16.2.3); the
+//     value is the []A of the items in order.
+//   - A union type's, which has no whiteSpace of its own, so that its
+//     normalized string is the characters themselves (Datatypes §4.3.6): the
+//     variant of its ·active basic member· (dt-active-member,
+//     dt-active-basic-member), the member [value.ValidatingType] identifies on
+//     that string, under the same bindings as Parse, the first member in order
+//     that accepts it, descended through a member that is itself a union, a
+//     {lexical form} included for a supplied value. The variant is the type
+//     [WithBranches] supplies for the union's interface whose Go type is that
+//     member's (item 6), and it holds the member's value read as above, from
+//     the string normalized by the member's own whiteSpace (cvc-datatype-valid
+//     clause 2.3, the note on its pre-lexical facets), under the member as a
+//     list or an atomic type. A list of a union is []I, I the item's
+//     interface, each list item's member identified on the item.
+//
+// Since a value is read from the item's own characters, and supplied only
+// where the item has none, it is the instance's own even where a fixed value
+// constraint holds it to an equal one that is not identical (§3.5.4 cvc-au,
+// cvc-elt clause 5.2.2.2.2): -0 against fixed 0 on xs:double decodes to
+// negative zero. The field of an optional attribute use with an effective
+// value constraint is the Go type codegen gives its simple type itself, as
+// codegen emits it, holding the supplied value when the attribute is absent;
+// a whitespace-only element has a character child and holds its own value;
+// and an element absent from the instance supplies nothing, its field nil or
+// not appended to. An element of type xs:anyType holds no such value: its
+// field holds its content raw (item 6), and its {value constraint} supplies
+// none, since its {content type} is mixed and it has no [schema normalized
+// value] (§3.3.5.4 sic-eltType), so an empty one's Text is "" whatever its
+// default or fixed value.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the

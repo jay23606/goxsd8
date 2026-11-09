@@ -23,9 +23,9 @@ type decimalValue interface {
 // decimalNumerical is the arm of a finite value, the mirror of codegen's
 // PrecisionDecimalValueNumerical, holding its fields exactly, in name, order
 // and Go type, so that the caller's arm converts to it and back:
-// Coefficient, the value's magnitude times 10^Scale; Scale, its ·scale·
-// (vp-pd-precision); and Negative, its ·sign· (vp-pd-sign) negative.
-// TestDatatypeMirrorsAreCodegens pins it to codegen's.
+// Coefficient, Scale, its ·scale· (vp-pd-precision), and Negative, its ·sign·
+// (vp-pd-sign) negative, each as codegen's package doc, "# Simple types",
+// states it. TestDatatypeMirrorsAreCodegens pins it to codegen's.
 type decimalNumerical struct {
 	Coefficient big.Int
 	Scale       big.Int
@@ -65,9 +65,9 @@ var decimalValueType = reflect.TypeFor[decimalValue]()
 // and NaN notANumber, those spellings only; any other is a numeral of
 // digits D with n of them after an optional '.', and an optional exponent E,
 // whose ·scale· is n − E (·decimalPtPrecision·, ·scientificPrecision·),
-// whose Coefficient is D read as a decimal integer, which is the value's
-// magnitude times 10^scale, and whose ·sign· is negative exactly when lexical
-// opens with '-', zero included. Scale is unbounded, as ·scale· is.
+// whose Coefficient is D read as a decimal integer, which give the value
+// decimalNumerical's doc points to, and whose ·sign· is negative exactly when
+// lexical opens with '-', zero included. Scale is unbounded, as ·scale· is.
 func convertDecimal(lexical string) (reflect.Value, error) {
 	v := reflect.New(decimalValueType).Elem()
 	switch lexical {
