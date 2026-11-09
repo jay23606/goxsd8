@@ -56,7 +56,7 @@ func TestWrapReachThrough(t *testing.T) {
 	if !errors.Is(wrapped, sentinel) {
 		t.Fatalf("errors.Is(wrapped, sentinel) = false, want true")
 	}
-	// Wrap preserves the wrapped message verbatim rather than duplicating it.
+	// Wrap preserves a plain cause's message verbatim rather than duplicating it.
 	if wrapped.Msg != sentinel.Error() {
 		t.Fatalf("Msg = %q, want %q", wrapped.Msg, sentinel.Error())
 	}
@@ -66,9 +66,56 @@ func TestWrapReachThrough(t *testing.T) {
 	}
 }
 
+// TestWrapCauseRendering pins Wrap's Error() line over an *Error cause. The
+// "zero-Loc cause" rows fail if Msg is err.Error() again, which prints the
+// cause's unknown position as "?: "; the "placed cause" row fails if every
+// *Error cause renders from its fields, which drops the cause's own Loc.
+func TestWrapCauseRendering(t *testing.T) {
+	outer := Loc{URI: "a.xsd", Line: 1, Col: 2}
+	for _, tc := range []struct {
+		name  string
+		loc   Loc
+		cause error
+		want  string
+	}{
+		{"zero-Loc cause, placed outer", outer, New("cvc-datatype-valid", Loc{}, "inner"), "a.xsd:1:2: [maxInclusive-valid-restriction] [cvc-datatype-valid] inner"},
+		{"zero-Loc cause, zero outer", Loc{}, New("cvc-datatype-valid", Loc{}, "inner"), "?: [maxInclusive-valid-restriction] [cvc-datatype-valid] inner"},
+		{"placed cause", outer, New("cvc-datatype-valid", Loc{URI: "b.xsd", Line: 3, Col: 4}, "inner"), "a.xsd:1:2: [maxInclusive-valid-restriction] b.xsd:3:4: [cvc-datatype-valid] inner"},
+	} {
+		if got := Wrap("maxInclusive-valid-restriction", tc.loc, tc.cause).Error(); got != tc.want {
+			t.Errorf("%s: Error() = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestWrapNil(t *testing.T) {
 	if got := Wrap("cvc-elt.1", Loc{}, nil); got != nil {
 		t.Fatalf("Wrap(nil) = %v, want nil", got)
+	}
+}
+
+// TestCauseText pins one row per arm of CauseText's rendering. The "wrapper"
+// row fails if the assertion becomes errors.As, which reaches the zero-Loc
+// *Error inside the fmt wrapper and drops the wrapper's own text.
+func TestCauseText(t *testing.T) {
+	unplaced := New("cvc-datatype-valid", Loc{}, "inner")
+	var typedNil *Error
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"bare zero-Loc", unplaced, "[cvc-datatype-valid] inner"},
+		{"placed", New("cvc-datatype-valid", Loc{URI: "a.xsd", Line: 2, Col: 3}, "inner"), "a.xsd:2:3: [cvc-datatype-valid] inner"},
+		{"partial Loc", New("cvc-datatype-valid", Loc{Line: 3}, "inner"), "?:3: [cvc-datatype-valid] inner"},
+		{"plain", errors.New("plain cause"), "plain cause"},
+		{"wrapper", fmt.Errorf("context: %w", unplaced), "context: ?: [cvc-datatype-valid] inner"},
+		{"nil", nil, "<nil>"},
+		{"typed-nil", typedNil, "<nil>"},
+	} {
+		if got := CauseText(tc.err); got != tc.want {
+			t.Errorf("%s: CauseText = %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }
 

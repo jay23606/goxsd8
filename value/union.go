@@ -157,7 +157,7 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 // decided by nobody. A member whose assertions facet FAILS is an ordinary
 // rejection and the scan goes on, which is how a later member becomes active.
 //
-// Each member's reason renders as memberRejection states.
+// Each member's reason renders as [xsderr.CauseText] renders it.
 //
 // A union whose {member type definitions} is EMPTY — xs:error (Structures
 // §3.16.7.3), whose value and lexical spaces are both empty — falls out of the
@@ -175,25 +175,11 @@ func dispatchUnion(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, raw
 		if IsFacetPrecondition(err) || IsAssertionDeclined(err) {
 			return nil, nil, err
 		}
-		rejections = append(rejections, fmt.Sprintf("member %d (%s): %v", i, m.Name(), memberRejection(err)))
+		rejections = append(rejections, fmt.Sprintf("member %d (%s): %s", i, m.Name(), xsderr.CauseText(err)))
 	}
 	return nil, nil, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
 		"value %q is Datatype Valid with respect to no member of the union's %d {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one: %s",
 		rawLexical, len(members), strings.Join(rejections, "; "))
-}
-
-// memberRejection is how dispatchUnion folds member err into its rejection
-// list. An err that is itself an *xsderr.Error with the zero Loc renders from
-// its fields as "[rule] msg", since its Error() would print the unknown
-// position as "?: " inside a message whose own Loc places it (#3457); every
-// other err renders as %v renders it, a wrapper around a zero-Loc
-// *xsderr.Error included.
-func memberRejection(err error) any {
-	//nolint:errorlint // only err ITSELF renders from its fields: a wrapper around a zero-Loc *xsderr.Error keeps its own %v rendering.
-	if inner, ok := err.(*xsderr.Error); ok && inner.Loc == (xsderr.Loc{}) {
-		return fmt.Sprintf("[%s] %s", inner.Rule, inner.Msg)
-	}
-	return err
 }
 
 // activeBasicMember is ValidatingType's own descent for dt-active-member /

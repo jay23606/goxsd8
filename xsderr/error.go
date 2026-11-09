@@ -113,7 +113,26 @@ type Error struct {
 
 // Error renders the error as "loc: [rule] msg".
 func (e *Error) Error() string {
-	return fmt.Sprintf("%s: [%s] %s", e.Loc, e.Rule, e.Msg)
+	return e.Loc.String() + ": " + e.ruleMsg()
+}
+
+// ruleMsg renders e without its Loc, as "[rule] msg".
+func (e *Error) ruleMsg() string {
+	return fmt.Sprintf("[%s] %s", e.Rule, e.Msg)
+}
+
+// CauseText renders err as it reads when quoted as the cause inside another
+// message. An err that is itself an *Error — its own dynamic type, not an
+// *Error found further down its chain — with the zero Loc renders as
+// "[rule] msg", without the "?: " its Error would print for the unknown
+// position; every other err, nil and a wrapper around a zero-Loc *Error
+// included, renders as fmt's %v renders it.
+func CauseText(err error) string {
+	//nolint:errorlint // only err ITSELF renders from its fields: a wrapper around a zero-Loc *Error keeps its own %v rendering.
+	if e, ok := err.(*Error); ok && e != nil && e.Loc == (Loc{}) {
+		return e.ruleMsg()
+	}
+	return fmt.Sprint(err)
 }
 
 // Unwrap returns the wrapped cause so errors.Is and errors.As reach through the
@@ -129,14 +148,14 @@ func New(rule Rule, loc Loc, format string, args ...any) *Error {
 	return &Error{Rule: rule, Loc: loc, Msg: fmt.Sprintf(format, args...)}
 }
 
-// Wrap attaches rule and loc to a deeper plain error, preserving its message
-// verbatim (Msg is err.Error()) and its identity (Unwrap returns err so
-// errors.Is/As reach the wrapped cause). Wrap returns nil when err is nil.
+// Wrap attaches rule and loc to a deeper error, keeping its identity (Unwrap
+// returns err so errors.Is/As reach the wrapped cause) and taking Msg from
+// CauseText(err). Wrap returns nil when err is nil.
 func Wrap(rule Rule, loc Loc, err error) *Error {
 	if err == nil {
 		return nil
 	}
-	return &Error{Rule: rule, Loc: loc, Msg: err.Error(), Err: err}
+	return &Error{Rule: rule, Loc: loc, Msg: CauseText(err), Err: err}
 }
 
 // RuleOf reports the Rule of the first *Error in err's chain. The second result

@@ -356,24 +356,15 @@ func (m resultMark) skipping(from, to resultMark) resultMark {
 //
 // format therefore stops at the delegating rule's own sentence, which leads
 // with its own fact and closes on its own citation (STYLE E5) — the ": " and
-// the cause's own rendering are this function's to append. A cause that is
-// itself an *xsderr.Error with the zero Loc renders from its fields as
-// "[rule] msg", since its Error() would print the unknown position as "?: "
-// inside a line the outer Loc already places (#1844); every other cause
-// renders as %v renders it. A nil cause yields the plain [xsderr.New] result,
-// Msg unadorned and Unwrap nil, and reaches here only through
-// [contentCheck.charge]: every other non-delegating charge site in the package
-// calls [xsderr.New] itself.
+// the cause's own rendering are this function's to append. The cause renders
+// as [xsderr.CauseText] renders it. A nil cause yields the plain [xsderr.New] result,
+// Msg unadorned and Unwrap nil, and reaches here only through [contentCheck.charge]:
+// every other non-delegating charge site in the package calls [xsderr.New] itself.
 func causedBy(rule xsderr.Rule, loc xsderr.Loc, cause error, format string, args ...any) *xsderr.Error {
 	if cause == nil {
 		return xsderr.New(rule, loc, format, args...)
 	}
-	var rendered any = cause
-	//nolint:errorlint // only the cause ITSELF renders from its fields: a wrapper around a zero-Loc *xsderr.Error keeps its own %v rendering.
-	if inner, ok := cause.(*xsderr.Error); ok && inner.Loc == (xsderr.Loc{}) {
-		rendered = fmt.Sprintf("[%s] %s", inner.Rule, inner.Msg)
-	}
-	v := xsderr.New(rule, loc, format+": %v", append(slices.Clone(args), rendered)...)
+	v := xsderr.New(rule, loc, format+": %s", append(slices.Clone(args), xsderr.CauseText(cause))...)
 	v.Err = cause
 	return v
 }

@@ -709,10 +709,8 @@ func TestNonDelegatingChargeWrapsNothing(t *testing.T) {
 	}
 }
 
-// causedBy drops only the zero Loc's placeholder: a cause that is not itself an
-// *xsderr.Error, or is one with a position of its own, still renders as %v
-// renders it, position included (#1844). Every arm keeps the identical cause
-// as the wrapped one.
+// causedBy renders its cause as xsderr.CauseText renders it, one row per arm
+// (#1844). Every arm keeps the identical cause as the wrapped one.
 func TestCausedByRendersOnlyAnUnplacedCauseFromItsFields(t *testing.T) {
 	placed := xsderr.New("cvc-datatype-valid", loc(2, 7), "boom")
 	for _, tc := range []struct {
