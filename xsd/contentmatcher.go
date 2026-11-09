@@ -819,17 +819,67 @@ func compareRegions(a, b region) int {
 // A third search follows them where the {content type}'s {open content} is
 // present, and is reachable only once both have failed — which is exactly
 // cvc-complex-content clause 2.3's and 3.3's "has no ·path· in {particle}".
+//
+// Next is [Matcher.NextParticle] without the position.
 func (m *Matcher) Next(name QName) (Attribution, bool) {
+	a, _, ok := m.NextParticle(name)
+	return a, ok
+}
+
+// NextParticle takes the one step [Matcher.Next] takes, answering as Next
+// does, and reports beside the answer the POSITION of the particle the item is
+// ·attributed to·: at each model group from the {content type}'s {particle}
+// down, the index among that group's {particles} of the one the path takes,
+// outermost first, the {content type}'s {particle} itself not counted. So
+// sequence(a, choice(b, c)) puts b at [1 0]. Particles at different points of
+// a content model are distinct components even where their {term}s are equal
+// (§3.8.6.4 cos-nonambig), and the position tells apart the items an equal
+// [Wildcard] answer cannot.
+//
+// The position is nil with a rejected name. It is empty and non-nil for an
+// [*OpenContent] answer, which is no particle (§3.4.4.4), and for an element
+// or wildcard particle that is the {content type}'s {particle} itself, which
+// no group holds. It is non-empty for every other [ElementDeclaration] or
+// [Wildcard] answer. Each call returns a fresh slice the caller may keep.
+//
+// One position answers for every live ·partition· of the items so far:
+// cos-nonambig leaves no two of them attributing one name to different
+// particles, and the element-first order Next states settles an element
+// particle against a wildcard particle.
+func (m *Matcher) NextParticle(name QName) (Attribution, []int, bool) {
 	if m.inS2 {
-		return m.openNext(name)
+		return m.openNextParticle(name)
 	}
 	if a, ok := m.step(nameTest{name, admitElements}); ok {
-		return a, true
+		return a, m.position(), true
 	}
 	if a, ok := m.step(nameTest{name, admitWildcards}); ok {
-		return a, true
+		return a, m.position(), true
 	}
-	return m.openNext(name)
+	return m.openNextParticle(name)
+}
+
+// openNextParticle is openNext with NextParticle's position: empty for an
+// admitted item, which is attributed to no particle, and nil for a rejected
+// one.
+func (m *Matcher) openNextParticle(name QName) (Attribution, []int, bool) {
+	a, ok := m.openNext(name)
+	if !ok {
+		return nil, nil, false
+	}
+	return a, []int{}, true
+}
+
+// position is NextParticle's position of the live path, the path the last
+// item was ·attributed to· (Matcher.path), which starts at the {content
+// type}'s {particle}, node 0: each later node's index among its parent's
+// children, which flatten appends in {particles} order.
+func (m *Matcher) position() []int {
+	pos := make([]int, 0, len(m.path))
+	for d := 1; d < len(m.path); d++ {
+		pos = append(pos, m.slotOf(m.path[d-1], m.path[d]))
+	}
+	return pos
 }
 
 // openNext offers name to {open content}.{wildcard}, the third tier

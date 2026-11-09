@@ -53,7 +53,7 @@
 //   - An element particle, local or <element ref>.
 //   - A substitution group, into a sealed interface.
 //   - A choice, into a sealed interface.
-//   - A wildcard particle.
+//   - A wildcard particle, any number of them in one sequence or choice.
 //   - An element declaration of type xs:anyType, the document element's or a
 //     particle's.
 //   - An attribute use.
@@ -106,13 +106,12 @@
 // interface over the referenced declaration's substitution group (codegen's
 // package doc, "# Substitution groups"), and each declaration of the group
 // with {abstract} false is such a declaration, an abstract head's own
-// properties never read; or the particle is a wildcard, at most one of the
-// sequence's or choice's particles, whatever its {namespace constraint} and
-// {process contents}. No two element particles share an expanded name, such an
-// interface's particle taking each of those declarations'. Each attribute use
-// is outside the xsi namespace and is typed the same way. No element in the
-// instance carries xsi:type, except inside a wildcard's match or an element of
-// type xs:anyType's raw content.
+// properties never read; or the particle is a wildcard, whatever its
+// {namespace constraint} and {process contents}. No two element particles
+// share an expanded name, such an interface's particle taking each of those
+// declarations'. Each attribute use is outside the xsi namespace and is typed
+// the same way. No element in the instance carries xsi:type, except inside a
+// wildcard's match or an element of type xs:anyType's raw content.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
@@ -137,10 +136,10 @@
 // cvc-accept clause 2.3.2), whose field and alternatives item 6 of
 // [Decode]'s doc states.
 //
-// A wildcard particle decodes into codegen's AnyElement field, or a choice's
-// branch holding one, each child attributed to the wildcard held raw;
-// [Decode]'s doc states the field, which children are attributed to it, and
-// the raw content.
+// Each wildcard particle decodes into its own AnyElement field codegen emits,
+// or a choice's branch holding one, each child attributed to that particle
+// held raw; [Decode]'s doc states the field, which children are attributed to
+// it, and the raw content.
 //
 // An element declaration of type xs:anyType itself (Structures §3.4.7),
 // nillable or not, decodes: the document element's into the named type
@@ -163,7 +162,6 @@
 //   - An all group.
 //   - A nested model group, inline or through <group ref>, a choice's
 //     model-group alternative included.
-//   - A second wildcard particle among one sequence's or choice's particles.
 //   - Mixed content.
 //   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/big"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -43,6 +44,12 @@ type (
 // wildcard, and wildDecimalSchema's a wildcard beside an element named any
 // of xs:decimal; openWildSchema is codegen's wildcard fixture, whose top-level
 // element anyElement makes codegen name the raw-content element AnyElement2.
+// The rest hold several wildcard particles: twoWildSchema's sequence an
+// element e between wildcards over urn:a and urn:b; equalWildSchema's two
+// ##any wildcards whose {term}s are equal, mgF019's; moreWildSchema's
+// repeated urn:b and optional urn:c wildcards after twoWildSchema's first
+// two particles; and shapeWildSchema's choice a wildcard over urn:a once and
+// one over urn:b repeated.
 const (
 	seqStrictSchema   = `<xs:element name="w" type="xs:string"/>` + `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any namespace="##targetNamespace"/></xs:sequence></xs:complexType></xs:element>`
 	seqLaxSchema      = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
@@ -56,6 +63,10 @@ const (
 	nameAnySchema     = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="any" type="xs:string"/><xs:any namespace="##other" processContents="lax"/></xs:choice></xs:complexType></xs:element>`
 	wildDecimalSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:decimal"/></xs:choice></xs:complexType></xs:element>`
 	openWildSchema    = `<xs:element name="anyElement" type="xs:string"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element name="id" type="xs:string"/><xs:any minOccurs="0" maxOccurs="unbounded" namespace="##other" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
+	twoWildSchema     = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any namespace="urn:a" processContents="lax"/><xs:element name="e" type="xs:string"/><xs:any namespace="urn:b" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
+	equalWildSchema   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any processContents="skip"/><xs:any processContents="skip"/></xs:sequence></xs:complexType></xs:element>`
+	moreWildSchema    = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any namespace="urn:a" processContents="lax"/><xs:element name="e" type="xs:string"/><xs:any namespace="urn:b" processContents="lax" maxOccurs="unbounded"/><xs:any namespace="urn:c" processContents="lax" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	shapeWildSchema   = `<xs:element name="r"><xs:complexType><xs:choice><xs:any namespace="urn:a" processContents="lax"/><xs:any namespace="urn:b" processContents="lax" maxOccurs="unbounded"/></xs:choice></xs:complexType></xs:element>`
 )
 
 // The types codegen emits for those schemas' s:r, each named here by its
@@ -79,7 +90,19 @@ type (
 		A   string
 	}
 	nestedWild struct{ N struct{ Any anyElement } }
-	open       struct {
+	twoWild    struct {
+		Any  anyElement
+		E    string
+		Any2 anyElement
+	}
+	equalWild struct{ Any, Any2 anyElement }
+	moreWild  struct {
+		Any  anyElement
+		E    string
+		Any2 []anyElement
+		Any3 *anyElement
+	}
+	open struct {
 		Id  string
 		Any []anyElement
 	}
@@ -95,6 +118,10 @@ type (
 	nameAnyAny2  struct{ Any anyElement }
 	pickWildAny2 struct{ Any anyElement2 }
 
+	shapeWild     interface{ isShapeWild() }
+	shapeWildAny  struct{ Any anyElement }
+	shapeWildAny2 struct{ Any []anyElement }
+
 	wildDecimal     interface{ isWildDecimal() }
 	wildDecimalAny  struct{ Any anyElement }
 	wildDecimalAny2 struct{ Any big.Rat }
@@ -107,6 +134,9 @@ func (manyWildAny) isManyWild()  {}
 func (nameAnyAny) isNameAny()    {}
 func (nameAnyAny2) isNameAny()   {}
 func (pickWildAny2) isPickWild() {}
+
+func (shapeWildAny) isShapeWild()  {}
+func (shapeWildAny2) isShapeWild() {}
 
 func (wildDecimalAny) isWildDecimal()  {}
 func (wildDecimalAny2) isWildDecimal() {}
@@ -131,9 +161,10 @@ type (
 
 // The branch sets of the choice schemas' interfaces.
 var (
-	pickWildBranches = WithBranches[pickWild](pickWildA{}, pickWildAny{})
-	manyWildBranches = WithBranches[manyWild](manyWildB{}, manyWildAny{})
-	nameAnyBranches  = WithBranches[nameAny](nameAnyAny{}, nameAnyAny2{})
+	pickWildBranches  = WithBranches[pickWild](pickWildA{}, pickWildAny{})
+	manyWildBranches  = WithBranches[manyWild](manyWildB{}, manyWildAny{})
+	nameAnyBranches   = WithBranches[nameAny](nameAnyAny{}, nameAnyAny2{})
+	shapeWildBranches = WithBranches[shapeWild](shapeWildAny{}, shapeWildAny2{})
 
 	wildDecimalBranches = WithBranches[wildDecimal](wildDecimalAny{}, wildDecimalAny2{})
 )
@@ -179,6 +210,13 @@ func TestWildcardTypesAreCodegens(t *testing.T) {
 			"type RAny2 struct {\n\tAny big.Rat\n}\n\nfunc (RAny2) isR() {}\n",
 		}},
 		{openWildSchema, append(raw("AnyElement2"), "type R struct {\n\tId  string\n\tAny []AnyElement2\n}\n")},
+		{twoWildSchema, []string{"type R struct {\n\tAny  AnyElement\n\tE    string\n\tAny2 AnyElement\n}\n"}},
+		{equalWildSchema, []string{"type R struct {\n\tAny  AnyElement\n\tAny2 AnyElement\n}\n"}},
+		{moreWildSchema, []string{"type R struct {\n\tAny  AnyElement\n\tE    string\n\tAny2 []AnyElement\n\tAny3 *AnyElement\n}\n"}},
+		{shapeWildSchema, []string{
+			"type RAny struct {\n\tAny AnyElement\n}\n\nfunc (RAny) isR() {}\n",
+			"type RAny2 struct {\n\tAny []AnyElement\n}\n\nfunc (RAny2) isR() {}\n",
+		}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -197,10 +235,13 @@ func TestWildcardTypesAreCodegens(t *testing.T) {
 // as validation attributes it (§3.4.4.4 key-att-to), an element particle
 // taking a name before the wildcard (cvc-accept, §3.8.6.4 cos-nonambig), so
 // of sequence(a, b?, any?) the second <b/> is the wildcard's, and of
-// sequence(a, any*) the second <a/>. A match's xsi:type, at any depth, is
-// one of its raw attributes and no decline.
+// sequence(a, any*) the second <a/>. Of several wildcard particles, each
+// child is the field or branch of the particle it is attributed to, two
+// wildcards of equal {term}s told apart by position. A match's xsi:type, at
+// any depth, is one of its raw attributes and no decline.
 func TestDecodeWildcard(t *testing.T) {
 	const other = ` xmlns:o="urn:o"`
+	const abc = ` xmlns:a="urn:a" xmlns:b="urn:b" xmlns:c="urn:c"`
 	str := func(s string) *string { return &s }
 	el := func(space, local, text string) anyElement {
 		return anyElement{Space: space, Local: local, Content: anyType{Text: text}}
@@ -256,6 +297,18 @@ func TestDecodeWildcard(t *testing.T) {
 		{"codegen's wildcard fixture, no match", openWildSchema, `<s:id>i</s:id>`, into[open](), open{Id: "i"}},
 		{"codegen's wildcard fixture, two matches", openWildSchema, `<s:id>i</s:id><o:x` + other + `/><o:y` + other + `/>`, into[open](),
 			open{Id: "i", Any: []anyElement{el("urn:o", "x", ""), el("urn:o", "y", "")}}},
+		{"two wildcards around an element", twoWildSchema, `<a:x` + abc + `>1</a:x><s:e>2</s:e><b:y` + abc + `>3</b:y>`, into[twoWild](),
+			twoWild{Any: el("urn:a", "x", "1"), E: "2", Any2: el("urn:b", "y", "3")}},
+		{"two wildcards of equal terms", equalWildSchema, `<o:x` + other + `>1</o:x><o:y` + other + `>2</o:y>`, into[equalWild](),
+			equalWild{Any: el("urn:o", "x", "1"), Any2: el("urn:o", "y", "2")}},
+		{"a repeated and an optional wildcard after the second particle", moreWildSchema,
+			`<a:x` + abc + `/><s:e>2</s:e><b:y` + abc + `>3</b:y><b:z` + abc + `>4</b:z><c:w` + abc + `>5</c:w>`, into[moreWild](),
+			moreWild{Any: el("urn:a", "x", ""), E: "2", Any2: []anyElement{el("urn:b", "y", "3"), el("urn:b", "z", "4")}, Any3: &anyElement{Space: "urn:c", Local: "w", Content: anyType{Text: "5"}}}},
+		{"a repeated wildcard after the second particle, the optional one absent", moreWildSchema, `<a:x` + abc + `/><s:e>2</s:e><b:y` + abc + `/>`, into[moreWild](),
+			moreWild{Any: el("urn:a", "x", ""), E: "2", Any2: []anyElement{el("urn:b", "y", "")}}},
+		{"choice of two wildcards, the first", shapeWildSchema, `<a:x` + abc + `>1</a:x>`, into[shapeWild](shapeWildBranches), shapeWild(shapeWildAny{Any: el("urn:a", "x", "1")})},
+		{"choice of two wildcards, the repeated second", shapeWildSchema, `<b:x` + abc + `>1</b:x><b:y` + abc + `/>`, into[shapeWild](shapeWildBranches),
+			shapeWild(shapeWildAny2{Any: []anyElement{el("urn:b", "x", "1"), el("urn:b", "y", "")}})},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -359,3 +412,24 @@ type (
 )
 
 func (pickWildOther) isPickWild() {}
+
+// TestDecodeWildcardSharedBranch pins that a choice of two wildcard
+// alternatives occurring alike declines as a shared branch, which no branch
+// struct could tell apart (field.sharesBranch), the decline's detail opening
+// with the second wildcard particle, Decode and CheckDecode alike.
+func TestDecodeWildcardSharedBranch(t *testing.T) {
+	const want = "codec does not decode two branches of a sealed interface whose structs have one shape: wildcard particle 2 of "
+	schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:choice><xs:any namespace="urn:a" processContents="lax"/><xs:any namespace="urn:b" processContents="lax"/></xs:choice></xs:complexType></xs:element>`)
+	data := instanceOf("", `<b:x xmlns:b="urn:b"/>`)
+	mustAccept(t, schema, data)
+	_, decodeErr := Decode[struct{}](schema, strict.New(), data)
+	for i, err := range []error{decodeErr, CheckDecode[struct{}](schema, rootName)} {
+		var de *DeclineError
+		if !errors.As(err, &de) || de.Construct() != (Construct{constructSharedBranch}) {
+			t.Fatalf("error %d = %v, want the shared-branch *DeclineError", i, err)
+		}
+		if got := err.Error(); !strings.Contains(got, want) {
+			t.Errorf("error %d = %q, want it to hold %q", i, got, want)
+		}
+	}
+}

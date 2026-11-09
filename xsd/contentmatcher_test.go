@@ -9,12 +9,12 @@ import (
 )
 
 // These tests drive Matcher through the exported entry points alone —
-// Schema.ContentMatcher, Matcher.Next, Matcher.Accepting, Matcher.Admissible —
-// but live in the package because the fixtures they share (uq, uOccurs, uGroup,
-// uLocal, …) are particleattribution_test.go's. Every schema below is
-// FINALIZED, which is what makes the models cos-nonambig-clean: a fixture that
-// stopped being unambiguous would fail at cmSchema rather than silently
-// exercise a model the walk is not licensed over.
+// Schema.ContentMatcher, Matcher.Next, Matcher.NextParticle, Matcher.Accepting,
+// Matcher.Admissible — but live in the package because the fixtures they share
+// (uq, uOccurs, uGroup, uLocal, …) are particleattribution_test.go's. Every
+// schema below is FINALIZED, which is what makes the models cos-nonambig-clean:
+// a fixture that stopped being unambiguous would fail at cmSchema rather than
+// silently exercise a model the walk is not licensed over.
 
 // cmSchema finalizes a schema whose complex type {urn:upa}ct has p as its
 // {content type} particle, and returns it with that type.

@@ -100,7 +100,6 @@ const (
 	constructAllContent
 	constructSequenceOccurs
 	constructNestedGroup
-	constructWildcardParticle // a wildcard particle after its sequence's or choice's first
 	constructAbstractTypeElement
 	constructSharedName
 	constructSharedBranch
@@ -123,7 +122,6 @@ var constructNames = [...]string{
 	constructAllContent:          "all content",
 	constructSequenceOccurs:      "a content sequence occurring other than exactly once",
 	constructNestedGroup:         "a nested model group particle",
-	constructWildcardParticle:    "a wildcard particle",
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
 	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",
 	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",

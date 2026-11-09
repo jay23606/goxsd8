@@ -115,10 +115,8 @@ func TestDecodeDeclines(t *testing.T) {
 		{"nested model group", sequenceOf(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructNestedGroup, 1, 1},
 		{"nested <group ref>", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>` + sequenceOf(`<xs:group ref="s:g"/>`),
 			"", a, constructNestedGroup, 1, 1},
-		{"a second wildcard particle of a sequence", sequenceOf(`<xs:any namespace="##local" processContents="lax"/><xs:element name="a" type="xs:string"/><xs:any namespace="##other" processContents="lax"/>`),
-			"", `<w/>` + a + `<o:w xmlns:o="urn:o"/>`, constructWildcardParticle, 1, 1},
-		{"a second wildcard alternative of a choice, codegen's either", root(`<xs:choice><xs:any namespace="##local"/><xs:any namespace="##other" processContents="lax"/></xs:choice>`),
-			"", `<o:w xmlns:o="urn:o"/>`, constructWildcardParticle, 1, 1},
+		{"choice alternatives sharing a branch shape, two wildcards occurring once", root(`<xs:choice><xs:any namespace="##local"/><xs:any namespace="##other" processContents="lax"/></xs:choice>`),
+			"", `<o:w xmlns:o="urn:o"/>`, constructSharedBranch, 1, 1},
 		{"a wildcard particle in mixed content", `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`,
 			"", "t" + a, constructMixedContent, 1, 1},
 		{"a wildcard particle beside an attribute wildcard", root(`<xs:sequence><xs:any processContents="lax"/></xs:sequence><xs:anyAttribute processContents="lax"/>`),
@@ -304,7 +302,7 @@ func TestCheckDecodeMaxOccursZero(t *testing.T) {
 		{"element", `<xs:element name="a" type="xs:string"/>`,
 			"codec: the particle of element {urn:s}a declared at s.xsd:1:219 has {max occurs} 0, for which codegen emits no type"},
 		{"wildcard", `<xs:any processContents="lax"/>`,
-			"codec: the wildcard particle of the {type definition} of element {urn:s}r declared at s.xsd:1:281, a type defined at s.xsd:1:181 has {max occurs} 0, for which codegen emits no type"},
+			"codec: wildcard particle 1 of the {type definition} of element {urn:s}r declared at s.xsd:1:281, a type defined at s.xsd:1:181 has {max occurs} 0, for which codegen emits no type"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) { checkMaxOccursZero(t, row.particle, row.want) })
@@ -504,8 +502,8 @@ func TestDeclineConstruct(t *testing.T) {
 			{`<xs:complexType name="ct"><xs:choice minOccurs="0"><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
 		}},
 		{"particle", [2]decl{
-			{sequenceOf(`<xs:any processContents="lax"/><xs:any processContents="lax"/>`), "", a + `<s:b/>`},
-			{root(`<xs:choice><xs:any namespace="##local" processContents="lax"/><xs:any namespace="##other" processContents="skip"/></xs:choice>`), "", `<o:c xmlns:o="urn:o"/>`},
+			{sequenceOf(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`), "", a},
+			{root(`<xs:choice><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`), "", a},
 		}},
 		{"attribute use", [2]decl{
 			{xsiImport + root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:nil"/>`), "", a},
