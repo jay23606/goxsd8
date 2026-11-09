@@ -15,7 +15,9 @@ Value implementations, parsing, validation, and generation live above them.
                                   standard library, except internal/xmltok, whose
                                   two module edges, to internal/xmlname and
                                   internal/xmlchar, are the only
-                                  internal-on-internal edges:
+                                  internal-on-internal edges, and
+                                  internal/goshape, the one internal package
+                                  above xsd, with its own row below:
                                   - internal/schemaloc, the schemaLocation resolver. Its
                                     doc.go still justifies it by the conformance closure
                                     walk #272 deleted (#1286). Its consumers are parser's
@@ -60,6 +62,8 @@ Value implementations, parsing, validation, and generation live above them.
                                     codegen names its declarations with and
                                     codec finds a generated struct's fields
                                     by.)
+                 internal/goshape (the component → Go shape decisions codegen
+                                  emits and codec binds against; imports xsd only)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
@@ -104,10 +108,10 @@ present-tense sentence in their sections below as "will", not "does".
 `codec` has left this note: it exports `Decode`/`CheckDecode`/`Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`,
 `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
 imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
-`xsderr`, `internal/goname` and `internal/xmlqname` (its section says what ships).
+`xsderr`, `internal/goname`, `internal/goshape` and `internal/xmlqname` (its section says what ships).
 `codegen` has left this note: it exports `Generate`, `CheckTargets` and
-`Target`, with the error types they return, and imports `xsd`, `xsderr`
-and `internal/goname` (its section says what ships).
+`Target`, with the error types they return, and imports `xsd`, `xsderr`,
+`internal/goname` and `internal/goshape` (its section says what ships).
 `xpath` has left this note: it exports the CTA compile, evaluate and
 statically-check entry points, and the assertion compile and evaluate ones,
 and imports `xsd`, `value`, `regex` and
@@ -139,7 +143,7 @@ them;
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
 `internal/xmlenc`, `internal/xmlname`, `internal/xmlchar`,
-`internal/xmlqname`, `internal/xmltok`, `internal/goname`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
+`internal/xmlqname`, `internal/xmltok`, `internal/goname`, `internal/goshape`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
 `parser`, `parser/xmltree`, `xpath`, `icpath`, `validate`,
 `validate/xmlsrc`, `validate/jsonsrc`, `codegen`, `codec`, `conformance` and `cmd/goxsd8` carry
 code today.
@@ -744,6 +748,9 @@ present tense because it is a design contract; read it as "will", not
   finds a generated struct's fields by. `codegen/doc.go` "# Naming" owns the
   naming rule, anonymous types' included, and which generated declarations'
   header comments record their schema origin; do not restate either here.
+- **One shape home**: `internal/goshape`, which `codegen` renders from and
+  `codec` binds against. `codegen/doc.go`'s sections own the shape rules; do
+  not restate them here.
 - `codec` is the dataset serializer/deserializer: schema-directed decode of
   instance documents into generated (or reflective) Go values and canonical
   encode back out.

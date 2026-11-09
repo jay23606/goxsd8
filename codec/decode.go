@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/kud360/goxsd8/internal/goname"
+	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/validate/xmlsrc"
@@ -2316,14 +2317,14 @@ func particleElement(schema *xsd.Schema, p xsd.Particle) (xsd.ElementDeclaration
 // the *DeclineError Decode's doc states for it, item 5, or the plain error
 // that item states in a decline's place, in the order that doc states. For a
 // top-level el, which an <element ref> named, whose substitution group
-// codegen gives a sealed interface (substitutionMembers), it is groupField's.
+// codegen gives a sealed interface (goshape.SubstitutionSum), it is groupField's.
 // Otherwise it is declField's for el, the field taking el's name alone, and
 // then an expanded name an earlier particle of its model group shares,
 // children indexing the earlier particles' names, declines; a local el of
 // simple type's field holds the Go type codegen gives its type, and a
 // top-level one's the named type codegen emits for el over it (valueNamed).
 func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, []xsd.QName, error) {
-	if members, sum := substitutionMembers(run.p.schema, el); sum {
+	if members, sum := goshape.SubstitutionSum(run.p.schema, el); sum {
 		return groupField(run, children, el, members, occurs)
 	}
 	value := valueBare
@@ -2342,7 +2343,7 @@ func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclar
 // groupField returns the field, but for its name, of an <element ref>
 // particle to head occurring as occurs, where codegen gives it the sealed
 // interface over head's substitution group, members being
-// substitutionMembers' for head, and the expanded names of members, the
+// goshape.SubstitutionSum's for head, and the expanded names of members, the
 // instance children that field takes, in group order (codegen/doc.go "#
 // Substitution groups"). The interface has one branch per member, in group
 // order, holding the one field declField gives the member, of the member's
@@ -2459,28 +2460,6 @@ func particleShape(children map[xsd.QName]int, decls []xsd.ElementDeclaration, e
 		}
 	}
 	return occursShape(occurs, "the particle of "+declSubject(el))
-}
-
-// substitutionMembers reports whether codegen gives the field of an <element
-// ref> particle to head, an element declaration, the sealed interface over
-// head's ·substitution group· (§3.3.6.4 key-eq, [xsd.Schema.SubstitutionGroup],
-// which decides cos-equiv-derived-ok-rec clauses 1 to 2.3, a head blocking
-// substitution by clause 2.1 holding itself alone) rather than head's own
-// type, and returns the group's declarations with {abstract} false, in group
-// order, since cvc-elt clause 2 validates no element against an abstract one.
-// sum is true exactly when head is top-level, a local declaration heading no
-// group (cvc-accept clause 2.3.2), and members are not head alone, so an
-// abstract head whose group holds no other declaration with {abstract} false
-// answers a sum with no members. It mirrors codegen's substitutionSum.
-func substitutionMembers(schema *xsd.Schema, head xsd.ElementDeclaration) (members []xsd.ElementDeclaration, sum bool) {
-	if head.ScopeVariety() != xsd.ScopeGlobal {
-		return nil, false
-	}
-	members = slices.DeleteFunc(schema.SubstitutionGroup(head.Name()), xsd.ElementDeclaration.Abstract)
-	if len(members) == 1 && members[0].Name() == head.Name() {
-		return nil, false
-	}
-	return members, true
 }
 
 // attributeUse returns the attribute field, but for its name, which its

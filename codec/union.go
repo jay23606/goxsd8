@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 )
@@ -41,14 +42,14 @@ func (u *unionGo) forScalar(union string) scalarElem {
 // unionDecline returns the unionGo of st, a union simple type of the item
 // subject names, or else the *DeclineError Decode's doc states for st, item 5,
 // or a plain error, in this order: each basic member in basic-member order
-// (basicMembers), examined as simpleDecline examines an atomic or list type,
+// (goshape.BasicMembers), examined as simpleDecline examines an atomic or list type,
 // the first declining member's construct, its detail naming the member after
 // subject; then a basic member whose Go type an earlier one's is
 // (simpleGo.oneGoType), constructSharedVariant, naming the later member; then
 // an assertions facet anywhere value.ValidatingType's identification of the
 // ·active basic member· reaches (reachesAssertions), constructUnionAssertions.
 func unionDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (*unionGo, error) {
-	basic, err := basicMembers(r, st)
+	basic, err := goshape.BasicMembers(r, st)
 	if err != nil {
 		return nil, err
 	}
@@ -75,44 +76,6 @@ func unionDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (*unio
 		return nil, decline(constructUnionAssertions, subject)
 	}
 	return u, nil
-}
-
-// basicMembers returns the basic members of the union simple type st
-// (Datatypes §2.4.1.3 dt-basicmember) in codegen's basic-member order
-// (codegen/doc.go "# Simple types"): its {member type definitions}, read
-// through [xsd.SimpleType.Members], which takes a restriction's from its base
-// (§3.16.2.1), depth first in member order, each union member replaced by its
-// own basic members, and each kept at its first position only, by identity. A
-// list member is basic. It mirrors codegen's basicMembers. No union reaches
-// itself through its members (cos-st-restricts clause 3.3, which finalize
-// checks), so the walk carries no visited set.
-func basicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, error) {
-	members, err := st.Members(r)
-	if err != nil {
-		return nil, err
-	}
-	var basic []*xsd.SimpleType
-	for _, m := range members {
-		variety, err := m.Variety(r)
-		if err != nil {
-			return nil, err
-		}
-		reached := []*xsd.SimpleType{m}
-		// {variety} is a closed sum, so the assertion is STYLE T2's sealed-sum
-		// exception.
-		if _, isUnion := variety.(xsd.Union); isUnion {
-			reached, err = basicMembers(r, m)
-			if err != nil {
-				return nil, err
-			}
-		}
-		for _, b := range reached {
-			if !slices.Contains(basic, b) {
-				basic = append(basic, b)
-			}
-		}
-	}
-	return basic, nil
 }
 
 // reachesAssertions reports whether an assertions facet is effective on st

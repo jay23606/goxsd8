@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/internal/goname"
+	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -1100,7 +1101,7 @@ func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.Simpl
 // unionType returns the sealed interface "# Simple types" gives the union simple
 // type t (Datatypes §2.4.1.3), emitting it and its variants when no earlier
 // declaration did: the interface's name is claimed first (unionName), then
-// each variant's, the interface's name plus variantWord's, in basicMembers' order,
+// each variant's, the interface's name plus variantWord's, in goshape.BasicMembers' order,
 // each before its member's Go type is computed with the variant's own name as what
 // an anonymous union there is named by (variantUnion). The interface and its
 // variants join e.tailDecls together at that first use, ahead of whatever their
@@ -1114,7 +1115,7 @@ func (e *emitter) unionType(subject, typed string, loc xsderr.Loc, t *xsd.Simple
 	if name, ok := e.unions[t]; ok {
 		return emittedType{name: name, sealed: true}, nil
 	}
-	members, err := e.basicMembers(t)
+	members, err := goshape.BasicMembers(e.schema, t)
 	if err != nil {
 		return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
@@ -1172,42 +1173,6 @@ type variantUnion string
 
 func (v variantUnion) claimUnion(types typeNamer) string {
 	return types.extend(string(v), "union")
-}
-
-// basicMembers returns the basic members of the union simple type t
-// (Datatypes §2.4.1.3 dt-basicmember): its {member type definitions}
-// (§3.16.1), read through [xsd.SimpleType.Members], which takes a
-// restriction's from its base (§3.16.2.1), depth first in member order, each
-// union member replaced by its own basic members, and each component kept at
-// its first position only, by identity. A list member is basic. No union
-// reaches itself through its members (cos-st-restricts clause 3.3
-// no-self-membership, which finalize checks), so the walk carries no visited
-// set.
-func (e *emitter) basicMembers(t *xsd.SimpleType) ([]*xsd.SimpleType, error) {
-	members, err := t.Members(e.schema)
-	if err != nil {
-		return nil, err
-	}
-	var basic []*xsd.SimpleType
-	for _, m := range members {
-		variety, err := m.Variety(e.schema)
-		if err != nil {
-			return nil, err
-		}
-		reached := []*xsd.SimpleType{m}
-		if _, isUnion := variety.(xsd.Union); isUnion {
-			reached, err = e.basicMembers(m)
-			if err != nil {
-				return nil, err
-			}
-		}
-		for _, b := range reached {
-			if !slices.Contains(basic, b) {
-				basic = append(basic, b)
-			}
-		}
-	}
-	return basic, nil
 }
 
 // variantWord is the local name a union's variant for its basic member m is
@@ -2320,27 +2285,25 @@ type fieldSpec struct {
 // contentGroup and groupField handle, or exactly once among an all group's
 // {particles}, which spliced splices. An element particle whose declaration
 // abstractLocal answers true for declines, charged to that declaration, before
-// its type is resolved. The field of an <element ref> particle,
-// whose declaration is global, holds the type refType returns for the
-// referenced declaration, after declaredType has resolved that declaration's
-// type: the sealed interface over its substitution group's declarations with
-// {abstract} false when substitutionSum answers a sum, and the type elementType
-// returns for it otherwise; the walk does not enter that type's body, which
-// topLevel emits, but valueCycle checks it when the particle occurs exactly
-// once, the declaration is not nillable, and the type is a complex type other
-// than xs:anyType emitted as a struct; valueCycle ends at once for a type whose
-// content particle occurs other than exactly once. A local declaration
-// governingTypes answers a sum for holds the sealed interface localTable
-// returns. A local declaration of type xs:anyType holds the raw-content struct
-// AnyType (anyTypeType). From field, neither a global declaration nor xs:anyType
-// ever reaches nestedType. A nillable declaration (nillable) holds, inside any
-// MixedChild wrap and by the same occurrence rules, Nillable over the type the
-// rules above give (nillableType), whose names are claimed after that type's,
-// unless that type is AnyType, which holds xsi:nil among its Attributes, or a sum
-// over the declaration's substitution group or governing types, whose branches
-// wrap their own fields (substitutionType, tableType); its particle is never a
-// value field, whatever its occurrence, since the field holds an interface or
-// AnyType, whose walk ends at once.
+// its type is resolved. The field of an <element ref> particle, whose declaration is
+// global, holds the type refType returns for the referenced declaration, after
+// declaredType has resolved that declaration's type: the sealed interface over its
+// substitution group's declarations with {abstract} false when goshape.SubstitutionSum
+// answers a sum, and the type elementType returns for it otherwise; the walk does not
+// enter that type's body, which topLevel emits, but valueCycle checks it when the
+// particle occurs exactly once, the declaration is not nillable, and the type is a
+// complex type other than xs:anyType emitted as a struct; valueCycle ends at once for a
+// type whose content particle occurs other than exactly once. A local declaration
+// governingTypes answers a sum for holds the sealed interface localTable returns. A
+// local declaration of type xs:anyType holds the raw-content struct AnyType
+// (anyTypeType). From field, neither a global declaration nor xs:anyType ever reaches
+// nestedType. A nillable declaration (nillable) holds, inside any MixedChild wrap and
+// by the same occurrence rules, Nillable over the type the rules above give
+// (nillableType), whose names are claimed after that type's, unless that type is
+// AnyType, which holds xsi:nil among its Attributes, or a sum over the declaration's
+// substitution group or governing types, whose branches wrap their own fields
+// (substitutionType, tableType); its particle is never a value field, whatever its
+// occurrence, since the field holds an interface or AnyType, whose walk ends at once.
 func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []valueNode, o origin, t xsd.ComplexType, p xsd.Particle) (fieldSpec, error) {
 	subject, loc := o.subject, t.Loc()
 	if wildcardTerm(p.Term()) {
@@ -2407,7 +2370,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	if err != nil {
 		return fieldSpec{}, err
 	}
-	_, substitution := e.substitutionSum(decl)
+	_, substitution := goshape.SubstitutionSum(e.schema, decl)
 	if nillable(decl) && !sum && !isAnyType(td) && !substitution {
 		typ = e.nillableType(typ, td)
 	}
@@ -2464,7 +2427,7 @@ func abstractLocal(decl xsd.ElementDeclaration) bool {
 // refType returns the type of the field of an <element ref> particle to the
 // top-level element declaration decl, whose {type definition} declaredType
 // resolved to td: the sealed interface substitutionType emits when
-// substitutionSum answers a sum for decl, and elementType's otherwise. When
+// goshape.SubstitutionSum answers a sum for decl, and elementType's otherwise. When
 // value is true, the particle occurring exactly once over a declaration that
 // is not nillable (field's value, which reads nillable), and that type is a struct
 // emitted for a complex td other than xs:anyType, valueCycle walks td's body
@@ -2474,7 +2437,7 @@ func abstractLocal(decl xsd.ElementDeclaration) bool {
 // nor the governing types' interface elementType records as sealed: no field
 // holds either as a struct value.
 func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclaration, td xsd.TypeDefinition) (emittedType, error) {
-	if members, sum := e.substitutionSum(decl); sum {
+	if members, sum := goshape.SubstitutionSum(e.schema, decl); sum {
 		return e.substitutionType(decl, members)
 	}
 	typ, err := e.elementType(decl, td)
@@ -2488,55 +2451,26 @@ func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclara
 	return typ, e.valueCycle(chain, decl, structScope(scope{}, decl, ct), ct)
 }
 
-// substitutionSum reports whether a field over the element declaration decl
-// holds a sum, and returns its members: the declarations of decl's
-// ·substitution group· (§3.3.6.4 key-eq, [xsd.Schema.SubstitutionGroup]) with
-// {abstract} false, in group order, since no element is valid against an
-// abstract one (§3.3.4.3 cvc-elt clause 2). sum is true exactly when decl is
-// top-level and members are not decl alone, so an abstract decl whose group
-// holds no other declaration with {abstract} false answers a sum with no
-// members, and a decl with {abstract} false whose other declarations are all
-// abstract answers none. The group is taken before {abstract} is read, so a
-// member the group holds through an abstract declaration
-// (cos-equiv-derived-ok-rec clause 2.2) is among the members. A local
-// declaration heads no substitution group, so a field over one holds only it
-// (cvc-accept clause 2.3.2), and a head with no affiliate, one whose
-// {disallowed substitutions} contains substitution (cos-equiv-derived-ok-rec
-// clause 2.1), or one blocking each affiliate's ·derivation· (clause 2.3), has
-// itself alone in its group (clause 1). It is the one test refType, field and
-// valueCycle read.
-func (e *emitter) substitutionSum(decl xsd.ElementDeclaration) (members []xsd.ElementDeclaration, sum bool) {
-	if decl.ScopeVariety() != xsd.ScopeGlobal {
-		return nil, false
-	}
-	members = slices.DeleteFunc(e.schema.SubstitutionGroup(decl.Name()), xsd.ElementDeclaration.Abstract)
-	if len(members) == 1 && members[0].Name() == decl.Name() {
-		return nil, false
-	}
-	return members, true
-}
-
 // substitutionType returns the sealed interface a field over an <element ref>
-// particle to the head declaration head holds, members being substitutionSum's
-// for head, emitting it once per package in the package doc's
-// "# Substitution groups" shape: the interface, named from head's local name
-// plus SubstitutionGroup, then one branch struct per declaration of members in
-// order, none when members is empty, named from the interface's name plus the
-// declaration's local name and holding one field, named from that local name,
-// of the type elementType returns for it. Each declaration's type is resolved
-// by declaredType and claimed by elementType at its branch, after the branch's
-// name, so the shape of its type, or of each of its governing types,
-// declines the interface at the first such declaration in group order, with the
-// same DeclineError its own topLevel turn returns first; a decline in a
-// declaration's body is met only at its own turn. Each branch implements the
-// interface's method; the declarations' own types carry no method, since one
-// may be sealed or sit in several heads' groups. The field of a nillable
-// declaration's branch (nillable), the head's when it has a branch, holds
-// Nillable over that type (nillableType), its names claimed after the type's,
-// unless the type is AnyType or the sum over the declaration's governing types,
-// whose branches wrap their own fields; the interface itself is never wrapped,
-// each declaration's own {nillable} governing its branch. It stores the
-// interface's name in e.substitutions only once every branch is emitted.
+// particle to the head declaration head holds, members being goshape.SubstitutionSum's
+// for head, emitting it once per package in the package doc's "# Substitution groups"
+// shape: the interface, named from head's local name plus SubstitutionGroup, then one
+// branch struct per declaration of members in order, none when members is empty, named
+// from the interface's name plus the declaration's local name and holding one field,
+// named from that local name, of the type elementType returns for it. Each
+// declaration's type is resolved by declaredType and claimed by elementType at its
+// branch, after the branch's name, so the shape of its type, or of each of its
+// governing types, declines the interface at the first such declaration in group
+// order, with the same DeclineError its own topLevel turn returns first; a decline in
+// a declaration's body is met only at its own turn. Each branch implements the
+// interface's method; the declarations' own types carry no method, since one may be
+// sealed or sit in several heads' groups. The field of a nillable declaration's branch
+// (nillable), the head's when it has a branch, holds Nillable over that type
+// (nillableType), its names claimed after the type's, unless the type is AnyType or
+// the sum over the declaration's governing types, whose branches wrap their own
+// fields; the interface itself is never wrapped, each declaration's own {nillable}
+// governing its branch. It stores the interface's name in e.substitutions only once
+// every branch is emitted.
 func (e *emitter) substitutionType(head xsd.ElementDeclaration, members []xsd.ElementDeclaration) (emittedType, error) {
 	if name, ok := e.substitutions[head.Name()]; ok {
 		return emittedType{name: name, sealed: true}, nil
@@ -2993,7 +2927,7 @@ func reacher(decl xsd.ElementDeclaration) string {
 // spliced particles occurs exactly once, and it never steps to an element of type xs:anyType, whose AnyType
 // reaches itself only through slices. A wildcard particle (wildcardTerm) is a leaf, passed before elementTerm:
 // its field holds AnyElement, which reaches AnyType, which reaches itself only through the slice Children. So is
-// an <element ref> particle to a head substitutionSum answers a sum for, passed after elementTerm: its field
+// an <element ref> particle to a head goshape.SubstitutionSum answers a sum for, passed after elementTerm: its field
 // holds the group's sealed interface (substitutionType). So is an element particle whose declaration governingTypes answers a
 // sum for, passed after that: its field holds the governing types' sealed interface (tableType); a declaration with one
 // governing type steps to that type, which declaredType returns. So is an element particle whose declaration is nillable
@@ -3043,7 +2977,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nes
 		if err != nil {
 			continue
 		}
-		if _, sum := e.substitutionSum(el); sum {
+		if _, sum := goshape.SubstitutionSum(e.schema, el); sum {
 			continue
 		}
 		if _, sum, err := e.governingTypes(el); err != nil || sum || nillable(el) || abstractLocal(el) {
@@ -3088,7 +3022,7 @@ func (e *emitter) elementTerm(subject string, loc xsderr.Loc, term xsd.TermOrRef
 		// The named top-level declaration alone: the declarations an instance
 		// may carry in its place are its substitution group (cvc-accept clause
 		// 2.3.2), which field types the particle over through refType's
-		// substitutionSum, an abstract declaration among them getting no
+		// goshape.SubstitutionSum, an abstract declaration among them getting no
 		// branch. A head blocking substitution admits only itself.
 		decl, ok := e.schema.Element(term.Name)
 		if !ok {

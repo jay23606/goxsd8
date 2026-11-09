@@ -226,7 +226,7 @@ func (a atomic) forScalar(string) scalarElem { return a }
 // (goType), so that xs:string and xs:token are one, and so are xs:QName and
 // xs:NOTATION, or both lists of a union, each a slice of any sealed
 // interface, whose element's bare type is unionValue, no atomic's. No basic
-// member is a union (basicMembers), and the datatype structs of two
+// member is a union (goshape.BasicMembers), and the datatype structs of two
 // datatypes have different fields, so no variant is over both.
 func (g simpleGo) oneGoType(h simpleGo) bool { return g.goType() == h.goType() }
 
