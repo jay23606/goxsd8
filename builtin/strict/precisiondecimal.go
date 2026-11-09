@@ -340,8 +340,11 @@ func canonicalPrecisionDecimal(v value.Value) (string, error) {
 // with the decimal point placed and trailing zeros PADDED to the scale (step 4, so 3
 // with scale 2 → "3.00"); everything else — a negative scale, or a magnitude outside
 // the range — renders in scientific notation (step 5; a zero by zeroCanonical).
-// Trailing zeros are canonical, never stripped: that is how the canonical form is
-// quantum-preserving even though Eq is quantum-blind.
+// Every finite form re-parses (f-precDecLexmap) to an Identical value, as
+// dt-canonical-mapping requires, where step 5 as written does not: see
+// zeroCanonical and scientificCanonical. Trailing zeros are canonical, never
+// stripped: that is how the canonical form is quantum-preserving even though Eq is
+// quantum-blind.
 //
 // The one error is zeroCanonical's beyond-capacity one. It is why
 // precisionDecimalVal does not implement [value.Canonical]: that string-only
@@ -359,6 +362,10 @@ func (p precisionDecimalVal) canonical() (string, error) {
 		// Rendered by the numeric algorithm below.
 	}
 
+	// f-precDecCanmap never reads ·sign·, so as written 0 and -0 share one form,
+	// against dt-canonical-mapping's one-to-one requirement; prepending "-" keeps
+	// the ·sign· (vp-pd-sign) that f-precDecLexmap step 3 reads back. This departs
+	// from the letter of the algorithm, a candidate erratum, not a reading.
 	sign := ""
 	if p.sign == signNegative {
 		sign = "-"
@@ -401,17 +408,20 @@ const maxZeroCanonicalScale = 1 << 20
 // errors.Is-identifiable inside the package.
 var errPrecisionDecimalCapacity = errors.New("precisionDecimal canonical: canonical form beyond this processor's capacity")
 
-// zeroCanonical renders the unsigned canonical form of a zero (step 5) as
-// scientificCanonicalMap(0) = "0.0E0": the mantissa "0.0" (f = 1) padded with
-// aP − 1 trailing zeros to preserve ·scale· aP.
+// zeroCanonical renders the unsigned canonical form of a zero (step 5), whose
+// mantissa and exponent are implementer-supplied: scientificCanonicalMap(0) is
+// undefined (log 0), so step 5 as written has no output for any zero. Each form
+// re-parses to ·scale· aP (vp-sciPrecision): for aP ≤ 0 the point-less "0E"
+// followed by −aP ("0E0", "0E5"), the shortest; for aP ≥ 1 the mantissa "0.0"
+// (f = 1) padded with aP − 1 trailing zeros, exponent 0 ("0.0E0", "0.00E0").
 //
 // A ·scale· above maxZeroCanonicalScale, one past the host int included, is
 // errPrecisionDecimalCapacity (xmlschema11-2 §5.4). It is decided on the
 // *big.Int before any aP − 1 arithmetic or allocation, so no ·scale· is wrapped
 // and no padding proportional to it is built.
 func (p precisionDecimalVal) zeroCanonical() (string, error) {
-	if p.scale.Cmp(big.NewInt(1)) <= 0 {
-		return "0.0E0", nil
+	if p.scale.Sign() <= 0 {
+		return "0E" + new(big.Int).Neg(p.scale).String(), nil
 	}
 	if p.scale.Cmp(big.NewInt(maxZeroCanonicalScale)) > 0 {
 		return "", fmt.Errorf("%w: a zero of ·scale· %s, above the bound %d",
@@ -459,22 +469,23 @@ func (p precisionDecimalVal) inCanonicalRange() bool {
 // exp = (len(C')−1) + k − aP, the adjusted exponent, then append aP + exp − f
 // trailing zeros (f = m's fractional-digit count) so the printed scale matches
 // ·scale·. That pad is (len(C')−1) + k − f = len(digits) − 1 − f, free of aP, so
-// it is bounded by the literal's length. digits is the coefficient magnitude
-// string, which has no leading zero. The sign is prepended by the caller.
+// it is bounded by the literal's length. It would be −1 exactly when digits is
+// one digit: scientificCanonicalMap's forced mantissa "D.0" then carries one
+// more fractional digit than ·scale· admits, and step 5's "f will invariably be
+// less than or equal to aP+p" fails. That mantissa drops its ".0" (f = 0, an m
+// with no decimal point, as step 5's t contemplates), so 3E2 renders "3E2" and
+// re-parses Identical. digits is the coefficient magnitude string, which has no
+// leading zero. The sign is prepended by the caller.
 func (p precisionDecimalVal) scientificCanonical(digits string) string {
+	exp := "E" + p.adjusted().String()
+	if len(digits) == 1 {
+		return digits + exp
+	}
 	cPrime := strings.TrimRight(digits, "0")
 
-	mantissa, frac := cPrime, 0
-	if len(cPrime) == 1 {
-		mantissa, frac = cPrime+".0", 1
-	}
+	mantissa, frac := cPrime+".0", 1
 	if len(cPrime) > 1 {
 		mantissa, frac = cPrime[:1]+"."+cPrime[1:], len(cPrime)-1
 	}
-
-	pad := len(digits) - 1 - frac
-	if pad < 0 {
-		pad = 0
-	}
-	return mantissa + strings.Repeat("0", pad) + "E" + p.adjusted().String()
+	return mantissa + strings.Repeat("0", len(digits)-1-frac) + exp
 }

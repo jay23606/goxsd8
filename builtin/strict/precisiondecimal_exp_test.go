@@ -189,7 +189,7 @@ func TestPrecisionDecimalCanonicalUnboundedExponent(t *testing.T) {
 	cases := []struct {
 		lexical, want string // want "" is the beyond-capacity error
 	}{
-		{"1E-99999999999999999999", "1.0E-99999999999999999999"},
+		{"1E-99999999999999999999", "1E-99999999999999999999"},
 		{"-1.50E99999999999999999999", "-1.50E99999999999999999999"},
 		{"0E-1048577", ""},
 		{"0E-99999999999", ""},

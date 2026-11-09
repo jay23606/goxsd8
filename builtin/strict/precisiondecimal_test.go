@@ -66,6 +66,61 @@ func TestPrecisionDecimalCanonical(t *testing.T) {
 	}
 }
 
+// TestPrecisionDecimalCanonicalRoundTrips pins dt-canonical-mapping's
+// lexicalMap(canonicalMap(v)) = v for finite values: each lexical's canonical
+// form is the string given and re-parses (f-precDecLexmap) to an Identical
+// value — the same ·numericalValue·, ·scale· (vp-sciPrecision) and ·sign·
+// (vp-pd-sign). The single-digit-coefficient rows of negative ·scale· or out of
+// range, and the zeros of ·scale· ≤ 0, are the ones f-precDecCanmap step 5 as
+// written gives no Identical form for (#3515); the rest pin forms it does give.
+func TestPrecisionDecimalCanonicalRoundTrips(t *testing.T) {
+	m := pdMapping(t)
+	cases := []struct{ lexical, want string }{
+		// Zeros: scientificCanonicalMap(0) is undefined, so the form is ours.
+		{"0", "0E0"},
+		{"-0", "-0E0"},
+		{"0E5", "0E5"},
+		{"-0E5", "-0E5"},
+		{"0E1", "0E1"},
+		{"0.0", "0.0E0"},
+		{"0.00", "0.00E0"},
+		// One-digit coefficients that reach step 5.
+		{"3E2", "3E2"},
+		{"1E7", "1E7"},
+		{"-1E7", "-1E7"},
+		{"1E-7", "1E-7"},
+		{"1E6", "1E6"},
+		{"5E1", "5E1"},
+		// Forms step 5 and steps 3-4 already give.
+		{"3", "3"},
+		{"3.00", "3.00"},
+		{"03.00", "3.00"},
+		{"300", "300"},
+		{"3.00e2", "300"},
+		{"3.0e2", "3.0E2"},
+		{"30e1", "3.0E2"},
+		{".30e3", "3.0E2"},
+		{"-1.23", "-1.23"},
+		{"+1.0", "1.0"},
+		{"0.05", "0.05"},
+		{"1.5E-3", "0.0015"},
+	}
+	for _, c := range cases {
+		v := parsePD(t, m, c.lexical).(value.Identical)
+		got, err := m.Canonical(v)
+		if err != nil {
+			t.Errorf("Canonical(%q): unexpected error %v", c.lexical, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("Canonical(%q) = %q, want %q", c.lexical, got, c.want)
+		}
+		if !v.Identical(parsePD(t, m, got)) {
+			t.Errorf("Canonical(%q) = %q, which re-parses to a value not Identical to %q", c.lexical, got, c.lexical)
+		}
+	}
+}
+
 // TestPrecisionDecimalCanonicalContrastsDecimal pins the distinction from xs:decimal:
 // decimal collapses precision (1.00 → "1"), precisionDecimal preserves scale
 // (1.00 → "1.00"). A regression that reused decimal's canonical would break this.
