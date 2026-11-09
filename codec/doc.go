@@ -49,7 +49,10 @@
 //   - A top-level element declaration, as the document element's.
 //   - A complex type with empty, simple or element-only content.
 //   - A sequence or choice, inline or through <group ref>, occurring exactly
-//     once.
+//     once, as a complex type's content {particle}.
+//   - A nested sequence, inline or through <group ref>, that codegen splices
+//     (codegen's package doc, "# Particles"), into the fields its own
+//     particles give.
 //   - An element particle, local or <element ref>.
 //   - A substitution group, into a sealed interface.
 //   - A choice, into a sealed interface.
@@ -97,21 +100,23 @@
 // dcl.ctd.ctsc), its value field's, or element-only content with no {open
 // content} whose {particle} is a sequence or choice, inline or the {model
 // group} of the definition a <group ref> names, occurring exactly once. Each
-// particle of that sequence or choice is an element declaration with no {type
-// table}, of xs:anyType itself, or, with {nillable} false, of a simple type
-// that decodes or of a complex type that decodes by these same rules at any
-// depth: a local one, or the top-level one an <element ref> names where
-// codegen gives the particle's field that declaration's own type; or the
-// particle is an <element ref> where codegen gives its field a sealed
-// interface over the referenced declaration's substitution group (codegen's
-// package doc, "# Substitution groups"), and each declaration of the group
-// with {abstract} false is such a declaration, an abstract head's own
-// properties never read; or the particle is a wildcard, whatever its
-// {namespace constraint} and {process contents}. No two element particles
-// share an expanded name, such an interface's particle taking each of those
-// declarations'. Each attribute use is outside the xsi namespace and is typed
-// the same way. No element in the instance carries xsi:type, except inside a
-// wildcard's match or an element of type xs:anyType's raw content.
+// particle of that sequence or choice, a sequence's nested sequence particle
+// codegen splices replaced by its own particles at any depth, is an element
+// declaration with no {type table}, of xs:anyType itself, or, with {nillable}
+// false, of a simple type that decodes or of a complex type that decodes by
+// these same rules at any depth: a local one, or the top-level one an
+// <element ref> names where codegen gives the particle's field that
+// declaration's own type; or the particle is an <element ref> where codegen
+// gives its field a sealed interface over the referenced declaration's
+// substitution group (codegen's package doc, "# Substitution groups"), and
+// each declaration of the group with {abstract} false is such a declaration,
+// an abstract head's own properties never read; or the particle is a
+// wildcard, whatever its {namespace constraint} and {process contents}. No
+// two element particles share an expanded name, such an interface's particle
+// taking each of those declarations'. Each attribute use is outside the xsi
+// namespace and is typed the same way. No element in the instance carries
+// xsi:type, except inside a wildcard's match or an element of type
+// xs:anyType's raw content.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
@@ -160,8 +165,8 @@
 //   - Two element particles taking one expanded name; item 5 of [Decode]'s
 //     doc states when.
 //   - An all group.
-//   - A nested model group, inline or through <group ref>, a choice's
-//     model-group alternative included.
+//   - A nested choice, and a nested sequence codegen does not splice, inline
+//     or through <group ref>, a choice's model-group alternative included.
 //   - Mixed content.
 //   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.

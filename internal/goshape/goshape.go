@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // SubstitutionSum reports whether a field over the element declaration decl
@@ -65,4 +66,37 @@ func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, er
 		}
 	}
 	return basic, nil
+}
+
+// Splices reports whether a model group particle of group occurring as occurs,
+// inline or a <group ref> to group's definition (§3.7.2
+// declare-namedModelGroup), the content {particle} or nested, is spliced,
+// giving in its place the fields group's own particles give, as
+// codegen/doc.go "# Particles" states. Each caller follows a <group ref> to
+// group itself. Whether one occurrence of group can match nothing is
+// [xsd.Schema.ParticleEmptiable] over a particle of group occurring exactly
+// once, so that cos-group-emptiable's clause 2 alone decides (§3.9.6.3,
+// §3.8.6.5 cos-seq-range), never read off the particle's own 0..1 range. The
+// error is xsd.NewOccurs' or xsd.NewParticle's, unwrapped; neither rejects
+// the constant range or a resolved model group term.
+func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error) {
+	if group.Compositor() == xsd.CompositorChoice {
+		return false, nil
+	}
+	upper, bounded := occurs.Max()
+	if !bounded || upper != 1 {
+		return false, nil
+	}
+	if occurs.Min() == 1 {
+		return true, nil
+	}
+	once, err := xsd.NewOccurs(xsderr.Loc{}, 1, 1)
+	if err != nil {
+		return false, err
+	}
+	p, err := xsd.NewParticle(xsderr.Loc{}, once, xsd.ResolvedTerm{Term: group})
+	if err != nil {
+		return false, err
+	}
+	return schema.ParticleEmptiable(p), nil
 }

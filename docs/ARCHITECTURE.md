@@ -63,7 +63,7 @@ Value implementations, parsing, validation, and generation live above them.
                                     codec finds a generated struct's fields
                                     by.)
                  internal/goshape (the component → Go shape decisions codegen
-                                  emits and codec binds against; imports xsd only)
+                                  emits and codec binds against; imports xsd and xsderr)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)

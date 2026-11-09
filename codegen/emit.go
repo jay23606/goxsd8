@@ -1610,12 +1610,12 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 // contentFields returns the fields the content particle content of the
 // complex type t generated from o gives in the struct body emits for t, whose
 // nested types are named in nested and whose particles chain is valueChain's
-// for: particleFields' for its group's particles when splices answers true,
-// and otherwise the one field groupField returns.
+// for: particleFields' for its group's particles when goshape.Splices answers
+// true, and otherwise the one field groupField returns.
 func (e *emitter) contentFields(nested scope, chain []valueNode, o origin, t xsd.ComplexType, content groupParticle) ([]fieldSpec, error) {
-	splice, err := e.splices(o.subject, t.Loc(), content.group, content.occurs)
+	splice, err := goshape.Splices(e.schema, content.group, content.occurs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s at %s: %w", o.subject, t.Loc(), err)
 	}
 	if splice {
 		return e.particleFields(nested, groupSite{}, chain, o, t, content.group.Particles())
@@ -1635,7 +1635,7 @@ func (e *emitter) contentFields(nested scope, chain []valueNode, o origin, t xsd
 // occurrenceType emits flattened, whatever c's occurrence, a choice occurring
 // exactly once included; otherwise it holds the type for one occurrence of c's
 // group (occurrenceType) by c's occurrence (occursGoType). Its two callers are
-// contentFields, for a content particle splices does not splice, and field,
+// contentFields, for a content particle goshape.Splices does not splice, and field,
 // for a model group particle nested in a struct's or a branch's particles, so
 // the walk tests a particle before any particle in its term, and a particle
 // flattens answers true for is the outermost one: its term is the reach walk's
@@ -1895,21 +1895,21 @@ func (e *emitter) particleFields(nested scope, site groupSite, chain []valueNode
 
 // spliced returns particles in order with each particle whose term is a model
 // group (modelGroupTerm), inline or the {model group} of the definition a
-// <group ref> names (§3.7.2), and which splices answers true for replaced,
+// <group ref> names (§3.7.2), and which goshape.Splices answers true for replaced,
 // recursively, by that group's own particles: one occurrence of a sequence
 // particle is one pass through its particles in order (§3.8.4.1.1
 // sec-sequences), and one of an all particle one sequence per particle
 // interleaved (§3.8.4.1.3 all-mg), so its fields are theirs; cos-all-limited
 // (§3.8.6.2 clauses 1.3 and 2), checked at Finalize, admits an all group
 // particle among particles only as an all group's member occurring exactly
-// once, so every one is spliced. A complex-content extension's
-// content particle (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.3) is one such
-// sequence, nesting its base's when the base is itself an extension, so the
-// splice recurses; the package doc's "# Particles" states the fields that
-// gives. Every other particle is kept as is, and field gives a choice and a
-// sequence splices does not splice, inline or referenced alike, the field
-// groupField returns. subject and loc name the complex type holding
-// particles in the error modelGroupTerm returns.
+// once, so every one is spliced. A complex-content extension's content particle
+// (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.3) is one such sequence, nesting
+// its base's when the base is itself an extension, so the splice recurses; the
+// package doc's "# Particles" states the fields that gives. Every other particle
+// is kept as is, and field gives a choice and a sequence goshape.Splices does not
+// splice, inline or referenced alike, the field groupField returns. subject and
+// loc name the complex type holding particles in the errors modelGroupTerm and
+// goshape.Splices return.
 func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Particle) ([]xsd.Particle, error) {
 	var leaves []xsd.Particle
 	for _, p := range particles {
@@ -1921,9 +1921,9 @@ func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Partic
 			leaves = append(leaves, p)
 			continue
 		}
-		splice, err := e.splices(subject, loc, group, p.Occurs())
+		splice, err := goshape.Splices(e.schema, group, p.Occurs())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s at %s: %w", subject, loc, err)
 		}
 		if !splice {
 			leaves = append(leaves, p)
@@ -1936,27 +1936,6 @@ func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Partic
 		leaves = append(leaves, inner...)
 	}
 	return leaves, nil
-}
-
-// splices reports whether a model group particle of group under occurs, inline
-// or a <group ref> to group's definition (§3.7.2), gives in its place the fields
-// group's own particles give (spliced, contentFields): group is a sequence or an
-// all group, and occurs is exactly once, or {min occurs} 0 and {max occurs} 1
-// when one occurrence of group can match nothing (termEmptiable, §3.9.6.3
-// cos-group-emptiable), as the package doc's "# Particles" states. subject and
-// loc name the complex type holding the particle in the error termEmptiable
-// returns.
-func (e *emitter) splices(subject string, loc xsderr.Loc, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error) {
-	if group.Compositor() == xsd.CompositorChoice {
-		return false, nil
-	}
-	if occurs == exactlyOnce {
-		return true, nil
-	}
-	if occurs != optional {
-		return false, nil
-	}
-	return e.termEmptiable(subject, loc, xsd.ResolvedTerm{Term: group})
 }
 
 // modelGroupTerm returns the model group a particle's term holds and true: an
@@ -2184,15 +2163,9 @@ func branchParticle(subject string, loc xsderr.Loc, p xsd.Particle) (xsd.Particl
 	return branch, nil
 }
 
-// exactlyOnce is the {min occurs} = {max occurs} = 1 range under which a
-// sequence or an all particle, a complex type's content particle or nested, is
-// spliced whatever its emptiability (splices), and under which an element
-// particle gives a value field.
+// exactlyOnce is the {min occurs} = {max occurs} = 1 range, under which,
+// among others, an element particle gives a value field.
 var exactlyOnce = mustOccurs(xsd.NewOccurs(xsderr.Loc{}, 1, 1))
-
-// optional is the {min occurs} 0, {max occurs} 1 range under which a sequence
-// or an all particle whose one occurrence is emptiable is spliced (splices).
-var optional = mustOccurs(xsd.NewOccurs(xsderr.Loc{}, 0, 1))
 
 // mustOccurs unwraps a constructor result that cannot fail on constant
 // arguments.
@@ -2277,7 +2250,7 @@ type fieldSpec struct {
 // nestedType or valueChain, and gives a choice's wildcard alternative its
 // branch struct's one field (sealedType). The field of a model group particle
 // (modelGroupTerm), inline or a <group ref>, a choice or a sequence which
-// spliced does not splice (splices), is the one groupField returns for p at
+// spliced does not splice (goshape.Splices), is the one groupField returns for p at
 // ordinal under site, after a {max occurs} of 0 has declined naming the group,
 // as contentGroup declines one, before any occurrence type is emitted; an all
 // group is an error, never a decline: cos-all-limited (§3.8.6.2), checked at
@@ -2922,7 +2895,7 @@ func reacher(decl xsd.ElementDeclaration) string {
 // <group ref>, is a value edge that pushes no node, and every other nested model group particle (modelGroupTerm)
 // is a leaf, passed before elementTerm: its field holds a slice, a pointer to its occurrence struct, or a bare
 // sealed interface (groupField), never a value. A choice t, a t whose content particle occurs other than exactly
-// once, and a step whose first node (valueNodes) is in e.acyclic, end the walk: a content particle splices
+// once, and a step whose first node (valueNodes) is in e.acyclic, end the walk: a content particle goshape.Splices
 // answers true for though it occurs other than exactly once is emptiable, so no element particle among its
 // spliced particles occurs exactly once, and it never steps to an element of type xs:anyType, whose AnyType
 // reaches itself only through slices. A wildcard particle (wildcardTerm) is a leaf, passed before elementTerm:
