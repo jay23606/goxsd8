@@ -34,8 +34,9 @@ import (
 // test asserting only that an error occurred cannot see.
 func TestProduceOccursAttributeFaultsCharged(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). Every body starts
-	// on line 2 of the wrapped document and puts the offending element on the
-	// line named by wantLine, so the charged position is pinned exactly.
+	// on line 2 of the wrapped document and puts the offending element, and so
+	// the faulted attribute a lexical charge is located at, on the line named by
+	// wantLine; TestProduceAttributeValueChargeLocated pins the column.
 	cases := []struct {
 		name     string
 		body     string
@@ -92,7 +93,7 @@ func TestProduceOccursAttributeFaultsCharged(t *testing.T) {
 		},
 		{
 			// The nested <element> position takes the same occursOf path, and the
-			// charge is positioned at the <element> that carries the attribute.
+			// charge is positioned at the minOccurs the <element> carries.
 			name: `nested <element> minOccurs with a non-numeric lexical`,
 			body: "\n" + `<xs:complexType name="CT"><xs:sequence>` + "\n" +
 				`<xs:element name="a" type="xs:string" minOccurs="x"/>` + "\n" +
@@ -133,7 +134,7 @@ func TestProduceOccursAttributeFaultsCharged(t *testing.T) {
 				t.Fatalf("error %v carries no position, want %s:%d:col (STYLE E3)", err, produceURI, tc.wantLine)
 			}
 			if loc.URI != produceURI || loc.Line != tc.wantLine || loc.Col == 0 {
-				t.Fatalf("position = %s:%d:%d, want the offending element at %s:%d with a column",
+				t.Fatalf("position = %s:%d:%d, want the charge on the offending element's line %s:%d with a column",
 					loc.URI, loc.Line, loc.Col, produceURI, tc.wantLine)
 			}
 		})

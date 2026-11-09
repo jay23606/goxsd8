@@ -211,8 +211,8 @@ func carriesVersioningAttr(el *Element) bool {
 // nothing, and needs no test of its own: whichever arm fires ignores the
 // element.
 func ignoredElement(el *Element) (bool, error) {
-	if lexical, ok := versioningAttr(el, "minVersion"); ok {
-		lower, err := conditionalDecimal(el, "minVersion", lexical)
+	if a, ok := versioningAttr(el, "minVersion"); ok {
+		lower, err := conditionalDecimal(el, "minVersion", a.Value(), a.Loc())
 		if err != nil {
 			return false, err
 		}
@@ -222,8 +222,8 @@ func ignoredElement(el *Element) (bool, error) {
 			return true, nil
 		}
 	}
-	if lexical, ok := versioningAttr(el, "maxVersion"); ok {
-		upper, err := conditionalDecimal(el, "maxVersion", lexical)
+	if a, ok := versioningAttr(el, "maxVersion"); ok {
+		upper, err := conditionalDecimal(el, "maxVersion", a.Value(), a.Loc())
 		if err != nil {
 			return false, err
 		}
@@ -233,8 +233,8 @@ func ignoredElement(el *Element) (bool, error) {
 			return true, nil
 		}
 	}
-	if lexical, ok := versioningAttr(el, "typeAvailable"); ok {
-		names, err := conditionalQNames(el, "typeAvailable", lexical)
+	if a, ok := versioningAttr(el, "typeAvailable"); ok {
+		names, err := conditionalQNames(el, "typeAvailable", a.Value())
 		if err != nil {
 			return false, err
 		}
@@ -244,8 +244,8 @@ func ignoredElement(el *Element) (bool, error) {
 			return true, nil
 		}
 	}
-	if lexical, ok := versioningAttr(el, "typeUnavailable"); ok {
-		names, err := conditionalQNames(el, "typeUnavailable", lexical)
+	if a, ok := versioningAttr(el, "typeUnavailable"); ok {
+		names, err := conditionalQNames(el, "typeUnavailable", a.Value())
 		if err != nil {
 			return false, err
 		}
@@ -254,8 +254,8 @@ func ignoredElement(el *Element) (bool, error) {
 			return true, nil
 		}
 	}
-	if lexical, ok := versioningAttr(el, "facetAvailable"); ok {
-		names, err := conditionalQNames(el, "facetAvailable", lexical)
+	if a, ok := versioningAttr(el, "facetAvailable"); ok {
+		names, err := conditionalQNames(el, "facetAvailable", a.Value())
 		if err != nil {
 			return false, err
 		}
@@ -264,8 +264,8 @@ func ignoredElement(el *Element) (bool, error) {
 			return true, nil
 		}
 	}
-	if lexical, ok := versioningAttr(el, "facetUnavailable"); ok {
-		names, err := conditionalQNames(el, "facetUnavailable", lexical)
+	if a, ok := versioningAttr(el, "facetUnavailable"); ok {
+		names, err := conditionalQNames(el, "facetUnavailable", a.Value())
 		if err != nil {
 			return false, err
 		}
@@ -277,17 +277,18 @@ func ignoredElement(el *Element) (bool, error) {
 	return false, nil
 }
 
-// versioningAttr returns the value of el's {versioningNS}local attribute,
-// reporting whether it is present. The namespace test is what distinguishes a
-// §4.2.2 attribute from an identically-named one in no namespace, which the
-// schema for schema documents would govern instead.
-func versioningAttr(el *Element, local string) (string, bool) {
+// versioningAttr is [Element.attr] for el's {versioningNS}local attribute: it
+// returns that attribute, for the reason and with the absent-case answer attr
+// states. The namespace test is what distinguishes a §4.2.2 attribute from an
+// identically-named one in no namespace, which the schema for schema documents
+// would govern instead.
+func versioningAttr(el *Element, local string) (xmltree.Attribute, bool) {
 	for _, a := range el.attrs {
 		if a.Name().Space() == versioningNS && a.Name().Local() == local {
-			return a.Value(), true
+			return a, true
 		}
 	}
-	return "", false
+	return xmltree.Attribute{}, false
 }
 
 // allNamed reports whether every name satisfies known — whether every item of a
@@ -449,10 +450,13 @@ func conditionalQNames(el *Element, attr, lexical string) ([]xsd.QName, error) {
 // before the lexical mapping, so leading and trailing whitespace is stripped
 // here; any whitespace INSIDE the value survives collapse as a space and is
 // outside the lexical space either way.
-func conditionalDecimal(el *Element, attr, lexical string) (decimal, error) {
+//
+// loc is the attribute's own Loc, from versioningAttr, and the charge is
+// located there.
+func conditionalDecimal(el *Element, attr, lexical string, loc xsderr.Loc) (decimal, error) {
 	d, ok := parseDecimal(collapseTrim(lexical))
 	if !ok {
-		return decimal{}, xsderr.New(ruleSrcCIP, el.Loc(),
+		return decimal{}, xsderr.New(ruleSrcCIP, loc,
 			"vc:%s value %q on <%s> is not in the ·lexical space· of xs:decimal, which src-cip requires it to be valid against (Datatypes §3.3.3.1)",
 			attr, lexical, el.Name().Local())
 	}

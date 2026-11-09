@@ -1543,11 +1543,11 @@ func (p *producer) checkFormDefaults() error {
 	// (STYLE D1/D2), so a <schema> writing both malformed values names the same
 	// one every time.
 	for _, attr := range []string{"attributeFormDefault", "elementFormDefault"} {
-		lexical, ok := p.schemaElem.Attr(attr)
+		a, ok := p.schemaElem.attr(attr)
 		if !ok {
 			continue
 		}
-		if _, err := formChoiceQualified(lexical, p.schemaElem.Loc(), attr); err != nil {
+		if _, err := formChoiceQualified(a.Value(), a.Loc(), attr); err != nil {
 			return err
 		}
 	}
@@ -3421,15 +3421,16 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 // An absent attribute is that declared default and is NOT an error, a branch
 // distinct from present-but-invalid; boolAttr and facetFixed split the same two.
 func attributeUseToken(el *Element) (string, error) {
-	lexical, hasUse := el.Attr("use")
+	attr, hasUse := el.attr("use")
 	if !hasUse {
 		return "optional", nil
 	}
+	lexical := attr.Value()
 	switch use := collapseTrim(lexical); use {
 	case "prohibited", "optional", "required":
 		return use, nil
 	}
-	return "", xsderr.New(ruleDatatypeValid, el.Loc(),
+	return "", xsderr.New(ruleDatatypeValid, attr.Loc(),
 		"<attribute> use value %q is not one of prohibited/optional/required, the enumeration the schema for schema documents restricts xs:NMTOKEN to there", lexical)
 }
 
@@ -3652,8 +3653,8 @@ func (p *producer) produceWildcard(el *Element) (xsd.Wildcard, error) {
 		return xsd.Wildcard{}, err
 	}
 	process := xsd.ProcessStrict
-	if pc, ok := el.Attr("processContents"); ok {
-		process, err = processContentsOf(pc, el.Loc())
+	if pc, ok := el.attr("processContents"); ok {
+		process, err = processContentsOf(pc.Value(), pc.Loc())
 		if err != nil {
 			return xsd.Wildcard{}, err
 		}
@@ -3758,16 +3759,16 @@ func (p *producer) namespaceVarietyAndSet(ns string, hasNS bool, notNS string, h
 // does not reach for a declaration, so src-resolve clause 4's licensing test
 // (licensedNamespace) does not apply to it.
 func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNameKeyword, error) {
-	notQName, ok := el.Attr("notQName")
+	notQName, ok := el.attr("notQName")
 	if !ok {
 		return nil, nil, nil
 	}
 	attributeWildcard := el.Name().Local() == "anyAttribute"
 	var names []xsd.QName
 	var keywords []xsd.DisallowedNameKeyword
-	for _, tok := range xmlSpaceFields(notQName) {
+	for _, tok := range xmlSpaceFields(notQName.Value()) {
 		if strings.HasPrefix(tok, "##") {
-			kw, err := disallowedNameKeywordOf(tok, attributeWildcard, el.Loc())
+			kw, err := disallowedNameKeywordOf(tok, attributeWildcard, notQName.Loc())
 			if err != nil {
 				return nil, nil, err
 			}
@@ -3849,8 +3850,8 @@ func (p *producer) localTargetNS(el *Element, formDefaultAttr string) (string, e
 	if tns, ok := el.Attr("targetNamespace"); ok {
 		return tns, nil
 	}
-	if form, ok := el.Attr("form"); ok {
-		qualified, err := formChoiceQualified(form, el.Loc(), "form")
+	if form, ok := el.attr("form"); ok {
+		qualified, err := formChoiceQualified(form.Value(), form.Loc(), "form")
 		if err != nil {
 			return "", err
 		}
@@ -3877,21 +3878,21 @@ func (p *producer) localTargetNS(el *Element, formDefaultAttr string) (string, e
 // and the message names those values (ruleParticleCorrect).
 func occursOf(el *Element) (occ xsd.Occurs, elided bool, err error) {
 	minN := occursNumeral("1")
-	if minS, ok := el.Attr("minOccurs"); ok {
-		minN, err = nonNegativeNumeral(minS, el.Loc(), "minOccurs")
+	if minA, ok := el.attr("minOccurs"); ok {
+		minN, err = nonNegativeNumeral(minA.Value(), minA.Loc(), "minOccurs")
 		if err != nil {
 			return xsd.Occurs{}, false, err
 		}
 	}
 	min := minN.int()
-	maxS, hasMax := el.Attr("maxOccurs")
-	if hasMax && collapseTrim(maxS) == "unbounded" {
+	maxA, hasMax := el.attr("maxOccurs")
+	if hasMax && collapseTrim(maxA.Value()) == "unbounded" {
 		occ, err = xsd.NewUnboundedOccurs(el.Loc(), min)
 		return occ, false, err
 	}
 	maxN := occursNumeral("1")
 	if hasMax {
-		maxN, err = nonNegativeNumeral(maxS, el.Loc(), "maxOccurs")
+		maxN, err = nonNegativeNumeral(maxA.Value(), maxA.Loc(), "maxOccurs")
 		if err != nil {
 			return xsd.Occurs{}, false, err
 		}
@@ -3996,20 +3997,20 @@ func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
 // charges instead — and charges for minOccurs="0" and maxOccurs="1" too, which
 // this enumeration admits.
 func allOccursGrammar(el *Element) error {
-	if lexical, ok := el.Attr("minOccurs"); ok {
-		if err := allOccursEnum(lexical, el.Loc(), "minOccurs"); err != nil {
+	if minA, ok := el.attr("minOccurs"); ok {
+		if err := allOccursEnum(minA.Value(), minA.Loc(), "minOccurs"); err != nil {
 			return err
 		}
 	}
-	lexical, ok := el.Attr("maxOccurs")
+	maxA, ok := el.attr("maxOccurs")
 	if !ok {
 		return nil
 	}
-	if collapseTrim(lexical) == "unbounded" {
-		return xsderr.New(ruleDatatypeValid, el.Loc(),
+	if collapseTrim(maxA.Value()) == "unbounded" {
+		return xsderr.New(ruleDatatypeValid, maxA.Loc(),
 			`<all> maxOccurs is "unbounded", but the schema for schema documents restricts it to the enumeration 0, 1`)
 	}
-	return allOccursEnum(lexical, el.Loc(), "maxOccurs")
+	return allOccursEnum(maxA.Value(), maxA.Loc(), "maxOccurs")
 }
 
 // allOccursEnum checks one numeric <all> occurrence lexical against the {0,1}
@@ -4147,17 +4148,18 @@ func attrOr(el *Element, local string) string {
 // distinct from present-but-invalid; facetFixed splits the same two. On a fault
 // both bools are their zero values and the error is the only meaningful return.
 func boolAttr(el *Element, local string) (val bool, present bool, err error) {
-	lexical, ok := el.Attr(local)
+	attr, ok := el.attr(local)
 	if !ok {
 		return false, false, nil
 	}
+	lexical := attr.Value()
 	switch collapseTrim(lexical) {
 	case "true", "1":
 		return true, true, nil
 	case "false", "0":
 		return false, true, nil
 	}
-	return false, false, xsderr.New(ruleDatatypeValid, el.Loc(),
+	return false, false, xsderr.New(ruleDatatypeValid, attr.Loc(),
 		"<%s> %s value %q is not in the lexical space of xs:boolean (true, false, 1, 0) that the schema for schema documents declares for it",
 		el.Name().Local(), local, lexical)
 }

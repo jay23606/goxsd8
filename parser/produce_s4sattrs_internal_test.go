@@ -64,13 +64,14 @@ func TestS4SAttrRostersAreWellFormed(t *testing.T) {
 	}
 }
 
-// attrReaders are the three call shapes that read a NO-NAMESPACE schema
-// attribute by a literal name, and the argument index the name is at. Attr is
-// Element's own primitive (tree.go); attrOr and boolAttr are the two helpers that
-// funnel into it (produce_complex.go). versioningAttr is deliberately absent — it
-// reads the vc: namespace (conditional.go), which xs:openAttrs' ##other wildcard
-// admits and no roster governs.
-var attrReaders = map[string]int{"Attr": 0, "attrOr": 1, "boolAttr": 1}
+// attrReaders are the four call shapes that read a NO-NAMESPACE schema
+// attribute by a literal name, and the argument index the name is at. attr is
+// Element's own primitive and Attr its value-only wrapper (tree.go); attrOr and
+// boolAttr are the two helpers that funnel into them (produce_complex.go).
+// versioningAttr is deliberately absent — it reads the vc: namespace
+// (conditional.go), which xs:openAttrs' ##other wildcard admits and no roster
+// governs.
+var attrReaders = map[string]int{"Attr": 0, "attr": 0, "attrOr": 1, "boolAttr": 1}
 
 // TestS4SAttrRostersCoverEveryAttributeThisPackageReads is the guard against the
 // one defect rejectUndeclaredAttrs can introduce: a roster missing a name
@@ -140,7 +141,7 @@ func TestS4SAttrRostersCoverEveryAttributeThisPackageReads(t *testing.T) {
 }
 
 // attrReaderIndex reports which argument of call holds the attribute name, for
-// the three shapes attrReaders names, and whether call is one of them at all.
+// the four shapes attrReaders names, and whether call is one of them at all.
 func attrReaderIndex(call *ast.CallExpr) (int, bool) {
 	switch fn := call.Fun.(type) {
 	case *ast.SelectorExpr:

@@ -1215,15 +1215,16 @@ func (p *producer) namesSelfRef(el *Element, qn xsd.QName) (bool, error) {
 // clause 6.1.2 is about the attribute's actual value, not about the particle.
 func checkSelfReferenceOccurs(ref *Element, qn xsd.QName) error {
 	for _, attr := range []string{"minOccurs", "maxOccurs"} {
-		lexical, present := ref.Attr(attr)
+		a, present := ref.attr(attr)
 		if !present {
 			continue
 		}
+		lexical := a.Value()
 		if collapseTrim(lexical) == "unbounded" {
 			return xsderr.New(ruleSrcRedefine, ref.Loc(),
 				"the self-reference of the redefining <group> %s has %s=%q, but src-redefine clause 6.1.2 requires both minOccurs and maxOccurs to be 1 (or absent)", qn, attr, lexical)
 		}
-		n, err := nonNegativeInt(lexical, ref.Loc(), attr)
+		n, err := nonNegativeInt(lexical, a.Loc(), attr)
 		if err != nil {
 			return err
 		}

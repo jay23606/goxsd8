@@ -31,8 +31,9 @@ import (
 // test asserting only that an error occurred cannot see.
 func TestProduceProcessContentsFaultCharged(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). Every body starts
-	// on line 2 of the wrapped document and puts the offending element on line 3,
-	// so the charged position is pinned exactly.
+	// on line 2 of the wrapped document and puts the offending element, and so
+	// its processContents the charge is located at, on line 3;
+	// TestProduceAttributeValueChargeLocated pins the column.
 	cases := []struct {
 		name string
 		body string
@@ -76,7 +77,7 @@ func TestProduceProcessContentsFaultCharged(t *testing.T) {
 				t.Fatalf("error %v carries no position, want %s:3:col (STYLE E3)", err, produceURI)
 			}
 			if loc.URI != produceURI || loc.Line != 3 || loc.Col == 0 {
-				t.Fatalf("position = %s:%d:%d, want the offending element at %s:3 with a column",
+				t.Fatalf("position = %s:%d:%d, want the offending processContents at %s:3 with a column",
 					loc.URI, loc.Line, loc.Col, produceURI)
 			}
 		})

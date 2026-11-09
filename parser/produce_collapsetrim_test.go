@@ -144,7 +144,7 @@ func TestProduceCollapseTrimRejectsNonXMLWhitespacePadding(t *testing.T) {
 			}
 			loc, ok := xsderr.LocOf(err)
 			if !ok || loc.URI != produceURI || loc.Col == 0 {
-				t.Fatalf("position = %+v, want the offending element positioned in %s (STYLE E3)", loc, produceURI)
+				t.Fatalf("position = %+v, want the charge positioned in %s (STYLE E3)", loc, produceURI)
 			}
 		})
 	}
